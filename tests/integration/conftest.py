@@ -13,8 +13,8 @@ Configuration (environment variables):
 Run:
     export WATCHDOG_TEST_CATALOG=<your_catalog>
     export DATABRICKS_CONFIG_PROFILE=<your_profile>   # if non-default
-    cd bundles/watchdog-bundle
-    pytest tests/integration/ -v -m integration
+    cd databricks-watchdog
+    PYTHONPATH=engine/src pytest tests/integration/ -v
 
 Skip in CI when no catalog is configured:
     pytest tests/integration/ --ignore-glob="*integration*"
@@ -28,7 +28,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent.parent.parent / "engine" / "src"))
 
 import pytest
 
@@ -48,7 +48,7 @@ FIXTURE_RESOURCES = [
             "data_layer": "gold",
             "data_classification": "internal",
             "owner": "owner@example.com",
-            "business_unit": "dosimetry",
+            "business_unit": "engineering",
             "environment": "prod",
         },
         "metadata": {"comment": "Curated gold layer output"},
@@ -63,7 +63,7 @@ FIXTURE_RESOURCES = [
         "tags": {
             "data_classification": "pii",
             "owner": "owner@example.com",
-            "business_unit": "medical",
+            "business_unit": "finance",
             # Missing: data_steward, retention_days
         },
         "metadata": {},
@@ -101,7 +101,7 @@ FIXTURE_RESOURCES = [
         "tags": {
             "environment": "prod",
             "owner": "owner@example.com",
-            "business_unit": "detection",
+            "business_unit": "sales",
             "cost_center": "CC-5000",
         },
         "metadata": {"spark_version": "10.4.x-scala2.12"},
@@ -210,10 +210,10 @@ def policy_engine(spark, test_catalog, test_schema):
     from watchdog.policy_engine import PolicyEngine
     from watchdog.policy_loader import load_yaml_policies, load_delta_policies
 
-    bundle_root = Path(__file__).parent.parent.parent
-    ontology = OntologyEngine(ontology_dir=str(bundle_root / "ontologies"))
-    rule_engine = RuleEngine(primitives_dir=str(bundle_root / "ontologies"))
-    yaml_policies = load_yaml_policies(policies_dir=str(bundle_root / "policies"))
+    engine_root = Path(__file__).parent.parent.parent / "engine"
+    ontology = OntologyEngine(ontology_dir=str(engine_root / "ontologies"))
+    rule_engine = RuleEngine(primitives_dir=str(engine_root / "ontologies"))
+    yaml_policies = load_yaml_policies(policies_dir=str(engine_root / "policies"))
     user_policies = load_delta_policies(spark, test_catalog, test_schema)
 
     w = WorkspaceClient()

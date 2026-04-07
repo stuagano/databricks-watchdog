@@ -1,0 +1,12 @@
+command:
+  - uvicorn
+  - watchdog_mcp.server:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+env:
+  - name: DATABRICKS_CATALOG
+    value: platform
+  - name: DATABRICKS_SCHEMA
+    value: watchdog

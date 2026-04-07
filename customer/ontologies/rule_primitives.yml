@@ -1,0 +1,44 @@
+# Mirion-Specific Rule Primitives — customer overlay
+#
+# These primitives extend the generic base in engine/ontologies/rule_primitives.yml.
+# To use: copy these entries into engine/ontologies/rule_primitives.yml under
+# the primitives section before deploying.
+
+primitives:
+
+  # ── Export Control ─────────────────────────────────────────────────────
+
+  has_export_classification:
+    type: tag_exists
+    description: "Asset has an export control classification"
+    keys: [export_classification]
+
+  valid_export_classification:
+    type: tag_in
+    description: "Export classification uses an approved value"
+    key: export_classification
+    allowed: [NONE, EAR, ITAR]
+
+  has_regulatory_domain:
+    type: tag_exists
+    description: "Asset identifies its regulatory domain"
+    keys: [regulatory_domain]
+
+  # ── Conditional Compositions ──────────────────────────────────────────
+
+  export_controlled_has_steward:
+    type: if_then
+    description: "If asset is export-controlled, it must have a steward and regulatory domain"
+    condition:
+      type: tag_in
+      key: export_classification
+      allowed: [ITAR, EAR]
+    then:
+      type: all_of
+      rules:
+        - type: tag_exists
+          keys: [data_steward]
+        - type: tag_exists
+          keys: [regulatory_domain]
+        - type: tag_exists
+          keys: [retention_days]

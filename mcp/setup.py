@@ -1,0 +1,16 @@
+from setuptools import setup, find_packages
+
+setup(
+    name="watchdog-mcp",
+    version="0.1.0",
+    package_dir={"": "src"},
+    packages=find_packages(where="src"),
+    install_requires=[
+        "mcp[server]>=1.0.0",
+        "fastapi>=0.110.0",
+        "uvicorn>=0.27.0",
+        "databricks-sdk>=0.30.0",
+        "sse-starlette>=1.8.0",
+        "pydantic>=2.0.0",
+    ],
+)

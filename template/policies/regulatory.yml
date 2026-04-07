@@ -1,0 +1,22 @@
+# Customer-Specific Regulatory Policies
+#
+# Add your customer's regulatory compliance policies here, then copy to
+# engine/policies/. The file name doesn't matter — all *.yml in policies/
+# are loaded automatically.
+#
+# Example:
+#
+#   - id: POL-R001
+#     name: "HIPAA assets must have retention policy"
+#     applies_to: HipaaAsset           # must match a class in resource_classes.yml
+#     domain: RegulatoryCompliance
+#     severity: critical
+#     description: "HIPAA data must specify a retention period"
+#     remediation: "Add 'retention_days' tag"
+#     active: true
+#     rule:
+#       ref: has_retention_policy       # reference a primitive from rule_primitives.yml
+#
+# See customer/policies/regulatory.yml for a complete example (Mirion).
+
+policies: []

@@ -1,0 +1,84 @@
+# Cost Governance Policies
+# Domain: CostGovernance
+# Owner: platform_admin
+#
+# Ensures all resources are attributed for chargeback and cost tracking.
+
+policies:
+
+  - id: POL-C001
+    name: "All resources must have an owner"
+    applies_to: "*"
+    domain: CostGovernance
+    severity: high
+    description: "Every resource must have an identifiable owner for accountability and chargeback"
+    remediation: "Set the owner field or add an 'owner' tag to the resource"
+    active: true
+    rule:
+      ref: has_owner
+
+  - id: POL-C002
+    name: "Compute resources must have a cost_center tag"
+    applies_to: ComputeAsset
+    domain: CostGovernance
+    severity: high
+    description: "All compute resources must be attributed to a cost center for chargeback"
+    remediation: "Add a 'cost_center' tag to the resource"
+    active: true
+    rule:
+      ref: has_cost_center
+
+  - id: POL-C003
+    name: "All resources must have a business_unit tag"
+    applies_to: "*"
+    domain: CostGovernance
+    severity: medium
+    description: "Resources should be attributed to a business unit for cross-BU cost allocation"
+    remediation: "Add a 'business_unit' tag with your organization's business unit name"
+    active: true
+    rule:
+      ref: has_business_unit
+
+  - id: POL-C004
+    name: "Compute resources must have an environment tag"
+    applies_to: ComputeAsset
+    domain: CostGovernance
+    severity: medium
+    description: "Compute resources must be tagged with their environment for cost segmentation"
+    remediation: "Add an 'environment' tag (dev, test, staging, prod)"
+    active: true
+    rule:
+      ref: has_environment_tag
+
+  - id: POL-C005
+    name: "Environment tag must use approved values"
+    applies_to: ComputeAsset
+    domain: CostGovernance
+    severity: medium
+    description: "Environment tags must use standardized values for consistent reporting"
+    remediation: "Set 'environment' tag to one of: dev, test, staging, prod"
+    active: true
+    rule:
+      ref: valid_environment
+
+  - id: POL-C006
+    name: "Interactive clusters must have auto-termination"
+    applies_to: InteractiveCluster
+    domain: CostGovernance
+    severity: high
+    description: "Interactive clusters without auto-termination waste compute budget"
+    remediation: "Set autotermination_minutes in the cluster configuration"
+    active: true
+    rule:
+      ref: has_autotermination
+
+  - id: POL-C007
+    name: "Shared compute must have a team tag"
+    applies_to: SharedCompute
+    domain: CostGovernance
+    severity: medium
+    description: "Shared compute needs a team tag to identify the owning team for chargeback disputes"
+    remediation: "Add a 'team' tag identifying the primary owning team"
+    active: true
+    rule:
+      ref: has_team_tag

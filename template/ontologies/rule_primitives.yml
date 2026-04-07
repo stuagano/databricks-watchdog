@@ -1,0 +1,32 @@
+# Customer-Specific Rule Primitives
+#
+# Add reusable rule building blocks here, then copy them into
+# engine/ontologies/rule_primitives.yml under the primitives section.
+#
+# Example — check for a customer-specific tag:
+#
+#   has_department:
+#     type: tag_exists
+#     description: "Resource is tagged with a department"
+#     keys: [department]
+#
+# Example — conditional rule:
+#
+#   hipaa_has_steward:
+#     type: if_then
+#     description: "If asset is HIPAA-regulated, it must have a data steward"
+#     condition:
+#       type: tag_equals
+#       key: regulatory_domain
+#       value: "HIPAA"
+#     then:
+#       type: all_of
+#       rules:
+#         - type: tag_exists
+#           keys: [data_steward]
+#         - type: tag_exists
+#           keys: [retention_days]
+#
+# See customer/ontologies/rule_primitives.yml for a complete example (Mirion).
+
+primitives: {}

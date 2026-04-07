@@ -1,0 +1,156 @@
+# Data Quality Policies
+# Domain: DataQuality
+# Owner: data_steward
+#
+# Documentation, naming conventions, and discoverability standards.
+
+policies:
+
+  - id: POL-Q001
+    name: "Tables must have a comment"
+    applies_to: DataAsset
+    domain: DataQuality
+    severity: medium
+    description: "Tables should have a descriptive comment for discoverability in Unity Catalog"
+    remediation: "Run: ALTER TABLE <table> SET COMMENT '<description>'"
+    active: true
+    rule:
+      ref: has_table_comment
+
+  - id: POL-Q002
+    name: "Gold tables must have a data steward"
+    applies_to: GoldTable
+    domain: DataQuality
+    severity: high
+    description: "Curated gold-layer tables must have a named steward accountable for data quality"
+    remediation: "Add a 'data_steward' tag with the email of the responsible person"
+    active: true
+    rule:
+      ref: has_data_steward
+
+  - id: POL-Q003
+    name: "Tables must have a data_layer tag"
+    applies_to: DataAsset
+    domain: DataQuality
+    severity: low
+    description: "Tables should be tagged with their medallion layer for lineage clarity"
+    remediation: "Add a 'data_layer' tag (bronze, silver, gold, raw)"
+    active: true
+    rule:
+      ref: has_data_layer
+
+  - id: POL-Q004
+    name: "Data layer tag must use approved values"
+    applies_to: DataAsset
+    domain: DataQuality
+    severity: low
+    description: "Non-standard layer tags break medallion reporting"
+    remediation: "Set 'data_layer' to one of: raw, bronze, silver, gold, platinum"
+    active: true
+    rule:
+      ref: valid_data_layer
+
+  - id: POL-Q005
+    name: "Gold tables must have a business_unit tag"
+    applies_to: GoldTable
+    domain: DataQuality
+    severity: medium
+    description: "Gold tables are consumption-facing and must be attributed to a business unit"
+    remediation: "Add a 'business_unit' tag identifying the owning BU"
+    active: true
+    rule:
+      ref: has_business_unit
+
+  - id: POL-Q006
+    name: "Gold tables must have row-level quality checks configured"
+    applies_to: GoldTable
+    domain: DataQuality
+    severity: high
+    description: >
+      Curated gold-layer tables must have row-level quality checks configured
+      (via DQM or DQX). This complements Watchdog's metadata-level governance
+      by ensuring data content quality. Without quality checks, issues in gold
+      tables go undetected until downstream consumers report them.
+      Note: DQM is the supported Databricks product surface; DQX (Labs/OSS)
+      offers advanced capabilities. The two are converging.
+    remediation: >
+      1. Configure quality checks via DQM (Data Quality Management) or DQX (databrickslabs/dqx)
+      2. Ensure the quality pipeline stamps the 'dqx_enabled' tag on the table
+      3. ALTER TABLE <table> SET TAGS ('dqx_enabled' = 'true')
+      4. The tag is tool-agnostic — DQM, DQX, or custom pipelines all work
+    active: true
+    rule:
+      tag_equals:
+        dqx_enabled: "true"
+
+  - id: POL-Q008
+    name: "Schemas with gold tables must have DQM enabled"
+    applies_to: DataAsset
+    domain: DataQuality
+    severity: high
+    description: >
+      Schemas containing gold-layer tables must have Data Quality Monitoring (DQM)
+      enabled at the schema level. DQM provides automated freshness and completeness
+      monitoring via system.data_quality_monitoring.table_results. Without DQM,
+      stale or incomplete data can reach downstream consumers undetected.
+    remediation: >
+      1. Navigate to the schema in Unity Catalog
+      2. Enable Data Quality Monitoring (requires Public Preview enrollment)
+      3. Configure freshness and completeness thresholds
+      4. Verify results appear in system.data_quality_monitoring.table_results
+      5. Watchdog will detect DQM coverage on the next scan and set dqm_enabled=true
+    active: true
+    rule:
+      if_then:
+        if:
+          tag_equals:
+            data_layer: "gold"
+        then:
+          tag_equals:
+            dqm_enabled: "true"
+
+  - id: POL-Q009
+    name: "Gold tables must have Lakehouse Monitoring enabled"
+    applies_to: GoldTable
+    domain: DataQuality
+    severity: medium
+    description: >
+      Gold-layer tables should have Lakehouse Monitoring (LHM) enabled for
+      statistical profiling and drift detection. LHM catches distribution shifts,
+      null rate changes, and anomalies that DQM freshness/completeness checks miss.
+      Together, DQM + LHM provide comprehensive data quality coverage.
+    remediation: >
+      1. Create a monitor: databricks lakehouse-monitoring create --table-name <table>
+      2. Or use the UI: Table > Quality > Create Monitor
+      3. Watchdog detects monitors via profile table presence (_profile_metrics)
+      4. The lhm_enabled tag is set automatically by the Watchdog scan
+    active: true
+    rule:
+      tag_equals:
+        lhm_enabled: "true"
+
+  - id: POL-Q007
+    name: "Production tables must maintain quality score above threshold"
+    applies_to: GoldTable
+    domain: DataQuality
+    severity: medium
+    description: >
+      Gold tables with quality checks enabled should maintain a quality score
+      tag at or above 95%. The quality pipeline (DQM or DQX) updates this tag
+      after each run. Tables below threshold need investigation — either the
+      data has quality issues or the checks need tuning.
+    remediation: >
+      1. Review quality check results for failing rules (via dqx-mcp or DQM dashboard)
+      2. Fix upstream data issues or adjust overly strict rules
+      3. Re-run the quality pipeline and verify the score updates
+      4. Tag is updated automatically: ALTER TABLE <table> SET TAGS ('dqx_quality_score' = '<score>')
+    active: true
+    rule:
+      if_then:
+        if:
+          tag_equals:
+            dqx_enabled: "true"
+        then:
+          metadata_gte:
+            field: dqx_quality_score
+            value: 95

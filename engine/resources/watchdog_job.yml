@@ -1,0 +1,97 @@
+resources:
+  jobs:
+    watchdog_daily_scan:
+      name: "[${bundle.target}] Watchdog — Daily Governance Scan"
+      description: "Crawls all workspace resources, evaluates governance policies, writes violations to Delta tables"
+
+      schedule:
+        quartz_cron_expression: "0 0 6 * * ?"  # Daily at 06:00 UTC
+        timezone_id: "America/New_York"
+        pause_status: PAUSED  # Enable after validation
+
+      environments:
+        - environment_key: watchdog_env
+          spec:
+            client: "1"
+            dependencies:
+              - databricks-sdk>=0.30.0
+              - pyyaml>=6.0
+
+      tasks:
+        - task_key: crawl_resources
+          description: "Enumerate all workspace resources and write to resource_inventory"
+          environment_key: watchdog_env
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - crawl
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --secret-scope=${var.secret_scope}
+
+        - task_key: evaluate_policies
+          description: "Run all active policies against the resource inventory"
+          environment_key: watchdog_env
+          depends_on:
+            - task_key: crawl_resources
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - evaluate
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --sync-policies
+
+        - task_key: send_notifications
+          description: "Write to notification_queue + optionally send ACS emails"
+          environment_key: watchdog_env
+          depends_on:
+            - task_key: evaluate_policies
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - notify
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --secret-scope=${var.secret_scope}
+
+      tags:
+        project: watchdog
+        cost_center: data-platform
+        owner: data-platform-admin
+
+    watchdog_adhoc_scan:
+      name: "[${bundle.target}] Watchdog — Ad Hoc Scan"
+      description: "On-demand scan for a specific resource or full workspace"
+
+      parameters:
+        - name: resource_type
+          default: "all"
+        - name: resource_id
+          default: ""
+
+      environments:
+        - environment_key: watchdog_env
+          spec:
+            client: "1"
+            dependencies:
+              - databricks-sdk>=0.30.0
+              - pyyaml>=6.0
+
+      tasks:
+        - task_key: adhoc_crawl_and_evaluate
+          environment_key: watchdog_env
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - adhoc
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --secret-scope=${var.secret_scope}
+              - --resource-type={{job.parameters.resource_type}}
+              - --resource-id={{job.parameters.resource_id}}
+
+      tags:
+        project: watchdog
+        cost_center: data-platform
+        owner: data-platform-admin

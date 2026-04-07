@@ -1,0 +1,55 @@
+# Watchdog Governance Scanner — Databricks Asset Bundle
+#
+# Customize targets below with your customer's workspace URLs.
+# Variables (catalog, schema, secret_scope) can be overridden per target.
+
+bundle:
+  name: watchdog
+
+variables:
+  catalog:
+    description: "Platform catalog name"
+    default: "platform"
+  schema:
+    description: "Watchdog schema name"
+    default: "watchdog"
+  secret_scope:
+    description: "Secret scope containing Watchdog SP credentials"
+    default: "watchdog"
+
+targets:
+  # ── Dev target (your personal workspace for testing) ──────────────────
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: <YOUR_DEV_WORKSPACE_URL>         # e.g., https://adb-1234567890.azuredatabricks.net
+      root_path: ~/.bundle/${bundle.name}/${bundle.target}
+    variables:
+      catalog: <YOUR_DEV_CATALOG>             # e.g., main or dev_catalog
+      schema: watchdog
+
+  # ── Customer non-production ───────────────────────────────────────────
+  nonprod:
+    mode: development
+    workspace:
+      host: <YOUR_NONPROD_WORKSPACE_URL>
+      root_path: /Shared/watchdog/${bundle.target}
+    variables:
+      catalog: platform
+      schema: watchdog
+
+  # ── Customer production ───────────────────────────────────────────────
+  prod:
+    mode: production
+    workspace:
+      host: <YOUR_PROD_WORKSPACE_URL>
+      root_path: /Shared/watchdog/${bundle.target}
+    run_as:
+      service_principal_name: spWatchdog      # must match Terraform-provisioned SP
+    variables:
+      catalog: platform
+      schema: watchdog
+
+include:
+  - resources/*.yml

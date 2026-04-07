@@ -1,0 +1,205 @@
+# Rule Primitives — reusable building blocks for policy rules
+#
+# Policies compose rules from these primitives. Each primitive is a named,
+# reusable check that can be referenced by ID in policy definitions.
+#
+# Rule types:
+#   tag_exists:        Tag key must be present (any value)
+#   tag_equals:        Tag must equal specific value
+#   tag_in:            Tag value must be in allowed set
+#   tag_not_in:        Tag value must NOT be in disallowed set
+#   tag_matches:       Tag value must match regex
+#   metadata_equals:   Metadata field must equal value
+#   metadata_matches:  Metadata field must match regex
+#   metadata_not_empty: Metadata field must exist and be non-empty
+#   metadata_gte:      Metadata field >= threshold (numeric/version comparison)
+#   has_owner:         Resource must have owner field or owner tag
+#   all_of:            All child rules must pass (AND)
+#   any_of:            At least one child rule must pass (OR)
+#   none_of:           No child rules may pass (NOT)
+#   if_then:           Conditional — if condition matches, then check must pass
+
+primitives:
+
+  # ── Ownership & Attribution ────────────────────────────────────────────
+
+  has_owner:
+    type: any_of
+    description: "Resource has an identifiable owner"
+    rules:
+      - type: metadata_not_empty
+        field: owner
+      - type: tag_exists
+        keys: [owner]
+
+  has_cost_center:
+    type: tag_exists
+    description: "Resource is attributed to a cost center"
+    keys: [cost_center]
+
+  has_business_unit:
+    type: tag_exists
+    description: "Resource is tagged with a business unit"
+    keys: [business_unit]
+
+  has_environment_tag:
+    type: tag_exists
+    description: "Resource has an environment designation"
+    keys: [environment]
+
+  has_team_tag:
+    type: tag_exists
+    description: "Resource is attributed to a team"
+    keys: [team]
+
+  # ── Data Classification ────────────────────────────────────────────────
+
+  has_data_classification:
+    type: tag_exists
+    description: "Data asset has a sensitivity classification label"
+    keys: [data_classification]
+
+  has_data_layer:
+    type: tag_exists
+    description: "Table is tagged with its medallion layer (bronze/silver/gold)"
+    keys: [data_layer]
+
+  valid_data_classification:
+    type: tag_in
+    description: "Data classification tag uses an approved value"
+    key: data_classification
+    allowed: [public, internal, confidential, restricted, pii]
+
+  valid_environment:
+    type: tag_in
+    description: "Environment tag uses an approved value"
+    key: environment
+    allowed: [dev, test, staging, prod]
+
+  valid_data_layer:
+    type: tag_in
+    description: "Data layer tag uses an approved medallion value"
+    key: data_layer
+    allowed: [bronze, silver, gold, platinum, raw]
+
+  # ── Data Stewardship ──────────────────────────────────────────────────
+
+  has_data_steward:
+    type: tag_exists
+    description: "Regulated asset has a named data steward"
+    keys: [data_steward]
+
+  has_retention_policy:
+    type: tag_exists
+    description: "Asset specifies a retention policy"
+    keys: [retention_days]
+
+  # ── Customer-specific primitives ─────────────────────────────────────
+  # Add your customer's regulatory or industry-specific primitives here.
+  # See customer/ontologies/rule_primitives.yml for an example
+  # (Mirion: export control, regulatory domain).
+
+  # ── Documentation ──────────────────────────────────────────────────────
+
+  has_table_comment:
+    type: metadata_not_empty
+    description: "Table has a non-empty comment/description"
+    field: comment
+
+  has_description_tag:
+    type: tag_exists
+    description: "Resource has a description tag"
+    keys: [description]
+
+  # ── Operational ────────────────────────────────────────────────────────
+
+  is_production:
+    type: tag_equals
+    description: "Resource is tagged as production"
+    key: environment
+    value: "prod"
+
+  has_on_call_team:
+    type: tag_exists
+    description: "Production resource has an on-call team designated"
+    keys: [on_call_team]
+
+  has_sla_tier:
+    type: tag_exists
+    description: "Resource has an SLA tier designation"
+    keys: [sla_tier]
+
+  has_alert_channel:
+    type: tag_exists
+    description: "Resource has a notification/alert channel configured"
+    keys: [alert_channel]
+
+  runtime_current:
+    type: metadata_gte
+    description: "Compute uses a current Databricks runtime version"
+    field: spark_version
+    threshold: "15.4"
+
+  has_autotermination:
+    type: metadata_not_empty
+    description: "Cluster has auto-termination configured"
+    field: autotermination_minutes
+
+  # ── Identity & Permissions ────────────────────────────────────────────
+
+  is_account_level_group:
+    type: metadata_equals
+    description: "Group is an account-level group (SCIM-synced from IdP), not workspace-local"
+    field: group_type
+    value: "account"
+
+  is_workspace_local_group:
+    type: metadata_equals
+    description: "Group is workspace-local (not federated across workspaces)"
+    field: group_type
+    value: "workspace_local"
+
+  group_has_members:
+    type: metadata_not_empty
+    description: "Group has at least one member (empty groups are dead weight)"
+    field: member_count
+
+  group_has_entitlements:
+    type: metadata_not_empty
+    description: "Group has entitlements assigned (workspace access, cluster create, etc.)"
+    field: entitlements
+
+  # ── Conditional Compositions ───────────────────────────────────────────
+
+  production_has_alerting:
+    type: if_then
+    description: "If resource is production, it must have alerting configured"
+    condition:
+      type: tag_equals
+      key: environment
+      value: "prod"
+    then:
+      type: all_of
+      rules:
+        - type: tag_exists
+          keys: [on_call_team]
+        - type: tag_exists
+          keys: [alert_channel]
+
+  pii_has_steward:
+    type: if_then
+    description: "If data is PII, it must have a data steward"
+    condition:
+      type: tag_equals
+      key: data_classification
+      value: "pii"
+    then:
+      type: all_of
+      rules:
+        - type: tag_exists
+          keys: [data_steward]
+        - type: tag_exists
+          keys: [retention_days]
+
+  # Customer-specific conditional compositions go here.
+  # See customer/ontologies/rule_primitives.yml for examples.

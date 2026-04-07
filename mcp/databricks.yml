@@ -1,0 +1,44 @@
+# Watchdog MCP Server — Databricks Asset Bundle
+#
+# Deploys the governance MCP server as a Databricks App.
+# Customize targets with your customer's workspace URLs and warehouse IDs.
+
+bundle:
+  name: watchdog-mcp
+
+variables:
+  catalog:
+    description: "Platform catalog name"
+    default: "platform"
+  schema:
+    description: "Watchdog schema name"
+    default: "watchdog"
+  warehouse_id:
+    description: "SQL warehouse ID for governance queries"
+
+targets:
+  # ── Customer non-production ───────────────────────────────────────────
+  nonprod:
+    mode: development
+    default: true
+    workspace:
+      host: <YOUR_NONPROD_WORKSPACE_URL>
+    variables:
+      catalog: platform
+      schema: watchdog
+      warehouse_id: <YOUR_NONPROD_WAREHOUSE_ID>
+
+  # ── Customer production ───────────────────────────────────────────────
+  prod:
+    mode: production
+    workspace:
+      host: <YOUR_PROD_WORKSPACE_URL>
+    run_as:
+      service_principal_name: spWatchdog
+    variables:
+      catalog: platform
+      schema: watchdog
+      warehouse_id: <YOUR_PROD_WAREHOUSE_ID>
+
+include:
+  - resources/*.yml

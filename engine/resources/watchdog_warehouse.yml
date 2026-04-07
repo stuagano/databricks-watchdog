@@ -1,0 +1,22 @@
+# ==============================================================================
+# Watchdog SQL Warehouse — Serverless
+# ==============================================================================
+# Dedicated serverless warehouse for Watchdog dashboard queries and SQL alerts.
+# Serverless means zero cost when idle — no dependency on external provisioning.
+
+resources:
+  sql_warehouses:
+    watchdog_warehouse:
+      name: "[${bundle.target}] Watchdog Warehouse"
+      cluster_size: "2X-Small"
+      warehouse_type: "PRO"
+      enable_serverless_compute: true
+      auto_stop_mins: 10
+      min_num_clusters: 1
+      max_num_clusters: 1
+      tags:
+        custom_tags:
+          - key: "project"
+            value: "watchdog"
+          - key: "cost_center"
+            value: "data-platform"

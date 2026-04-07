@@ -1,0 +1,75 @@
+# Compliance Domain Ontology — governance domain taxonomy
+#
+# Domains organize policies into logical groups. Each domain has an owner
+# (team or role), a severity floor (minimum severity for new policies),
+# and optional escalation contacts.
+#
+# Policies reference their domain by name. Violations are groupable by
+# domain for role-scoped dashboards (e.g., "show me all SecurityGovernance
+# violations in the detection BU").
+
+domains:
+
+  CostGovernance:
+    description: "Cost attribution, chargeback, and resource optimization"
+    owner_role: "platform_admin"
+    severity_floor: medium
+    escalation: "finance-data-platform@mirion.com"
+    sub_domains:
+      - Tagging
+      - IdleResources
+      - Sizing
+
+  SecurityGovernance:
+    description: "Access control, encryption, network isolation, identity management"
+    owner_role: "security_admin"
+    severity_floor: high
+    escalation: "infosec@mirion.com"
+    sub_domains:
+      - AccessControl
+      - Encryption
+      - NetworkIsolation
+      - IdentityHygiene
+
+  DataQuality:
+    description: "Documentation, naming conventions, lineage, schema standards"
+    owner_role: "data_steward"
+    severity_floor: low
+    escalation: "data-governance@mirion.com"
+    sub_domains:
+      - Documentation
+      - NamingConventions
+      - Lineage
+      - SchemaStandards
+
+  OperationalGovernance:
+    description: "Runtime versions, retry policies, alerting, SLA compliance"
+    owner_role: "platform_admin"
+    severity_floor: medium
+    escalation: "platform-ops@mirion.com"
+    sub_domains:
+      - RuntimeCompliance
+      - Alerting
+      - SlaManagement
+      - RetryPolicies
+
+  RegulatoryCompliance:
+    description: "Export control (ITAR/EAR), NRC, DOE, SOX — Mirion regulatory obligations"
+    owner_role: "compliance_officer"
+    severity_floor: critical
+    escalation: "legal-compliance@mirion.com"
+    sub_domains:
+      - ExportControl
+      - NuclearRegulatory
+      - FinancialCompliance
+      - DataRetention
+
+  DataClassification:
+    description: "Ensuring all data assets are properly classified and labeled"
+    owner_role: "data_steward"
+    severity_floor: high
+    escalation: "data-governance@mirion.com"
+    sub_domains:
+      - SensitivityLabeling
+      - BusinessUnitAttribution
+      - DataLayerTagging

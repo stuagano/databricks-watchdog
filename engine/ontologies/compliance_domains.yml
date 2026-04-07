@@ -1,0 +1,72 @@
+# Compliance Domain Ontology — governance domain taxonomy
+#
+# Domains organize policies into logical groups. Each domain has an owner
+# (team or role), a severity floor (minimum severity for new policies),
+# and optional escalation contacts.
+#
+# Customize escalation emails and sub_domains for your customer.
+# See customer/ontologies/compliance_domains.yml for a Mirion example.
+
+domains:
+
+  CostGovernance:
+    description: "Cost attribution, chargeback, and resource optimization"
+    owner_role: "platform_admin"
+    severity_floor: medium
+    escalation: "data-platform@<company>.com"
+    sub_domains:
+      - Tagging
+      - IdleResources
+      - Sizing
+
+  SecurityGovernance:
+    description: "Access control, encryption, network isolation, identity management"
+    owner_role: "security_admin"
+    severity_floor: high
+    escalation: "infosec@<company>.com"
+    sub_domains:
+      - AccessControl
+      - Encryption
+      - NetworkIsolation
+      - IdentityHygiene
+
+  DataQuality:
+    description: "Documentation, naming conventions, lineage, schema standards"
+    owner_role: "data_steward"
+    severity_floor: low
+    escalation: "data-governance@<company>.com"
+    sub_domains:
+      - Documentation
+      - NamingConventions
+      - Lineage
+      - SchemaStandards
+
+  OperationalGovernance:
+    description: "Runtime versions, retry policies, alerting, SLA compliance"
+    owner_role: "platform_admin"
+    severity_floor: medium
+    escalation: "platform-ops@<company>.com"
+    sub_domains:
+      - RuntimeCompliance
+      - Alerting
+      - SlaManagement
+      - RetryPolicies
+
+  RegulatoryCompliance:
+    description: "Industry-specific regulatory obligations (customize for your customer)"
+    owner_role: "compliance_officer"
+    severity_floor: critical
+    escalation: "compliance@<company>.com"
+    sub_domains:
+      - DataRetention
+      - DataPrivacy
+
+  DataClassification:
+    description: "Ensuring all data assets are properly classified and labeled"
+    owner_role: "data_steward"
+    severity_floor: high
+    escalation: "data-governance@<company>.com"
+    sub_domains:
+      - SensitivityLabeling
+      - BusinessUnitAttribution
+      - DataLayerTagging

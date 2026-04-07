@@ -1,0 +1,31 @@
+resources:
+  apps:
+    watchdog_mcp:
+      name: "watchdog-mcp-${bundle.target}"
+      description: |
+        Watchdog Governance MCP — on-behalf-of auth. Each user's UC
+        permissions on platform.watchdog govern what governance data
+        they can query. No separate ACL layer.
+      source_code_path: ..
+      config:
+        command:
+          - uvicorn
+          - watchdog_mcp.server:app
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8000"
+        env:
+          - name: DATABRICKS_CATALOG
+            value: ${var.catalog}
+          - name: DATABRICKS_SCHEMA
+            value: ${var.schema}
+          - name: DATABRICKS_WAREHOUSE_ID
+            value: ${var.warehouse_id}
+      permissions:
+        - service_principal_name: spWatchdog
+          level: CAN_MANAGE
+        - group_name: <YOUR_ADMIN_GROUP>       # e.g., db-platform-admins
+          level: CAN_USE
+        - group_name: <YOUR_USER_GROUP>        # e.g., db-engineers
+          level: CAN_USE

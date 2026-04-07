@@ -1,0 +1,26 @@
+# Customer-Specific Resource Classes
+#
+# Add your customer's derived classes here, then copy them into
+# engine/ontologies/resource_classes.yml under the derived_classes section.
+#
+# Example — classify by business unit:
+#
+#   SalesAsset:
+#     parent: DataAsset
+#     description: "Owned by the Sales division"
+#     classifier:
+#       tag_equals:
+#         business_unit: "sales"
+#
+# Example — regulatory classification:
+#
+#   HipaaAsset:
+#     parent: ConfidentialAsset
+#     description: "Subject to HIPAA regulations"
+#     classifier:
+#       tag_equals:
+#         regulatory_domain: "HIPAA"
+#
+# See customer/ontologies/resource_classes.yml for a complete example (Mirion).
+
+derived_classes: {}

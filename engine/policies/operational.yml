@@ -1,0 +1,68 @@
+# Operational Governance Policies
+# Domain: OperationalGovernance
+# Owner: platform_admin
+#
+# Runtime compliance, alerting, SLA management, and operational hygiene.
+
+policies:
+
+  - id: POL-O001
+    name: "Production resources must have alerting configured"
+    applies_to: ProductionJob
+    domain: OperationalGovernance
+    severity: high
+    description: "Production jobs must have on-call and alert channel tags so failures get noticed"
+    remediation: "Add 'on_call_team' and 'alert_channel' tags to the job"
+    active: true
+    rule:
+      type: all_of
+      rules:
+        - ref: has_on_call_team
+        - ref: has_alert_channel
+
+  - id: POL-O002
+    name: "Critical jobs must have an SLA tier"
+    applies_to: CriticalJob
+    domain: OperationalGovernance
+    severity: critical
+    description: "Business-critical jobs must declare their SLA tier for incident prioritization"
+    remediation: "Add an 'sla_tier' tag (tier1, tier2, tier3)"
+    active: true
+    rule:
+      ref: has_sla_tier
+
+  - id: POL-O003
+    name: "Production pipelines must have alerting"
+    applies_to: ProductionPipeline
+    domain: OperationalGovernance
+    severity: high
+    description: "DLT pipelines in production need on-call team and alert channel"
+    remediation: "Add 'on_call_team' and 'alert_channel' tags to the pipeline"
+    active: true
+    rule:
+      type: all_of
+      rules:
+        - ref: has_on_call_team
+        - ref: has_alert_channel
+
+  - id: POL-O004
+    name: "All compute must use current runtime"
+    applies_to: ComputeAsset
+    domain: OperationalGovernance
+    severity: medium
+    description: "Outdated runtimes miss performance improvements and bug fixes"
+    remediation: "Update the compute's Databricks Runtime to >= 15.4"
+    active: true
+    rule:
+      ref: runtime_current
+
+  - id: POL-O005
+    name: "Production jobs must have a team tag"
+    applies_to: ProductionJob
+    domain: OperationalGovernance
+    severity: medium
+    description: "Production jobs need a team tag for escalation routing"
+    remediation: "Add a 'team' tag identifying the owning team"
+    active: true
+    rule:
+      ref: has_team_tag

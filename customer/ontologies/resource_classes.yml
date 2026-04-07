@@ -1,0 +1,86 @@
+# Mirion-Specific Resource Classes — customer overlay
+#
+# These classes extend the generic base in engine/ontologies/resource_classes.yml.
+# To use: copy these entries into engine/ontologies/resource_classes.yml under
+# the derived_classes section before deploying.
+#
+# Includes:
+#   - Export control (ITAR/EAR) — defense industry regulatory
+#   - Nuclear regulatory (NRC/DOE) — energy sector regulatory
+#   - Business units — Mirion organizational scoping
+
+derived_classes:
+
+  # ── Regulatory domain classes (export control & nuclear) ───────────────
+
+  ExportControlledAsset:
+    parent: ConfidentialAsset
+    description: "Subject to ITAR/EAR export control regulations"
+    classifier:
+      tag_in:
+        export_classification: [ITAR, EAR]
+
+  ItarAsset:
+    parent: ExportControlledAsset
+    description: "ITAR-regulated data — defense articles and services"
+    classifier:
+      tag_equals:
+        export_classification: "ITAR"
+
+  EarAsset:
+    parent: ExportControlledAsset
+    description: "EAR-regulated data — dual-use commercial/military items"
+    classifier:
+      tag_equals:
+        export_classification: "EAR"
+
+  NrcRegulatedAsset:
+    parent: ConfidentialAsset
+    description: "Subject to Nuclear Regulatory Commission oversight"
+    classifier:
+      tag_equals:
+        regulatory_domain: "NRC"
+
+  DoeRegulatedAsset:
+    parent: ConfidentialAsset
+    description: "Subject to Department of Energy oversight"
+    classifier:
+      tag_equals:
+        regulatory_domain: "DOE"
+
+  # ── Mirion business unit scoping ──────────────────────────────────────
+
+  DosimetryAsset:
+    parent: DataAsset
+    description: "Owned by Dosimetry business unit"
+    classifier:
+      tag_equals:
+        business_unit: "dosimetry"
+
+  DetectionAsset:
+    parent: DataAsset
+    description: "Owned by Detection & Measurement business unit"
+    classifier:
+      tag_equals:
+        business_unit: "detection"
+
+  MedicalAsset:
+    parent: DataAsset
+    description: "Owned by Medical business unit"
+    classifier:
+      tag_equals:
+        business_unit: "medical"
+
+  SensingAsset:
+    parent: DataAsset
+    description: "Owned by Sensing Systems business unit"
+    classifier:
+      tag_equals:
+        business_unit: "sensing"
+
+  IndustrialAsset:
+    parent: DataAsset
+    description: "Owned by Industrial business unit"
+    classifier:
+      tag_equals:
+        business_unit: "industrial"

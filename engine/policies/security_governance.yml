@@ -1,0 +1,119 @@
+# Security Governance Policies
+# Domain: SecurityGovernance
+# Owner: security_admin
+#
+# Access control, data protection, and identity hygiene.
+
+policies:
+
+  - id: POL-S001
+    name: "PII assets must have a data steward and retention policy"
+    applies_to: PiiAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: "PII data requires a named steward for accountability and a retention period for compliance"
+    remediation: "Add 'data_steward' tag (email of responsible person) and 'retention_days' tag"
+    active: true
+    rule:
+      type: all_of
+      rules:
+        - ref: has_data_steward
+        - ref: has_retention_policy
+
+  - id: POL-S002
+    name: "Confidential assets must have a data steward"
+    applies_to: ConfidentialAsset
+    domain: SecurityGovernance
+    severity: high
+    description: "Confidential data must have a named steward who is accountable for access decisions"
+    remediation: "Add a 'data_steward' tag with the email of the responsible person"
+    active: true
+    rule:
+      ref: has_data_steward
+
+  - id: POL-S003
+    name: "All data assets must have a data classification label"
+    applies_to: DataAsset
+    domain: SecurityGovernance
+    severity: high
+    description: "Every data asset must be labeled with its sensitivity level"
+    remediation: "Add a 'data_classification' tag (public, internal, confidential, restricted, pii)"
+    active: true
+    rule:
+      ref: has_data_classification
+
+  - id: POL-S004
+    name: "Data classification must use approved values"
+    applies_to: DataAsset
+    domain: SecurityGovernance
+    severity: high
+    description: "Non-standard classification values break reporting and access control automation"
+    remediation: "Set 'data_classification' to one of: public, internal, confidential, restricted, pii"
+    active: true
+    rule:
+      ref: valid_data_classification
+
+  - id: POL-S005
+    name: "Production jobs must run on current runtime"
+    applies_to: ProductionJob
+    domain: SecurityGovernance
+    severity: high
+    description: "Outdated runtimes miss security patches and bug fixes"
+    remediation: "Update the job's cluster policy or runtime to >= 15.4"
+    active: true
+    rule:
+      ref: runtime_current
+
+  # ── Identity & Permissions Drift ───────────────────────────────────────
+
+  - id: POL-S006
+    name: "All permission-holding groups must be account-level"
+    applies_to: IdentityAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: >
+      Workspace-local groups don't federate across workspaces, don't sync
+      with Entra ID, and create manual maintenance burden. All groups used
+      for permissions must be account-level (SCIM-synced from IdP).
+    remediation: >
+      Migrate workspace-local group to an account-level group synced from
+      your IdP via SCIM.
+    active: true
+    rule:
+      ref: is_account_level_group
+
+  - id: POL-S007
+    name: "Workspace-local groups must not exist in production"
+    applies_to: IdentityAsset
+    domain: SecurityGovernance
+    severity: high
+    description: >
+      Production workspaces must use account-level groups exclusively.
+      Workspace-local groups indicate identity drift or manual provisioning
+      that bypasses the IdP.
+    remediation: >
+      Remove the workspace-local group and replace with the equivalent
+      account-level group from your IdP.
+    active: true
+    rule:
+      type: none_of
+      rules:
+        - ref: is_workspace_local_group
+
+  - id: POL-S008
+    name: "Groups holding permissions must not be empty"
+    applies_to: IdentityAsset
+    domain: SecurityGovernance
+    severity: medium
+    description: >
+      Empty groups with entitlements are dead weight — they consume
+      permission slots but serve no one. Usually a sign of incomplete
+      SCIM sync or abandoned access patterns.
+    remediation: "Verify group membership in Entra ID. Remove group if no longer needed."
+    active: true
+    rule:
+      type: if_then
+      condition:
+        ref: group_has_entitlements
+      then:
+        ref: group_has_members

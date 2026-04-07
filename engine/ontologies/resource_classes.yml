@@ -1,0 +1,172 @@
+# Resource Class Ontology — tag-based classification hierarchy
+#
+# Every resource crawled by Watchdog gets classified into one or more classes
+# based on its tags. Classes form an inheritance tree: a PiiTable inherits all
+# policies that apply to Table, which inherits from DataAsset.
+#
+# Classifier rules use tags as the primary signal. If a resource doesn't have
+# the right tags, it doesn't get classified — fix the tags, not the engine.
+
+# --------------------------------------------------------------------------
+# Base classes — match on resource_type from the crawler
+# --------------------------------------------------------------------------
+base_classes:
+
+  DataAsset:
+    description: "Any data object in Unity Catalog"
+    matches_resource_types: [table, volume, catalog, schema]
+
+  ComputeAsset:
+    description: "Any compute resource"
+    matches_resource_types: [job, cluster, warehouse, pipeline]
+
+  IdentityAsset:
+    description: "Users, groups, service principals"
+    matches_resource_types: [user, group, service_principal]
+
+# --------------------------------------------------------------------------
+# Derived classes — classified by tags
+#
+# Each class specifies:
+#   parent:      which class it extends (inherits all parent policies)
+#   classifier:  tag-based rules that determine membership
+#   description: human-readable purpose
+#
+# Classifier operators:
+#   tag_equals:       { key: value }           — exact match
+#   tag_in:           { key: [v1, v2] }        — value in set
+#   tag_exists:       [key1, key2]             — keys present (any value)
+#   tag_matches:      { key: "regex" }         — value matches regex
+#   all_of:           [ ...classifiers ]       — AND
+#   any_of:           [ ...classifiers ]       — OR
+#   none_of:          [ ...classifiers ]       — NOT (exclusion)
+#   metadata_equals:  { key: value }           — check metadata map
+#   metadata_matches: { key: "regex" }         — metadata regex
+# --------------------------------------------------------------------------
+
+derived_classes:
+
+  # ── Data classification by sensitivity ──────────────────────────────────
+
+  PiiAsset:
+    parent: DataAsset
+    description: "Contains personally identifiable information"
+    classifier:
+      tag_equals:
+        data_classification: "pii"
+
+  ConfidentialAsset:
+    parent: DataAsset
+    description: "Contains confidential business data"
+    classifier:
+      tag_in:
+        data_classification: [confidential, restricted, pii]
+
+  InternalAsset:
+    parent: DataAsset
+    description: "Internal-only data (not for external sharing)"
+    classifier:
+      tag_in:
+        data_classification: [internal, confidential, restricted, pii]
+
+  PublicAsset:
+    parent: DataAsset
+    description: "Data approved for external sharing"
+    classifier:
+      tag_equals:
+        data_classification: "public"
+
+  # ── Customer-specific classes ───────────────────────────────────────────
+  # Add your customer's regulatory, business unit, or industry-specific
+  # classes here. See customer/ontologies/resource_classes.yml for an
+  # example (Mirion: export control, nuclear regulatory, business units).
+
+  # ── Table specializations ──────────────────────────────────────────────
+
+  PiiTable:
+    parent: PiiAsset
+    description: "Table containing PII data"
+    classifier:
+      all_of:
+        - tag_equals: { data_classification: "pii" }
+        - metadata_equals: { resource_type: "table" }
+
+  GoldTable:
+    parent: DataAsset
+    description: "Curated gold-layer table for consumption"
+    classifier:
+      tag_equals:
+        data_layer: "gold"
+
+  SilverTable:
+    parent: DataAsset
+    description: "Cleaned/conformed silver-layer table"
+    classifier:
+      tag_equals:
+        data_layer: "silver"
+
+  BronzeTable:
+    parent: DataAsset
+    description: "Raw ingestion bronze-layer table"
+    classifier:
+      tag_equals:
+        data_layer: "bronze"
+
+  # ── Compute specializations ────────────────────────────────────────────
+
+  ProductionJob:
+    parent: ComputeAsset
+    description: "Job running in production environment"
+    classifier:
+      all_of:
+        - tag_equals: { environment: "prod" }
+        - metadata_equals: { resource_type: "job" }
+
+  ProductionPipeline:
+    parent: ComputeAsset
+    description: "DLT pipeline in production"
+    classifier:
+      all_of:
+        - tag_equals: { environment: "prod" }
+        - metadata_equals: { resource_type: "pipeline" }
+
+  DevelopmentCompute:
+    parent: ComputeAsset
+    description: "Compute resource in dev/sandbox environment"
+    classifier:
+      tag_in:
+        environment: [dev, sandbox, test]
+
+  InteractiveCluster:
+    parent: ComputeAsset
+    description: "Interactive (all-purpose) cluster"
+    classifier:
+      all_of:
+        - metadata_equals: { resource_type: "cluster" }
+        - none_of:
+            - tag_equals: { cluster_type: "job" }
+
+  CriticalJob:
+    parent: ProductionJob
+    description: "Business-critical production job (SLA-bound)"
+    classifier:
+      all_of:
+        - tag_equals: { environment: "prod" }
+        - tag_equals: { criticality: "high" }
+        - metadata_equals: { resource_type: "job" }
+
+  # ── Cost attribution ───────────────────────────────────────────────────
+
+  UnattributedAsset:
+    parent: ComputeAsset
+    description: "Compute resource missing cost attribution tags"
+    classifier:
+      none_of:
+        - tag_exists: [cost_center]
+
+  SharedCompute:
+    parent: ComputeAsset
+    description: "Shared compute resource (multi-team)"
+    classifier:
+      tag_equals:
+        shared: "true"

@@ -1,0 +1,67 @@
+# Starter Governance Policies
+# Domain: Mixed (CostGovernance, DataQuality)
+# Owner: data-platform-admin
+#
+# Minimal policy set for MVP deployment. These work in two modes:
+#
+#   Full mode (ontologies/ present):
+#     - Classification assigns DataAsset, ComputeAsset, etc.
+#     - ref: rules resolve via rule_primitives.yml
+#
+#   MVP mode (ontologies/ absent):
+#     - applies_to uses resource_type fallback map in policy_engine.py
+#     - Rules are inlined so they don't depend on rule_primitives.yml
+#
+# Meeting-aligned examples: required metadata tags (cost center, owner),
+# table documentation, compute cost attribution.
+
+policies:
+
+  - id: POL-001
+    name: "Resource must have an owner"
+    applies_to: "*"
+    domain: CostGovernance
+    severity: high
+    description: "Every resource must have an identifiable owner for accountability"
+    remediation: "Set the owner field or add an 'owner' tag to the resource"
+    active: true
+    rule:
+      any_of:
+        - type: metadata_not_empty
+          field: owner
+        - type: tag_exists
+          keys: [owner]
+
+  - id: POL-002
+    name: "Tables must have a comment"
+    applies_to: DataAsset
+    domain: DataQuality
+    severity: medium
+    description: "Tables should have a descriptive comment for discoverability in Unity Catalog"
+    remediation: "Run: ALTER TABLE <table> SET COMMENT '<description>'"
+    active: true
+    rule:
+      type: metadata_not_empty
+      field: comment
+
+  - id: POL-003
+    name: "Jobs must have a cost_center tag"
+    applies_to: ComputeAsset
+    domain: CostGovernance
+    severity: high
+    description: "All jobs must be attributed to a cost center for chargeback"
+    remediation: "Add a 'cost_center' tag in the job configuration settings"
+    active: true
+    rule:
+      tag_exists: [cost_center]
+
+  - id: POL-004
+    name: "Compute resources should have a cost_center tag"
+    applies_to: ComputeAsset
+    domain: CostGovernance
+    severity: medium
+    description: "Compute resources should be tagged with cost_center for cost tracking"
+    remediation: "Add a 'cost_center' custom tag to the resource"
+    active: true
+    rule:
+      tag_exists: [cost_center]

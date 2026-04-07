@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "watchdog-governance"
+version = "0.1.0"
+description = "Pluggable governance UI module for Ontos (databrickslabs/ontos) — backed by Databricks Watchdog"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "Apache-2.0" }
+
+dependencies = [
+    "fastapi>=0.111.0",
+    "pydantic>=2.0.0",
+    "uvicorn[standard]>=0.29.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# The default WatchdogProvider needs the Databricks SQL Connector
+watchdog = [
+    "databricks-sql-connector>=3.0.0",
+]
+# OWL/Turtle export needs the engine's OntologyEngine
+export = [
+    "watchdog-governance[watchdog]",
+]
+dev = [
+    "pytest>=7.0",
+    "httpx>=0.24",
+    "ruff>=0.4.0",
+]
+
+[project.entry-points."watchdog_governance.providers"]
+watchdog = "watchdog_governance.providers.watchdog:WatchdogProvider"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/watchdog_governance"]

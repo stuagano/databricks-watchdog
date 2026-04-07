@@ -173,6 +173,11 @@ databricks-watchdog/
 │   ├── src/watchdog_mcp/
 │   └── resources/
 │
+├── ontos-adapter/                   # Pluggable governance UI for Ontos
+│   ├── pyproject.toml               #   watchdog-governance package
+│   ├── src/watchdog_governance/     #   Provider protocol + FastAPI routers
+│   └── frontend/                    #   React views (drop into Ontos fork)
+│
 ├── terraform/                       # Infrastructure as Code
 │   └── modules/watchdog/            #   Reusable TF module (SP, catalog, grants)
 │
@@ -261,6 +266,18 @@ databricks bundle deploy -t nonprod
 ```
 
 Connect from Claude Code or any MCP client using the app's SSE endpoint: `https://<app-url>/mcp/sse`
+
+## Ontos Integration
+
+The `ontos-adapter/` directory contains a pluggable governance UI module for [Ontos](https://github.com/databrickslabs/ontos) (Databricks Labs governance platform). It follows the **Prometheus/Grafana pattern**:
+
+- **Watchdog** (engine) = Prometheus — crawls resources, evaluates policies, writes violations to Delta tables
+- **Ontos adapter** = Grafana data source plugin — reads those tables and exposes a governance UI
+- **Delta tables** = the wire protocol — the contract between engine and UI
+
+The adapter defines a `GovernanceProvider` protocol that any backend can implement. The default `WatchdogProvider` reads from `platform.watchdog.*` Delta tables. Ontos consumes it with 3 additive lines in its fork.
+
+See [`ontos-adapter/README.md`](ontos-adapter/README.md) for integration details.
 
 ## Testing
 

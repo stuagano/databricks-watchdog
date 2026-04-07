@@ -1,90 +1,36 @@
-# Regulatory Compliance Policies (Mirion-specific)
+# Example Regulatory Compliance Policies
 # Domain: RegulatoryCompliance
 # Owner: compliance_officer
 #
-# Export control (ITAR/EAR), NRC, DOE, and data retention requirements.
-# These are the highest-severity policies — violations here have legal
-# consequences, not just operational ones.
+# Shows how to write regulatory policies that reference customer-specific
+# ontology classes and rule primitives. Adapt for your customer's
+# regulatory requirements (HIPAA, SOX, GDPR, etc.).
 
 policies:
 
   - id: POL-R001
-    name: "Export-controlled assets must have full regulatory tagging"
-    applies_to: ExportControlledAsset
+    name: "HIPAA assets must have a data steward and retention policy"
+    applies_to: HipaaAsset
     domain: RegulatoryCompliance
     severity: critical
-    description: "ITAR/EAR data requires a data steward, regulatory domain, and retention policy"
-    remediation: "Add tags: 'data_steward' (responsible person), 'regulatory_domain' (NRC/DOE/ITAR/EAR), 'retention_days' (retention period)"
+    description: "HIPAA-regulated data requires a named steward and retention period"
+    remediation: "Add 'data_steward' tag (email of responsible person) and 'retention_days' tag"
     active: true
     rule:
-      type: all_of
-      rules:
-        - ref: has_data_steward
-        - ref: has_regulatory_domain
-        - ref: has_retention_policy
+      ref: hipaa_has_steward
 
   - id: POL-R002
-    name: "ITAR assets must have valid export classification"
-    applies_to: ItarAsset
+    name: "SOX assets must have a data steward"
+    applies_to: SoxAsset
     domain: RegulatoryCompliance
     severity: critical
-    description: "ITAR-regulated data must have a properly formatted export classification tag"
-    remediation: "Set 'export_classification' tag to 'ITAR'"
+    description: "SOX-regulated financial data must have an accountable steward"
+    remediation: "Add a 'data_steward' tag with the email of the responsible person"
     active: true
     rule:
-      ref: valid_export_classification
+      ref: has_data_steward
 
   - id: POL-R003
-    name: "EAR assets must have valid export classification"
-    applies_to: EarAsset
-    domain: RegulatoryCompliance
-    severity: critical
-    description: "EAR-regulated data must have a properly formatted export classification tag"
-    remediation: "Set 'export_classification' tag to 'EAR'"
-    active: true
-    rule:
-      ref: valid_export_classification
-
-  - id: POL-R004
-    name: "NRC-regulated assets must have full regulatory tagging"
-    applies_to: NrcRegulatedAsset
-    domain: RegulatoryCompliance
-    severity: critical
-    description: "NRC-regulated data requires a data steward and retention policy"
-    remediation: "Add tags: 'data_steward', 'retention_days', ensure 'regulatory_domain' = 'NRC'"
-    active: true
-    rule:
-      type: all_of
-      rules:
-        - ref: has_data_steward
-        - ref: has_retention_policy
-
-  - id: POL-R005
-    name: "DOE-regulated assets must have full regulatory tagging"
-    applies_to: DoeRegulatedAsset
-    domain: RegulatoryCompliance
-    severity: critical
-    description: "DOE-regulated data requires a data steward and retention policy"
-    remediation: "Add tags: 'data_steward', 'retention_days', ensure 'regulatory_domain' = 'DOE'"
-    active: true
-    rule:
-      type: all_of
-      rules:
-        - ref: has_data_steward
-        - ref: has_retention_policy
-
-  - id: POL-R006
-    name: "Confidential assets must have an export classification"
-    applies_to: ConfidentialAsset
-    domain: RegulatoryCompliance
-    severity: high
-    description: "All confidential data must declare whether it is subject to export controls"
-    remediation: "Add 'export_classification' tag (NONE, EAR, ITAR)"
-    active: true
-    rule:
-      ref: has_export_classification
-
-  - id: POL-R007
     name: "All data assets must declare data classification"
     applies_to: DataAsset
     domain: RegulatoryCompliance
@@ -95,13 +41,24 @@ policies:
     rule:
       ref: has_data_classification
 
-  - id: POL-R008
+  - id: POL-R004
     name: "PII assets must have retention policy"
     applies_to: PiiAsset
     domain: RegulatoryCompliance
     severity: critical
-    description: "PII data must specify a retention period for GDPR/privacy compliance"
+    description: "PII data must specify a retention period for privacy compliance"
     remediation: "Add 'retention_days' tag with the maximum retention period in days"
     active: true
     rule:
       ref: has_retention_policy
+
+  - id: POL-R005
+    name: "Regulated assets must identify their regulatory domain"
+    applies_to: ConfidentialAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "Confidential data should declare which regulation applies"
+    remediation: "Add 'regulatory_domain' tag (HIPAA, SOX, GDPR, etc.)"
+    active: true
+    rule:
+      ref: has_regulatory_domain

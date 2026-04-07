@@ -17,6 +17,6 @@
 #     rule:
 #       ref: has_retention_policy       # reference a primitive from rule_primitives.yml
 #
-# See customer/policies/regulatory.yml for a complete example (Mirion).
+# See customer/ for a complete example.
 
 policies: []

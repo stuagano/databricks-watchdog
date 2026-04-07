@@ -97,7 +97,7 @@ primitives:
   # ── Customer-specific primitives ─────────────────────────────────────
   # Add your customer's regulatory or industry-specific primitives here.
   # See customer/ontologies/rule_primitives.yml for an example
-  # (Mirion: export control, regulatory domain).
+  # (regulatory domain, conditional compositions).
 
   # ── Documentation ──────────────────────────────────────────────────────
 

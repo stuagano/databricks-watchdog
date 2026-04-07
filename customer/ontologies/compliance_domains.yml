@@ -1,12 +1,8 @@
-# Compliance Domain Ontology — governance domain taxonomy
+# Example Customer Compliance Domains
 #
-# Domains organize policies into logical groups. Each domain has an owner
-# (team or role), a severity floor (minimum severity for new policies),
-# and optional escalation contacts.
-#
-# Policies reference their domain by name. Violations are groupable by
-# domain for role-scoped dashboards (e.g., "show me all SecurityGovernance
-# violations in the detection BU").
+# Shows how to customize escalation contacts and regulatory sub-domains
+# for a specific customer. Copy to engine/ontologies/compliance_domains.yml
+# and replace placeholder values with your customer's contacts.
 
 domains:
 
@@ -14,7 +10,7 @@ domains:
     description: "Cost attribution, chargeback, and resource optimization"
     owner_role: "platform_admin"
     severity_floor: medium
-    escalation: "finance-data-platform@mirion.com"
+    escalation: "data-platform@acme.com"
     sub_domains:
       - Tagging
       - IdleResources
@@ -24,7 +20,7 @@ domains:
     description: "Access control, encryption, network isolation, identity management"
     owner_role: "security_admin"
     severity_floor: high
-    escalation: "infosec@mirion.com"
+    escalation: "infosec@acme.com"
     sub_domains:
       - AccessControl
       - Encryption
@@ -35,7 +31,7 @@ domains:
     description: "Documentation, naming conventions, lineage, schema standards"
     owner_role: "data_steward"
     severity_floor: low
-    escalation: "data-governance@mirion.com"
+    escalation: "data-governance@acme.com"
     sub_domains:
       - Documentation
       - NamingConventions
@@ -46,7 +42,7 @@ domains:
     description: "Runtime versions, retry policies, alerting, SLA compliance"
     owner_role: "platform_admin"
     severity_floor: medium
-    escalation: "platform-ops@mirion.com"
+    escalation: "platform-ops@acme.com"
     sub_domains:
       - RuntimeCompliance
       - Alerting
@@ -54,13 +50,12 @@ domains:
       - RetryPolicies
 
   RegulatoryCompliance:
-    description: "Export control (ITAR/EAR), NRC, DOE, SOX — Mirion regulatory obligations"
+    description: "HIPAA, SOX, and data retention obligations"
     owner_role: "compliance_officer"
     severity_floor: critical
-    escalation: "legal-compliance@mirion.com"
+    escalation: "legal-compliance@acme.com"
     sub_domains:
-      - ExportControl
-      - NuclearRegulatory
+      - HealthcareCompliance
       - FinancialCompliance
       - DataRetention
 
@@ -68,7 +63,7 @@ domains:
     description: "Ensuring all data assets are properly classified and labeled"
     owner_role: "data_steward"
     severity_floor: high
-    escalation: "data-governance@mirion.com"
+    escalation: "data-governance@acme.com"
     sub_domains:
       - SensitivityLabeling
       - BusinessUnitAttribution

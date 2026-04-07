@@ -41,7 +41,7 @@ _CLASS_TYPE_FALLBACK: dict[str, set[str]] = {
     "SilverTable": {"table"},
     "BronzeTable": {"table"},
     "PiiTable": {"table"},
-    "ExportControlledTable": {"table"},
+    "ConfidentialAsset": {"table", "volume", "catalog", "schema"},
     "ProductionJob": {"job"},
     "InteractiveCluster": {"cluster"},
     "ProductionCluster": {"cluster"},

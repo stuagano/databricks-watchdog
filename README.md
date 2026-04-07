@@ -111,7 +111,7 @@ cd ../../..
 - Add customer-specific policies to `engine/policies/` (any `.yml` file is auto-loaded)
 - Add customer-specific rule primitives to `engine/ontologies/rule_primitives.yml`
 
-Use `template/` as a starting point — it has skeleton files with commented examples. See `customer/` for a complete real-world example (Mirion Technologies: export control, nuclear regulatory, business unit scoping).
+Use `template/` as a starting point — it has skeleton files with commented examples. See `customer/` for a complete worked example (HIPAA/SOX regulatory, business unit scoping).
 
 ### 4. Deploy the engine
 
@@ -176,9 +176,9 @@ databricks-watchdog/
 ├── terraform/                       # Infrastructure as Code
 │   └── modules/watchdog/            #   Reusable TF module (SP, catalog, grants)
 │
-├── customer/                        # Mirion-specific customizations (reference example)
-│   ├── ontologies/                  #   Export control classes, compliance domains
-│   └── policies/                    #   Regulatory policies (ITAR/EAR/NRC/DOE)
+├── customer/                        # Worked example (regulatory + business unit classes)
+│   ├── ontologies/                  #   Example classes, domains, primitives
+│   └── policies/                    #   Example regulatory policies
 │
 ├── template/                        # Blank starting point for new customers
 │   ├── ontologies/                  #   Skeleton with commented examples

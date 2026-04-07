@@ -79,34 +79,11 @@ class TestDataClassificationTags:
         assert result.classes == ["DataAsset"]
 
     def test_multiple_derived_classes_same_resource(self, engine):
-        """A PII table owned by dosimetry BU gets both PiiTable and DosimetryAsset."""
-        tags = {"data_classification": "pii", "business_unit": "dosimetry"}
+        """A PII gold table gets both PiiTable and GoldTable."""
+        tags = {"data_classification": "pii", "data_layer": "gold"}
         all_classes = engine.get_all_classes_for_resource("table", tags, {})
         assert "PiiTable" in all_classes
-        assert "DosimetryAsset" in all_classes
-
-
-# ── Export control classifications ───────────────────────────────────────────
-
-class TestExportControl:
-    def test_itar_classified(self, engine):
-        tags = {"export_classification": "ITAR", "data_classification": "confidential"}
-        all_classes = engine.get_all_classes_for_resource("table", tags, {})
-        assert "ItarAsset" in all_classes
-        assert "ExportControlledAsset" in all_classes
-        assert "ConfidentialAsset" in all_classes
-
-    def test_ear_classified(self, engine):
-        tags = {"export_classification": "EAR", "data_classification": "restricted"}
-        all_classes = engine.get_all_classes_for_resource("table", tags, {})
-        assert "EarAsset" in all_classes
-        assert "ExportControlledAsset" in all_classes
-
-    def test_wrong_export_value_not_classified(self, engine):
-        tags = {"export_classification": "NONE"}
-        result = engine.classify("table", tags, {})
-        assert "ExportControlledAsset" not in result.classes
-        assert "ItarAsset" not in result.classes
+        assert "GoldTable" in all_classes
 
 
 # ── Compute specializations ──────────────────────────────────────────────────
@@ -161,10 +138,6 @@ class TestAncestorChains:
     def test_critical_job_ancestor_chain(self, engine):
         chain = engine.get_ancestor_chain("CriticalJob")
         assert chain == ["CriticalJob", "ProductionJob", "ComputeAsset"]
-
-    def test_itar_asset_ancestor_chain(self, engine):
-        chain = engine.get_ancestor_chain("ItarAsset")
-        assert chain == ["ItarAsset", "ExportControlledAsset", "ConfidentialAsset", "DataAsset"]
 
     def test_get_all_classes_includes_ancestors(self, engine):
         """get_all_classes expands each matched class to its full ancestor chain."""

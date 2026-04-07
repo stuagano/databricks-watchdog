@@ -3,7 +3,7 @@
 # Copy this file to engine/ontologies/compliance_domains.yml and customize
 # the escalation emails and sub_domains for your customer.
 #
-# See customer/ontologies/compliance_domains.yml for a complete example (Mirion).
+# See customer/ for a complete example.
 
 domains:
 

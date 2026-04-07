@@ -11,7 +11,7 @@ Three views are created in the watchdog schema after each evaluate run:
   v_class_compliance
     One row per ontology class. Aggregated violation counts and compliance
     rate per class — answers "how are GoldTables doing?", "how are
-    ItarAssets doing?". The primary surface for Ontos dashboard grouping.
+    PiiAssets doing?". The primary surface for Ontos dashboard grouping.
 
   v_domain_compliance
     One row per compliance domain (CostGovernance, SecurityGovernance, etc.).

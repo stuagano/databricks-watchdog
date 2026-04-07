@@ -5,7 +5,7 @@
 # and optional escalation contacts.
 #
 # Customize escalation emails and sub_domains for your customer.
-# See customer/ontologies/compliance_domains.yml for a Mirion example.
+# See customer/ontologies/compliance_domains.yml for an example.
 
 domains:
 

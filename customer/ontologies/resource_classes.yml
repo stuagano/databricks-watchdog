@@ -1,86 +1,52 @@
-# Mirion-Specific Resource Classes — customer overlay
+# Example Customer Resource Classes
 #
-# These classes extend the generic base in engine/ontologies/resource_classes.yml.
-# To use: copy these entries into engine/ontologies/resource_classes.yml under
-# the derived_classes section before deploying.
+# These classes show how to extend the generic base in
+# engine/ontologies/resource_classes.yml for a specific customer.
 #
-# Includes:
-#   - Export control (ITAR/EAR) — defense industry regulatory
-#   - Nuclear regulatory (NRC/DOE) — energy sector regulatory
-#   - Business units — Mirion organizational scoping
+# To use: copy the entries you need into engine/ontologies/resource_classes.yml
+# under the derived_classes section before deploying.
+#
+# This example includes:
+#   - HIPAA regulatory classes (healthcare)
+#   - Business unit scoping classes
 
 derived_classes:
 
-  # ── Regulatory domain classes (export control & nuclear) ───────────────
+  # ── Regulatory domain classes ─────────────────────────────────────────
 
-  ExportControlledAsset:
+  HipaaAsset:
     parent: ConfidentialAsset
-    description: "Subject to ITAR/EAR export control regulations"
-    classifier:
-      tag_in:
-        export_classification: [ITAR, EAR]
-
-  ItarAsset:
-    parent: ExportControlledAsset
-    description: "ITAR-regulated data — defense articles and services"
+    description: "Subject to HIPAA regulations"
     classifier:
       tag_equals:
-        export_classification: "ITAR"
+        regulatory_domain: "HIPAA"
 
-  EarAsset:
-    parent: ExportControlledAsset
-    description: "EAR-regulated data — dual-use commercial/military items"
-    classifier:
-      tag_equals:
-        export_classification: "EAR"
-
-  NrcRegulatedAsset:
+  SoxAsset:
     parent: ConfidentialAsset
-    description: "Subject to Nuclear Regulatory Commission oversight"
+    description: "Subject to SOX financial compliance"
     classifier:
       tag_equals:
-        regulatory_domain: "NRC"
+        regulatory_domain: "SOX"
 
-  DoeRegulatedAsset:
-    parent: ConfidentialAsset
-    description: "Subject to Department of Energy oversight"
-    classifier:
-      tag_equals:
-        regulatory_domain: "DOE"
+  # ── Business unit scoping ─────────────────────────────────────────────
 
-  # ── Mirion business unit scoping ──────────────────────────────────────
-
-  DosimetryAsset:
+  EngineeringAsset:
     parent: DataAsset
-    description: "Owned by Dosimetry business unit"
+    description: "Owned by the Engineering business unit"
     classifier:
       tag_equals:
-        business_unit: "dosimetry"
+        business_unit: "engineering"
 
-  DetectionAsset:
+  SalesAsset:
     parent: DataAsset
-    description: "Owned by Detection & Measurement business unit"
+    description: "Owned by the Sales business unit"
     classifier:
       tag_equals:
-        business_unit: "detection"
+        business_unit: "sales"
 
-  MedicalAsset:
+  FinanceAsset:
     parent: DataAsset
-    description: "Owned by Medical business unit"
+    description: "Owned by the Finance business unit"
     classifier:
       tag_equals:
-        business_unit: "medical"
-
-  SensingAsset:
-    parent: DataAsset
-    description: "Owned by Sensing Systems business unit"
-    classifier:
-      tag_equals:
-        business_unit: "sensing"
-
-  IndustrialAsset:
-    parent: DataAsset
-    description: "Owned by Industrial business unit"
-    classifier:
-      tag_equals:
-        business_unit: "industrial"
+        business_unit: "finance"

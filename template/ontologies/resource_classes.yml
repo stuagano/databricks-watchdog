@@ -21,6 +21,6 @@
 #       tag_equals:
 #         regulatory_domain: "HIPAA"
 #
-# See customer/ontologies/resource_classes.yml for a complete example (Mirion).
+# See customer/ for a complete example.
 
 derived_classes: {}

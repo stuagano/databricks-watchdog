@@ -394,21 +394,20 @@ class TestPrimitiveRefs:
         assert not result.passed
         assert "Unknown rule primitive" in result.detail
 
-    def test_export_controlled_has_steward(self, engine):
-        """Condition: export_classification in [ITAR, EAR]. Then: steward + domain + retention."""
-        rule = {"ref": "export_controlled_has_steward"}
-        # ITAR with no steward → fails
-        result = engine.evaluate(rule, {"export_classification": "ITAR"}, {})
+    def test_pii_has_steward(self, engine):
+        """Condition: data_classification=pii. Then: steward + retention."""
+        rule = {"ref": "pii_has_steward"}
+        # PII with no steward → fails
+        result = engine.evaluate(rule, {"data_classification": "pii"}, {})
         assert not result.passed
-        # ITAR with all required tags → passes
+        # PII with all required tags → passes
         tags = {
-            "export_classification": "ITAR",
-            "data_steward": "legal@example.com",
-            "regulatory_domain": "ITAR",
-            "retention_days": "730",
+            "data_classification": "pii",
+            "data_steward": "privacy@example.com",
+            "retention_days": "365",
         }
         result = engine.evaluate(rule, tags, {})
         assert result.passed
-        # NONE export classification → vacuously true (condition doesn't match)
-        result = engine.evaluate(rule, {"export_classification": "NONE"}, {})
+        # Non-PII → vacuously true (condition doesn't match)
+        result = engine.evaluate(rule, {"data_classification": "internal"}, {})
         assert result.passed

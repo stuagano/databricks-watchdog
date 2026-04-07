@@ -27,6 +27,6 @@
 #         - type: tag_exists
 #           keys: [retention_days]
 #
-# See customer/ontologies/rule_primitives.yml for a complete example (Mirion).
+# See customer/ for a complete example.
 
 primitives: {}

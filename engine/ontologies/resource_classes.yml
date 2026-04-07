@@ -79,7 +79,7 @@ derived_classes:
   # ── Customer-specific classes ───────────────────────────────────────────
   # Add your customer's regulatory, business unit, or industry-specific
   # classes here. See customer/ontologies/resource_classes.yml for an
-  # example (Mirion: export control, nuclear regulatory, business units).
+  # example (HIPAA, SOX, business units).
 
   # ── Table specializations ──────────────────────────────────────────────
 

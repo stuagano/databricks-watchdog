@@ -22,6 +22,7 @@ from watchdog_governance.provider import GovernanceProvider
 from watchdog_governance.providers.watchdog import WatchdogProvider
 from watchdog_governance.routers._deps import get_provider
 from watchdog_governance.routers.exceptions import router as exceptions_router
+from watchdog_governance.routers.grants import router as grants_router
 from watchdog_governance.routers.ontology import router as ontology_router
 from watchdog_governance.routers.policies import router as policies_router
 from watchdog_governance.routers.violations import router as violations_router
@@ -30,6 +31,7 @@ root_router = APIRouter()
 root_router.include_router(violations_router)
 root_router.include_router(policies_router)
 root_router.include_router(exceptions_router)
+root_router.include_router(grants_router)
 root_router.include_router(ontology_router)
 
 

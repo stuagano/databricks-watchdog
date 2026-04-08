@@ -17,7 +17,12 @@ from databricks.sdk import WorkspaceClient
 from mcp.types import TextContent, Tool
 
 from ai_devkit.config import AiDevkitConfig
-from ai_devkit.watchdog_client import get_resource_governance, ResourceGovernanceState
+from ai_devkit.watchdog_client import (
+    get_grants_for_resource,
+    get_resource_governance,
+    get_service_principal_governance,
+    ResourceGovernanceState,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -676,6 +681,19 @@ async def _validate_ai_query(
                     msg = f"{table_name}: open {sev} violation ({policy})."
                     finding["issues"].append({"severity": "warning", "message": msg})
                     warnings.append(msg)
+
+        # --- 6. Grant-related violations (access governance) ---
+        grant_violations = gov.grant_violations
+        if grant_violations:
+            policy_ids = [v.get("policy_id", "") for v in grant_violations]
+            msg = (
+                f"{table_name}: {len(grant_violations)} open access governance "
+                f"violation(s) ({', '.join(policy_ids)}). "
+                f"Review grant hygiene before using in AI workflows."
+            )
+            finding["issues"].append({"severity": "warning", "message": msg})
+            warnings.append(msg)
+            finding["grant_violations"] = grant_violations
 
         findings.append(finding)
 

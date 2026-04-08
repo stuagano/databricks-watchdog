@@ -178,6 +178,16 @@ databricks-watchdog/
 │   ├── src/watchdog_governance/     #   Provider protocol + FastAPI routers
 │   └── frontend/                    #   React views (drop into Ontos fork)
 │
+├── guardrails/                      # AI DevKit guardrails MCP server
+│   ├── databricks.yml               #   DAB bundle (mcp-ai-guardrails app)
+│   ├── src/ai_devkit/               #   9 MCP tools + watchdog integration
+│   │   ├── server.py                #     FastAPI + SSE transport
+│   │   ├── tools/governance.py      #     Validate, discover, build safely
+│   │   ├── watchdog_client.py       #     Reads classifications + violations
+│   │   ├── guardrails.py            #     Defense-in-depth rules
+│   │   └── audit.py                 #     Structured compliance logging
+│   └── resources/                   #   App resource definition
+│
 ├── terraform/                       # Infrastructure as Code
 │   └── modules/watchdog/            #   Reusable TF module (SP, catalog, grants)
 │

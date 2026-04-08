@@ -1,0 +1,45 @@
+# AI DevKit Guardrails MCP Server — Databricks Asset Bundle
+#
+# Deploys governance guardrails as a standalone MCP Databricks App.
+# Provides classification-aware query validation, cost estimation,
+# column-level safety, and audit logging for AI developers.
+#
+# Complements the official AI Dev Kit (50+ tools) with governance
+# that UC alone doesn't provide.
+
+bundle:
+  name: ai-devkit-guardrails
+
+variables:
+  catalog:
+    description: "Default Unity Catalog for tools"
+  warehouse_id:
+    description: "SQL warehouse ID for governance queries"
+  watchdog_schema:
+    description: "Watchdog schema (catalog.schema) for violation data"
+    default: "platform.watchdog"
+
+targets:
+  # ── Customer non-production ───────────────────────────────────────────
+  nonprod:
+    mode: development
+    default: true
+    workspace:
+      host: <YOUR_NONPROD_WORKSPACE_URL>
+    variables:
+      catalog: <YOUR_CATALOG>
+      warehouse_id: <YOUR_NONPROD_WAREHOUSE_ID>
+
+  # ── Customer production ───────────────────────────────────────────────
+  prod:
+    mode: production
+    workspace:
+      host: <YOUR_PROD_WORKSPACE_URL>
+    run_as:
+      service_principal_name: spWatchdog
+    variables:
+      catalog: <YOUR_CATALOG>
+      warehouse_id: <YOUR_PROD_WAREHOUSE_ID>
+
+include:
+  - resources/*.yml

@@ -1,0 +1,21 @@
+resources:
+  apps:
+    mcp-ai-guardrails:
+      name: mcp-ai-guardrails
+      description: "AI DevKit governance guardrails — classification-aware validation, cost estimation, audit logging"
+      source_code_path: ../bundles/ai-devkit-guardrails
+      config:
+        command:
+          - uvicorn
+          - ai_devkit.server:app
+          - --host
+          - 0.0.0.0
+          - --port
+          - "8000"
+        env:
+          - name: DATABRICKS_CATALOG
+            value: ${var.catalog}
+          - name: DATABRICKS_WAREHOUSE_ID
+            value: ${var.warehouse_id}
+          - name: WATCHDOG_SCHEMA
+            value: ${var.watchdog_schema}

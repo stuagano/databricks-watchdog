@@ -1,0 +1,14 @@
+command:
+  - uvicorn
+  - ai_devkit.server:app
+  - --host
+  - 0.0.0.0
+  - --port
+  - "8000"
+env:
+  - name: DATABRICKS_CATALOG
+    value: ${var.catalog}
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: ${var.warehouse_id}
+  - name: WATCHDOG_SCHEMA
+    value: ${var.watchdog_schema}

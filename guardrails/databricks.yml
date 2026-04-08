@@ -20,10 +20,21 @@ variables:
     default: "platform.watchdog"
 
 targets:
+  # ── FE Stable (demo workspace) ──────────────────────────────────────
+  fe-stable:
+    mode: development
+    default: true
+    workspace:
+      host: https://fevm-serverless-stable-s0v155.cloud.databricks.com
+      profile: fe-stable
+    variables:
+      catalog: serverless_stable_s0v155_catalog
+      warehouse_id: 2053827451af25b6
+      watchdog_schema: serverless_stable_s0v155_catalog.watchdog
+
   # ── Customer non-production ───────────────────────────────────────────
   nonprod:
     mode: development
-    default: true
     workspace:
       host: <YOUR_NONPROD_WORKSPACE_URL>
     variables:

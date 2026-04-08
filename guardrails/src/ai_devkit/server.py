@@ -21,7 +21,7 @@ from mcp.server import Server
 from mcp.server.sse import SseServerTransport
 from mcp.types import TextContent, Tool
 
-from ai_devkit.audit import audit_log
+from ai_devkit.audit import log_tool_call as audit_log
 from ai_devkit.config import AiDevkitConfig
 from ai_devkit.tools import governance
 

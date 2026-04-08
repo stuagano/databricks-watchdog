@@ -7,8 +7,8 @@ command:
   - "8000"
 env:
   - name: DATABRICKS_CATALOG
-    value: ${var.catalog}
+    value: serverless_stable_s0v155_catalog
   - name: DATABRICKS_WAREHOUSE_ID
-    value: ${var.warehouse_id}
+    value: 2053827451af25b6
   - name: WATCHDOG_SCHEMA
-    value: ${var.watchdog_schema}
+    value: serverless_stable_s0v155_catalog.watchdog

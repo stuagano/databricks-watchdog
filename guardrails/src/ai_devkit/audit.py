@@ -136,3 +136,7 @@ def log_session_end(user: str, session_id: str) -> None:
         "session_id": session_id,
     }
     audit_logger.info(json.dumps(event))
+
+
+# Alias for backward compatibility with server.py imports
+audit_log = log_tool_call

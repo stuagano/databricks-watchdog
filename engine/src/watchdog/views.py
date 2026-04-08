@@ -1,6 +1,6 @@
 """Semantic Views — ontology-shaped compliance views for Ontos and Genie.
 
-Three views are created in the watchdog schema after each evaluate run:
+Six views are created in the watchdog schema after each evaluate run:
 
   v_resource_compliance
     One row per (resource_id, class_name). Starting point for navigating
@@ -17,15 +17,29 @@ Three views are created in the watchdog schema after each evaluate run:
     One row per compliance domain (CostGovernance, SecurityGovernance, etc.).
     Quick executive posture view by governance domain.
 
-All three are regular views (not materialized) so they always reflect the
-current state of the violations and resource_classifications tables.
+  v_tag_policy_coverage
+    One row per (resource_id, policy_id). Shows per-resource tag policy
+    compliance state — which policies are satisfied, violated, or not
+    evaluated for each resource.
+
+  v_data_classification_summary
+    One row per catalog. Aggregated classification posture — % classified,
+    % with steward, % with sensitive data, and ontology classification
+    coverage.
+
+  v_dq_monitoring_coverage
+    One row per table. Shows which tables have DQM, LHM, both, or neither,
+    along with anomaly counts and ontology class assignments.
+
+All six are regular views (not materialized) so they always reflect the
+current state of the underlying tables.
 """
 
 from pyspark.sql import SparkSession
 
 
 def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> None:
-    """Create or replace the three semantic compliance views.
+    """Create or replace the six semantic compliance views.
 
     Called after evaluate_policies so the views are always fresh after
     each scan. Idempotent — safe to call on every run.
@@ -33,6 +47,9 @@ def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> Non
     _ensure_resource_compliance_view(spark, catalog, schema)
     _ensure_class_compliance_view(spark, catalog, schema)
     _ensure_domain_compliance_view(spark, catalog, schema)
+    _ensure_tag_policy_coverage_view(spark, catalog, schema)
+    _ensure_data_classification_summary_view(spark, catalog, schema)
+    _ensure_dq_monitoring_coverage_view(spark, catalog, schema)
 
 
 def _ensure_resource_compliance_view(spark: SparkSession, catalog: str,
@@ -173,4 +190,135 @@ def _ensure_domain_compliance_view(spark: SparkSession, catalog: str,
         WHERE v.domain IS NOT NULL
         GROUP BY v.domain
         ORDER BY open_violations DESC
+    """)
+
+
+def _ensure_tag_policy_coverage_view(spark: SparkSession, catalog: str,
+                                      schema: str) -> None:
+    """v_tag_policy_coverage: per-resource tag policy compliance state.
+
+    One row per (resource_id, policy_id). Answers "which tag-based policies
+    are satisfied, violated, or not evaluated for each resource?" by crossing
+    the latest resource inventory with active policies in the SecurityGovernance
+    and DataClassification domains.
+
+    Includes exception status so dashboards can distinguish between violations
+    that are actively open vs those with approved waivers.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_tag_policy_coverage AS
+        SELECT
+            ri.resource_id,
+            ri.resource_type,
+            ri.resource_name,
+            ri.owner,
+            p.policy_id,
+            p.policy_name,
+            p.severity,
+            CASE
+                WHEN sr.result = 'pass' THEN 'satisfied'
+                WHEN sr.result = 'fail' THEN 'violated'
+                ELSE 'not_evaluated'
+            END AS coverage_status,
+            v.status AS violation_status,
+            v.first_detected,
+            v.last_detected,
+            e.active AS has_exception,
+            e.expires_at AS exception_expires
+        FROM {catalog}.{schema}.resource_inventory ri
+        CROSS JOIN {catalog}.{schema}.policies p
+        LEFT JOIN {catalog}.{schema}.scan_results sr
+            ON ri.resource_id = sr.resource_id
+            AND p.policy_id = sr.policy_id
+            AND sr.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.scan_results)
+        LEFT JOIN {catalog}.{schema}.violations v
+            ON ri.resource_id = v.resource_id
+            AND p.policy_id = v.policy_id
+            AND v.status IN ('open', 'exception')
+        LEFT JOIN {catalog}.{schema}.exceptions e
+            ON ri.resource_id = e.resource_id
+            AND p.policy_id = e.policy_id
+            AND e.active = true
+        WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+            AND p.active = true
+            AND p.domain IN ('SecurityGovernance', 'DataClassification')
+    """)
+
+
+def _ensure_data_classification_summary_view(spark: SparkSession, catalog: str,
+                                              schema: str) -> None:
+    """v_data_classification_summary: aggregated classification posture by catalog.
+
+    One row per catalog (ri.domain). Shows % of tables that are classified,
+    have a data steward, contain sensitive data, and are covered by ontology
+    classification. Useful for executive dashboards tracking data governance
+    maturity across the lakehouse.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_data_classification_summary AS
+        SELECT
+            ri.domain AS catalog_name,
+            COUNT(DISTINCT ri.resource_id) AS total_tables,
+            COUNT(DISTINCT CASE WHEN ri.tags['data_classification'] IS NOT NULL THEN ri.resource_id END)
+                AS classified_tables,
+            COUNT(DISTINCT CASE WHEN ri.tags['data_steward'] IS NOT NULL THEN ri.resource_id END)
+                AS tables_with_steward,
+            COUNT(DISTINCT CASE WHEN ri.tags['data_classification'] IN ('pii', 'confidential', 'restricted') THEN ri.resource_id END)
+                AS sensitive_tables,
+            COUNT(DISTINCT CASE WHEN rc.class_name IN ('PiiAsset', 'ConfidentialAsset') THEN ri.resource_id END)
+                AS ontology_classified,
+            ROUND(
+                COUNT(DISTINCT CASE WHEN ri.tags['data_classification'] IS NOT NULL THEN ri.resource_id END) * 100.0
+                / NULLIF(COUNT(DISTINCT ri.resource_id), 0), 1
+            ) AS classification_pct,
+            ROUND(
+                COUNT(DISTINCT CASE WHEN ri.tags['data_steward'] IS NOT NULL THEN ri.resource_id END) * 100.0
+                / NULLIF(COUNT(DISTINCT CASE WHEN ri.tags['data_classification'] IS NOT NULL THEN ri.resource_id END), 0), 1
+            ) AS stewardship_pct
+        FROM {catalog}.{schema}.resource_inventory ri
+        LEFT JOIN {catalog}.{schema}.resource_classifications rc
+            ON ri.resource_id = rc.resource_id
+            AND rc.scan_id = ri.scan_id
+        WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+            AND ri.resource_type = 'table'
+        GROUP BY ri.domain
+    """)
+
+
+def _ensure_dq_monitoring_coverage_view(spark: SparkSession, catalog: str,
+                                         schema: str) -> None:
+    """v_dq_monitoring_coverage: DQ monitoring status per table.
+
+    One row per table. Shows which tables have DQM (Data Quality Monitoring),
+    LHM (Lakehouse Monitoring), both, or neither. Includes anomaly counts
+    and ontology class for dashboard filtering.
+
+    Tags dqm_enabled/lhm_enabled are enriched by the crawler's DQ system
+    table crawlers during each scan.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_dq_monitoring_coverage AS
+        SELECT
+            ri.resource_id,
+            ri.resource_type,
+            ri.resource_name,
+            ri.owner,
+            ri.domain AS catalog_name,
+            COALESCE(ri.tags['dqm_enabled'], 'false') AS dqm_enabled,
+            COALESCE(ri.tags['lhm_enabled'], 'false') AS lhm_enabled,
+            CASE
+                WHEN ri.tags['dqm_enabled'] = 'true' AND ri.tags['lhm_enabled'] = 'true' THEN 'both'
+                WHEN ri.tags['dqm_enabled'] = 'true' THEN 'dqm_only'
+                WHEN ri.tags['lhm_enabled'] = 'true' THEN 'lhm_only'
+                ELSE 'none'
+            END AS monitoring_status,
+            ri.tags['dqm_anomalies'] AS dqm_anomalies,
+            ri.tags['dqm_metrics_checked'] AS dqm_metrics_checked,
+            rc.class_name AS ontology_class
+        FROM {catalog}.{schema}.resource_inventory ri
+        LEFT JOIN {catalog}.{schema}.resource_classifications rc
+            ON ri.resource_id = rc.resource_id
+            AND rc.scan_id = ri.scan_id
+        WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+            AND ri.resource_type = 'table'
     """)

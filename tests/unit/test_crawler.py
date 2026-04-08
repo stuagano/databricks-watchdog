@@ -60,8 +60,8 @@ class TestMetastoreId:
             resource_id="cat.schema.table1",
             resource_name="table1",
         )
-        # metastore_id is at index 8 in the tuple (after metadata, before discovered_at)
-        assert row[8] == "ms-abc-123"
+        # metastore_id is at index 1 in the tuple (after scan_id)
+        assert row[1] == "ms-abc-123"
 
     def test_metastore_id_cached(self):
         crawler = _make_crawler(metastore_id="ms-cached")
@@ -86,7 +86,9 @@ class TestMetastoreId:
             tags={"env": "prod"},
             metadata={"comment": "test"},
         )
-        # Tuple length must match INVENTORY_SCHEMA field count (10 fields)
+        # Tuple length must match INVENTORY_SCHEMA field count (10 fields:
+        # scan_id, metastore_id, resource_type, resource_id, resource_name,
+        # owner, domain, tags, metadata, discovered_at)
         assert len(row) == 10
 
 
@@ -111,16 +113,16 @@ class TestCrawlServicePrincipals:
 
         assert len(rows) == 1
         row = rows[0]
-        # resource_type at index 1
-        assert row[1] == "service_principal"
-        # resource_id at index 2
-        assert row[2] == "service_principal:app-001"
-        # resource_name at index 3
-        assert row[3] == "my-sp"
-        # owner at index 4 — SPs have no owner
-        assert row[4] is None
-        # metadata at index 7
-        metadata = row[7]
+        # resource_type at index 2 (after scan_id, metastore_id)
+        assert row[2] == "service_principal"
+        # resource_id at index 3
+        assert row[3] == "service_principal:app-001"
+        # resource_name at index 4
+        assert row[4] == "my-sp"
+        # owner at index 5 — SPs have no owner
+        assert row[5] is None
+        # metadata at index 8
+        metadata = row[8]
         assert metadata["application_id"] == "app-001"
         assert metadata["active"] == "True"
         assert metadata["entitlements"] == ""
@@ -135,7 +137,7 @@ class TestCrawlServicePrincipals:
         crawler.w.service_principals.list.return_value = [sp]
 
         rows = crawler._crawl_service_principals()
-        metadata = rows[0][7]
+        metadata = rows[0][8]
         assert metadata["entitlements"] == "workspace-access,databricks-sql-access"
 
     def test_no_display_name_falls_back_to_app_id(self):
@@ -144,7 +146,7 @@ class TestCrawlServicePrincipals:
         crawler.w.service_principals.list.return_value = [sp]
 
         rows = crawler._crawl_service_principals()
-        assert rows[0][3] == "app-003"
+        assert rows[0][4] == "app-003"
 
     def test_empty_list(self):
         crawler = _make_crawler()
@@ -196,11 +198,11 @@ class TestCrawlGrants:
 
         assert len(rows) == 1
         row = rows[0]
-        assert row[1] == "grant"  # resource_type
-        assert row[2] == "table:prod.sales.orders:data_team:SELECT"  # resource_id
-        assert row[3] == "SELECT on table prod.sales.orders"  # resource_name
-        assert row[4] == "data_team"  # owner = grantee
-        metadata = row[7]
+        assert row[2] == "grant"  # resource_type
+        assert row[3] == "table:prod.sales.orders:data_team:SELECT"  # resource_id
+        assert row[4] == "SELECT on table prod.sales.orders"  # resource_name
+        assert row[5] == "data_team"  # owner = grantee
+        metadata = row[8]
         assert metadata["securable_type"] == "table"
         assert metadata["securable_full_name"] == "prod.sales.orders"
         assert metadata["grantee"] == "data_team"
@@ -234,9 +236,9 @@ class TestCrawlGrants:
 
         assert len(rows) == 1
         row = rows[0]
-        assert row[2] == "schema:prod.finance:analysts:USE_SCHEMA"
-        assert row[3] == "USE_SCHEMA on schema prod.finance"
-        metadata = row[7]
+        assert row[3] == "schema:prod.finance:analysts:USE_SCHEMA"
+        assert row[4] == "USE_SCHEMA on schema prod.finance"
+        metadata = row[8]
         assert metadata["securable_type"] == "schema"
 
     def test_catalog_grant_via_sdk(self):
@@ -269,9 +271,9 @@ class TestCrawlGrants:
 
         assert len(rows) == 1
         row = rows[0]
-        assert row[2] == "catalog:analytics:all_users:USE_CATALOG"
-        assert row[3] == "USE_CATALOG on catalog analytics"
-        metadata = row[7]
+        assert row[3] == "catalog:analytics:all_users:USE_CATALOG"
+        assert row[4] == "USE_CATALOG on catalog analytics"
+        metadata = row[8]
         assert metadata["securable_type"] == "catalog"
         assert metadata["grantee"] == "all_users"
 

@@ -39,7 +39,6 @@ INVENTORY_SCHEMA = T.StructType([
     T.StructField("domain", T.StringType(), True),
     T.StructField("tags", T.MapType(T.StringType(), T.StringType()), True),
     T.StructField("metadata", T.MapType(T.StringType(), T.StringType()), True),
-    T.StructField("metastore_id", T.StringType(), True),
     T.StructField("discovered_at", T.TimestampType(), False),
 ])
 
@@ -212,7 +211,6 @@ class ResourceCrawler:
             domain,
             tags or {},
             metadata or {},
-            self.metastore_id,
             self.now,
         )
 

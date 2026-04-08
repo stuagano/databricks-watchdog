@@ -17,6 +17,14 @@ from watchdog_mcp.config import WatchdogMcpConfig
 
 logger = logging.getLogger(__name__)
 
+# Shared property for optional metastore filtering
+_METASTORE_PROP = {
+    "metastore": {
+        "type": "string",
+        "description": "Filter to a specific metastore ID. Omit for all metastores.",
+    },
+}
+
 TOOLS = [
     Tool(
         name="get_violations",
@@ -54,6 +62,7 @@ TOOLS = [
                     "type": "integer",
                     "description": "Max results. Default: 50.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -64,7 +73,7 @@ TOOLS = [
             "total open violations by severity, recent trends, top offending "
             "resource types, and coverage metrics."
         ),
-        inputSchema={"type": "object", "properties": {}},
+        inputSchema={"type": "object", "properties": {**_METASTORE_PROP}},
     ),
     Tool(
         name="get_policies",
@@ -79,6 +88,7 @@ TOOLS = [
                     "type": "boolean",
                     "description": "Only show active policies. Default: true.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -95,6 +105,7 @@ TOOLS = [
                     "type": "integer",
                     "description": "Number of recent scans. Default: 10.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -111,6 +122,7 @@ TOOLS = [
                     "type": "string",
                     "description": "The resource identifier to look up.",
                 },
+                **_METASTORE_PROP,
             },
             "required": ["resource_id"],
         },
@@ -128,6 +140,7 @@ TOOLS = [
                     "type": "boolean",
                     "description": "Only show non-expired exceptions. Default: true.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -154,6 +167,7 @@ TOOLS = [
                     "type": "string",
                     "description": "Policy ID (used with resource_id).",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -190,11 +204,22 @@ TOOLS = [
                     "enum": ["critical", "high", "medium", "low"],
                     "description": "Severity of the proposed policy. Default: medium.",
                 },
+                **_METASTORE_PROP,
             },
             "required": ["rule_type", "rule_key"],
         },
     ),
+    Tool(
+        name="list_metastores",
+        description="List all metastores Watchdog has scanned with latest scan timestamp and resource count.",
+        inputSchema={"type": "object", "properties": {}},
+    ),
 ]
+
+
+def _resolve_metastore(args: dict, config: WatchdogMcpConfig) -> str:
+    """Get metastore filter: explicit arg > config default > empty (no filter)."""
+    return args.get("metastore") or config.default_metastore_id or ""
 
 
 async def handle(
@@ -219,6 +244,8 @@ async def handle(
         return await _explain_violation(w, config, arguments)
     elif name == "what_if_policy":
         return await _what_if_policy(w, config, arguments)
+    elif name == "list_metastores":
+        return await _list_metastores(w, config, arguments)
     raise ValueError(f"Unknown governance tool: {name}")
 
 
@@ -248,8 +275,11 @@ async def _get_violations(
     status = args.get("status", "open")
     limit = args.get("limit", 50)
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
 
     where_clauses = [f"status = '{status}'"]
+    if metastore:
+        where_clauses.append(f"metastore_id = '{metastore}'")
     if args.get("severity"):
         where_clauses.append(f"severity = '{args['severity']}'")
     if args.get("resource_type"):
@@ -279,6 +309,9 @@ async def _get_governance_summary(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
+    ms_where = f"WHERE metastore_id = '{metastore}'" if metastore else ""
+    ms_and = f"AND metastore_id = '{metastore}'" if metastore else ""
 
     summary_query = f"""
         SELECT
@@ -290,12 +323,14 @@ async def _get_governance_summary(
             COUNT(*) FILTER (WHERE status = 'open' AND severity = 'medium') as medium_open,
             COUNT(*) FILTER (WHERE status = 'open' AND severity = 'low') as low_open
         FROM {qs}.violations
+        {ms_where}
     """
 
     by_type_query = f"""
         SELECT resource_type, COUNT(*) as count
         FROM {qs}.violations
         WHERE status = 'open'
+        {ms_and}
         GROUP BY resource_type
         ORDER BY count DESC
     """
@@ -304,6 +339,7 @@ async def _get_governance_summary(
         SELECT policy_id, severity, COUNT(*) as count
         FROM {qs}.violations
         WHERE status = 'open'
+        {ms_and}
         GROUP BY policy_id, severity
         ORDER BY count DESC
         LIMIT 10
@@ -325,8 +361,14 @@ async def _get_policies(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
     active_only = args.get("active_only", True)
-    where = "WHERE active = true" if active_only else ""
+    conditions = []
+    if active_only:
+        conditions.append("active = true")
+    if metastore:
+        conditions.append(f"metastore_id = '{metastore}'")
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     query = f"""
         SELECT policy_id, name, description, severity, resource_type,
@@ -343,12 +385,15 @@ async def _get_scan_history(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
     limit = args.get("limit", 10)
+    ms_where = f"WHERE metastore_id = '{metastore}'" if metastore else ""
 
     query = f"""
         SELECT scan_id, scan_timestamp, resources_scanned,
                violations_found, violations_resolved, duration_seconds
         FROM {qs}.scan_results
+        {ms_where}
         ORDER BY scan_timestamp DESC
         LIMIT {limit}
     """
@@ -360,13 +405,16 @@ async def _get_resource_violations(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
     resource_id = args["resource_id"]
+    ms_and = f"AND metastore_id = '{metastore}'" if metastore else ""
 
     query = f"""
         SELECT policy_id, severity, status, first_detected, last_detected,
                resolved_at, message
         FROM {qs}.violations
         WHERE resource_id = '{resource_id}'
+        {ms_and}
         ORDER BY first_detected DESC
     """
     result = _execute_sql(w, config, query)
@@ -377,8 +425,14 @@ async def _get_exceptions(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
     active_only = args.get("active_only", True)
-    where = "WHERE expires_at > current_timestamp() OR expires_at IS NULL" if active_only else ""
+    conditions = []
+    if active_only:
+        conditions.append("(expires_at > current_timestamp() OR expires_at IS NULL)")
+    if metastore:
+        conditions.append(f"metastore_id = '{metastore}'")
+    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
 
     query = f"""
         SELECT resource_id, policy_id, approved_by, approved_at,
@@ -479,6 +533,8 @@ async def _explain_violation(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
+    ms_and = f"AND metastore_id = '{metastore}'" if metastore else ""
     violation_id = args.get("violation_id")
     resource_id = args.get("resource_id")
     policy_id = args.get("policy_id")
@@ -497,6 +553,7 @@ async def _explain_violation(
                    v.owner, v.resource_classes, v.first_detected, v.last_detected, v.status
             FROM {qs}.violations v
             WHERE v.violation_id = '{violation_id}'
+            {ms_and}
         """
     else:
         violation_query = f"""
@@ -506,6 +563,7 @@ async def _explain_violation(
             FROM {qs}.violations v
             WHERE v.resource_id = '{resource_id}' AND v.policy_id = '{policy_id}'
               AND v.status = 'open'
+            {ms_and}
         """
 
     violation_result = _execute_sql(w, config, violation_query)
@@ -614,6 +672,8 @@ async def _what_if_policy(
     w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
 ) -> list[TextContent]:
     qs = config.qualified_schema
+    metastore = _resolve_metastore(args, config)
+    ms_and = f"AND ri.metastore_id = '{metastore}'" if metastore else ""
     applies_to = args.get("applies_to", "*")
     rule_type = args["rule_type"]
     rule_key = args["rule_key"]
@@ -633,11 +693,13 @@ async def _what_if_policy(
             FROM {qs}.resource_inventory ri
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
               AND {failure_condition}
+              {ms_and}
         """
         total_query = f"""
             SELECT COUNT(DISTINCT ri.resource_id) as total
             FROM {qs}.resource_inventory ri
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
+            {ms_and}
         """
     else:
         failing_query = f"""
@@ -649,6 +711,7 @@ async def _what_if_policy(
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
               AND rc.class_name = '{applies_to}'
               AND {failure_condition}
+              {ms_and}
         """
         total_query = f"""
             SELECT COUNT(DISTINCT ri.resource_id) as total
@@ -657,6 +720,7 @@ async def _what_if_policy(
               ON ri.resource_id = rc.resource_id AND ri.scan_id = rc.scan_id
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
               AND rc.class_name = '{applies_to}'
+              {ms_and}
         """
 
     failing_result = _execute_sql(w, config, failing_query)
@@ -689,3 +753,19 @@ async def _what_if_policy(
         ),
     }
     return [TextContent(type="text", text=json.dumps(simulation, indent=2, default=str))]
+
+
+async def _list_metastores(
+    w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
+) -> list[TextContent]:
+    qs = config.qualified_schema
+    query = f"""
+        SELECT metastore_id, MAX(discovered_at) as last_scanned,
+               COUNT(DISTINCT resource_id) as resource_count
+        FROM {qs}.resource_inventory
+        WHERE metastore_id IS NOT NULL AND metastore_id != ''
+        GROUP BY metastore_id
+        ORDER BY last_scanned DESC
+    """
+    result = _execute_sql(w, config, query)
+    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]

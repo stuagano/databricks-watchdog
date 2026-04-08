@@ -271,3 +271,13 @@ class GrantFilters(BaseModel):
     grantee: str | None = None
     privilege: str | None = None
     securable_type: str | None = None
+
+
+# ── Metastores ──────────────────────────────────────────────────────────────
+
+
+class MetastoreInfo(BaseModel):
+    metastore_id: str
+    latest_scan: str | None = None
+    resource_count: int = 0
+    last_scanned: str | None = None

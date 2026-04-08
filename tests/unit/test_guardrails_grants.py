@@ -219,6 +219,6 @@ class TestGetServicePrincipalGovernance:
 
         result = get_service_principal_governance(mock_w, mock_config, "app-123")
         mock_get_gov.assert_called_once_with(
-            mock_w, mock_config, "service_principal:app-123"
+            mock_w, mock_config, "service_principal:app-123", metastore_id=None
         )
         assert result.resource_id == "service_principal:app-123"

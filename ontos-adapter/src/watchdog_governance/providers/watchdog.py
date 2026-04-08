@@ -72,6 +72,8 @@ class WatchdogProvider:
         self._schema = schema
         self._ontology_dir = Path(ontology_dir) if ontology_dir else None
 
+        self._active_metastore: str | None = None
+
         self._conn_kwargs: dict[str, Any] = {}
         if server_hostname:
             self._conn_kwargs["server_hostname"] = server_hostname.replace("https://", "")
@@ -131,9 +133,48 @@ class WatchdogProvider:
         """Escape a string for SQL literals (single-quote doubling)."""
         return value.replace("'", "''")
 
+    # ── Metastore helpers ─────────────────────────────────────────────────
+
+    def set_active_metastore(self, metastore_id: str | None) -> None:
+        """Set the active metastore filter. None clears the filter."""
+        self._active_metastore = metastore_id
+
+    def _resolve_metastore(self, metastore_id: str | None = None) -> str | None:
+        """Resolve metastore: explicit param > active metastore > None."""
+        return metastore_id or self._active_metastore or None
+
+    def _metastore_clause(
+        self,
+        metastore_id: str | None = None,
+        *,
+        prefix: str = "AND",
+    ) -> str:
+        """Return a SQL clause fragment for metastore filtering.
+
+        Returns empty string when no metastore is active.
+        """
+        resolved = self._resolve_metastore(metastore_id)
+        if not resolved:
+            return ""
+        return f"{prefix} metastore_id = '{self._esc(resolved)}'"
+
+    def list_metastores(self) -> list[dict]:
+        """List all metastores with latest scan timestamp and resource count."""
+        rows = self._execute(f"""
+            SELECT metastore_id,
+                   MAX(CAST(last_seen AS STRING)) AS last_scanned,
+                   COUNT(DISTINCT resource_id)     AS resource_count
+            FROM {self._tbl('resource_inventory')}
+            WHERE metastore_id IS NOT NULL AND metastore_id != ''
+            GROUP BY metastore_id
+            ORDER BY last_scanned DESC
+        """)
+        return rows
+
     # ── Violations ────────────────────────────────────────────────────────
 
-    def violations_summary(self) -> ViolationSummary:
+    def violations_summary(self, *, metastore_id: str | None = None) -> ViolationSummary:
+        ms_where = self._metastore_clause(metastore_id, prefix="WHERE")
         rows = self._execute(f"""
             SELECT
                 COUNT(*)                                                      AS total,
@@ -143,11 +184,15 @@ class WatchdogProvider:
                 SUM(CASE WHEN active AND severity = 'medium'   THEN 1 ELSE 0 END) AS medium,
                 SUM(CASE WHEN active AND severity = 'low'      THEN 1 ELSE 0 END) AS low
             FROM {self._tbl('violations')}
+            {ms_where}
         """)
         return ViolationSummary(**(rows[0] if rows else {}))
 
-    def list_violations(self, filters: ViolationFilters) -> list[Violation]:
+    def list_violations(self, filters: ViolationFilters, *, metastore_id: str | None = None) -> list[Violation]:
+        resolved_ms = self._resolve_metastore(metastore_id)
         conditions = [f"active = {str(filters.active).lower()}"]
+        if resolved_ms:
+            conditions.append(f"metastore_id = '{self._esc(resolved_ms)}'")
         if filters.severity:
             conditions.append(f"severity = '{self._esc(filters.severity)}'")
         if filters.policy_id:
@@ -238,7 +283,7 @@ class WatchdogProvider:
 
     # ── Resources ─────────────────────────────────────────────────────────
 
-    def list_resources(self, filters: ResourceFilters) -> list[Resource]:
+    def list_resources(self, filters: ResourceFilters, *, metastore_id: str | None = None) -> list[Resource]:
         if filters.scan_id:
             scan_filter = f"scan_id = '{self._esc(filters.scan_id)}'"
         else:
@@ -251,7 +296,10 @@ class WatchdogProvider:
                 )
             """
 
+        resolved_ms = self._resolve_metastore(metastore_id)
         conditions = [scan_filter]
+        if resolved_ms:
+            conditions.append(f"metastore_id = '{self._esc(resolved_ms)}'")
         if filters.resource_type:
             conditions.append(f"resource_type = '{self._esc(filters.resource_type)}'")
         where = "WHERE " + " AND ".join(conditions)

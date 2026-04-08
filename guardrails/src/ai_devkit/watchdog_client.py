@@ -274,14 +274,22 @@ def get_grants_for_resource(
     w: WorkspaceClient,
     config: AiDevkitConfig,
     resource_id: str,
+    metastore_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Get all grants associated with a resource from Watchdog inventory.
 
     Queries the resource_inventory table for grant-type resources whose
     ``metadata['securable_full_name']`` matches the given resource_id.
     Uses the most recent scan.
+
+    Args:
+        metastore_id: Optional metastore filter. When provided, restricts
+            queries to the given metastore. Omit for all metastores.
     """
     schema = config.watchdog_schema
+    metastore_clause = (
+        f"AND metastore_id = '{_esc(metastore_id)}'" if metastore_id else ""
+    )
     try:
         resp = w.statement_execution.execute_statement(
             warehouse_id=config.warehouse_id,
@@ -293,6 +301,7 @@ def get_grants_for_resource(
                 )
                   AND resource_type = 'grant'
                   AND metadata['securable_full_name'] = '{_esc(resource_id)}'
+                  {metastore_clause}
             """,
             wait_timeout="10s",
         )
@@ -309,14 +318,19 @@ def get_service_principal_governance(
     w: WorkspaceClient,
     config: AiDevkitConfig,
     sp_application_id: str,
+    metastore_id: str | None = None,
 ) -> ResourceGovernanceState:
     """Get governance state for a service principal.
 
     Constructs the canonical resource_id (``service_principal:<app_id>``)
     and delegates to ``get_resource_governance``.
+
+    Args:
+        metastore_id: Optional metastore filter. When provided, restricts
+            queries to the given metastore. Omit for default behavior.
     """
     resource_id = f"service_principal:{sp_application_id}"
-    return get_resource_governance(w, config, resource_id)
+    return get_resource_governance(w, config, resource_id, metastore_id=metastore_id)
 
 
 def _esc(value: str) -> str:

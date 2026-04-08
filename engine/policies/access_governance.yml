@@ -1,0 +1,57 @@
+# Access Governance Policies
+# Domain: SecurityGovernance
+# Owner: security_admin
+#
+# Least-privilege enforcement, grant hygiene, and identity permissions.
+
+policies:
+
+  - id: POL-A001
+    name: "No ALL PRIVILEGES on production data"
+    applies_to: OverprivilegedGrant
+    domain: SecurityGovernance
+    severity: critical
+    description: "ALL PRIVILEGES and MANAGE grants on production assets violate least-privilege. Use specific grants (SELECT, MODIFY, etc.)."
+    remediation: "Replace ALL PRIVILEGES with specific required privileges. Use 'GRANT SELECT' or 'GRANT MODIFY' instead."
+    active: true
+    rule:
+      ref: no_all_privileges
+
+  - id: POL-A002
+    name: "No direct user grants on catalogs"
+    applies_to: GrantAsset
+    domain: SecurityGovernance
+    severity: high
+    description: "Grants should be assigned to groups, not individual users. Direct user grants bypass group-based access reviews and make permission auditing difficult."
+    remediation: "Create a group, add the user to it, and grant permissions to the group instead."
+    active: true
+    rule:
+      ref: grant_uses_groups
+
+  - id: POL-A003
+    name: "Service principals must not have workspace admin entitlements"
+    applies_to: "*"
+    domain: SecurityGovernance
+    severity: critical
+    description: "Service principals with workspace admin entitlements have unrestricted access. This violates least-privilege and creates security risk."
+    remediation: "Remove workspace-admin entitlement from the service principal. Grant only specific UC privileges needed for the workload."
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: metadata_equals
+        field: resource_type
+        value: "service_principal"
+      then:
+        ref: sp_not_workspace_admin
+
+  - id: POL-A004
+    name: "Groups with MANAGE on catalogs must have at least 2 members"
+    applies_to: IdentityAsset
+    domain: SecurityGovernance
+    severity: medium
+    description: "Groups that control catalog-level MANAGE permissions should have multiple members to avoid single points of failure for access management."
+    remediation: "Add at least one additional member to the group, or delegate MANAGE to a broader admin group."
+    active: true
+    rule:
+      ref: group_has_multiple_members

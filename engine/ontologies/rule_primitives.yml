@@ -201,5 +201,35 @@ primitives:
         - type: tag_exists
           keys: [retention_days]
 
+  # ── Access Governance ──────────────────────────────────────────────────
+
+  no_all_privileges:
+    type: none_of
+    description: "Resource must not have ALL PRIVILEGES granted"
+    rules:
+      - type: metadata_equals
+        field: privilege
+        value: "ALL PRIVILEGES"
+
+  grant_uses_groups:
+    type: metadata_matches
+    description: "Grants must be assigned to groups, not individual users"
+    field: grantee
+    pattern: "^(group:|account group:)"
+
+  sp_not_workspace_admin:
+    type: none_of
+    description: "Service principal must not have workspace admin entitlements"
+    rules:
+      - type: metadata_matches
+        field: entitlements
+        pattern: "workspace-admin"
+
+  group_has_multiple_members:
+    type: metadata_gte
+    description: "Groups with MANAGE privilege should have at least 2 members"
+    field: member_count
+    threshold: "2"
+
   # Customer-specific conditional compositions go here.
   # See customer/ontologies/rule_primitives.yml for examples.

@@ -10,7 +10,7 @@ A config-driven governance scanner for Databricks. Write policies in YAML, Watch
 - **Violation tracking** — deduplication via MERGE, status lifecycle (open → resolved/exception), exception management with expiration
 - **Notification service** — dual-path: Delta queue for enterprise email integration + optional Azure Communication Services direct email
 - **AI/BI dashboards** — 8 pre-built SQL queries for Lakeview dashboards (compliance summary, violations by owner, data quality coverage)
-- **MCP server** — 6 governance tools (get_violations, get_governance_summary, get_policies, get_scan_history, get_resource_violations, get_exceptions) with on-behalf-of auth
+- **MCP server** — 8 governance tools (get_violations, get_governance_summary, get_policies, get_scan_history, get_resource_violations, get_exceptions, explain_violation, what_if_policy) with on-behalf-of auth
 - **Terraform module** — provisions service principal, secret scope, catalog, schema, and UC grants
 
 ## Architecture
@@ -34,7 +34,7 @@ A config-driven governance scanner for Databricks. Write policies in YAML, Watch
 │  AI/BI Dashboards    │  │  MCP Server (Databricks App)          │
 │  (Lakeview)          │  │  On-behalf-of auth — each user's      │
 │  SQL queries against │  │  UC grants govern data access          │
-│  watchdog schema     │  │  6 governance tools for AI assistants  │
+│  watchdog schema     │  │  8 governance tools for AI assistants  │
 └─────────────────────┘  └──────────────────────────────────────┘
 ```
 
@@ -268,6 +268,8 @@ The MCP server exposes Watchdog governance data as tools for AI assistants. It u
 | `get_scan_history` | View recent scan results |
 | `get_resource_violations` | Full compliance history for a specific resource |
 | `get_exceptions` | List approved exceptions |
+| `explain_violation` | Explain a violation in plain language with remediation steps |
+| `what_if_policy` | Simulate a proposed policy against current inventory |
 
 Deploy as a Databricks App:
 ```bash

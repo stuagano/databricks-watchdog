@@ -25,7 +25,7 @@ from pyspark.sql import SparkSession
 
 
 def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> None:
-    """Create or replace the three semantic compliance views.
+    """Create or replace all semantic compliance views.
 
     Called after evaluate_policies so the views are always fresh after
     each scan. Idempotent — safe to call on every run.
@@ -33,6 +33,8 @@ def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> Non
     _ensure_resource_compliance_view(spark, catalog, schema)
     _ensure_class_compliance_view(spark, catalog, schema)
     _ensure_domain_compliance_view(spark, catalog, schema)
+    _ensure_cross_metastore_compliance_view(spark, catalog, schema)
+    _ensure_cross_metastore_inventory_view(spark, catalog, schema)
 
 
 def _ensure_resource_compliance_view(spark: SparkSession, catalog: str,
@@ -173,4 +175,65 @@ def _ensure_domain_compliance_view(spark: SparkSession, catalog: str,
         WHERE v.domain IS NOT NULL
         GROUP BY v.domain
         ORDER BY open_violations DESC
+    """)
+
+
+def _ensure_cross_metastore_compliance_view(spark: SparkSession, catalog: str,
+                                             schema: str) -> None:
+    """v_cross_metastore_compliance: compliance posture per metastore.
+
+    One row per metastore_id. Shows total resources, violation counts, and
+    compliance percentage. Useful for comparing governance posture across
+    metastores in multi-metastore deployments.
+
+    Each metastore's latest scan is used independently via a correlated
+    subquery on metastore_id.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_cross_metastore_compliance AS
+        SELECT
+            ri.metastore_id,
+            COUNT(DISTINCT ri.resource_id) as total_resources,
+            COUNT(DISTINCT CASE WHEN v.status = 'open' THEN v.resource_id END) as resources_with_violations,
+            COUNT(DISTINCT CASE WHEN v.status = 'open' THEN v.violation_id END) as open_violations,
+            COUNT(DISTINCT CASE WHEN v.status = 'open' AND v.severity = 'critical' THEN v.violation_id END) as critical,
+            COUNT(DISTINCT CASE WHEN v.status = 'open' AND v.severity = 'high' THEN v.violation_id END) as high,
+            ROUND(
+                (COUNT(DISTINCT ri.resource_id) - COUNT(DISTINCT CASE WHEN v.status = 'open' THEN v.resource_id END)) * 100.0
+                / NULLIF(COUNT(DISTINCT ri.resource_id), 0), 1
+            ) as compliance_pct
+        FROM {catalog}.{schema}.resource_inventory ri
+        LEFT JOIN {catalog}.{schema}.violations v ON ri.resource_id = v.resource_id
+        WHERE ri.scan_id = (
+            SELECT MAX(scan_id)
+            FROM {catalog}.{schema}.resource_inventory
+            WHERE metastore_id = ri.metastore_id
+        )
+        GROUP BY ri.metastore_id
+    """)
+
+
+def _ensure_cross_metastore_inventory_view(spark: SparkSession, catalog: str,
+                                            schema: str) -> None:
+    """v_cross_metastore_inventory: resource counts per metastore and type.
+
+    One row per (metastore_id, resource_type). Shows resource count and
+    distinct owner count. Useful for understanding resource distribution
+    across metastores.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_cross_metastore_inventory AS
+        SELECT
+            metastore_id,
+            resource_type,
+            COUNT(*) as resource_count,
+            COUNT(DISTINCT owner) as distinct_owners
+        FROM {catalog}.{schema}.resource_inventory
+        WHERE scan_id = (
+            SELECT MAX(scan_id)
+            FROM {catalog}.{schema}.resource_inventory
+            WHERE metastore_id = resource_inventory.metastore_id
+        )
+        GROUP BY metastore_id, resource_type
+        ORDER BY metastore_id, resource_count DESC
     """)

@@ -172,6 +172,60 @@ def notify():
         print("Path 2 (ACS email): skipped — acs_connection_string not in secret scope")
 
 
+def crawl_all_metastores():
+    """Crawl resources across multiple metastores.
+
+    Reads WATCHDOG_METASTORE_IDS env var (comma-separated) or --metastore-ids arg.
+    For each metastore, runs crawl_all() with the metastore_id parameter.
+    All results write to the same Delta tables with metastore_id discriminator.
+
+    Falls back to single-metastore crawl() when no metastore IDs are configured.
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", required=True)
+    parser.add_argument("--schema", required=True)
+    parser.add_argument("--secret-scope", default="watchdog")
+    parser.add_argument("--metastore-ids", default="",
+                        help="Comma-separated metastore IDs (overrides WATCHDOG_METASTORE_IDS)")
+    args = parser.parse_args()
+
+    from watchdog.config import WatchdogConfig
+    config = WatchdogConfig()
+
+    # CLI override takes precedence over env var
+    metastore_ids = [
+        m.strip() for m in args.metastore_ids.split(",") if m.strip()
+    ] if args.metastore_ids else config.metastore_ids
+
+    if not metastore_ids:
+        print("No metastore IDs configured. Falling back to single-metastore crawl.")
+        crawl()
+        return
+
+    spark = SparkSession.builder.getOrCreate()
+    w = WorkspaceClient()
+
+    from watchdog.crawler import ResourceCrawler
+
+    total_resources = 0
+    for metastore_id in metastore_ids:
+        print(f"Scanning metastore {metastore_id}...")
+        crawler = ResourceCrawler(spark, w, args.catalog, args.schema,
+                                  metastore_id=metastore_id)
+        results = crawler.crawl_all()
+
+        metastore_total = 0
+        for r in results:
+            status = "OK" if not r.errors else f"ERROR: {r.errors}"
+            print(f"  {r.resource_type}: {r.count} resources ({status})")
+            metastore_total += r.count
+
+        print(f"  Metastore {metastore_id}: {metastore_total} resources")
+        total_resources += metastore_total
+
+    print(f"Scanned {len(metastore_ids)} metastores, {total_resources} resources")
+
+
 def adhoc():
     """Entrypoint: ad-hoc scan for a specific resource or full workspace."""
     parser = argparse.ArgumentParser()

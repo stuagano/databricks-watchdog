@@ -31,6 +31,7 @@ class CrawlResult:
 # Schema for the resource_inventory table
 INVENTORY_SCHEMA = T.StructType([
     T.StructField("scan_id", T.StringType(), False),
+    T.StructField("metastore_id", T.StringType(), True),
     T.StructField("resource_type", T.StringType(), False),
     T.StructField("resource_id", T.StringType(), False),
     T.StructField("resource_name", T.StringType(), True),
@@ -54,6 +55,7 @@ def ensure_inventory_table(spark: SparkSession, catalog: str, schema: str) -> No
     spark.sql(f"""
         CREATE TABLE IF NOT EXISTS {table} (
             scan_id STRING NOT NULL,
+            metastore_id STRING,
             resource_type STRING NOT NULL,
             resource_id STRING NOT NULL,
             resource_name STRING,
@@ -75,11 +77,14 @@ def ensure_inventory_table(spark: SparkSession, catalog: str, schema: str) -> No
 class ResourceCrawler:
     """Crawls Databricks workspace resources and writes to Delta."""
 
-    def __init__(self, spark: SparkSession, w: WorkspaceClient, catalog: str, schema: str):
+    def __init__(self, spark: SparkSession, w: WorkspaceClient, catalog: str, schema: str,
+                 metastore_id: Optional[str] = None):
         self.spark = spark
         self.w = w
         self.catalog = catalog
         self.schema = schema
+        self._metastore_id_override = metastore_id
+        self._cached_metastore_id: Optional[str] = None
         self.scan_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         self.now = datetime.now(timezone.utc)
         self._metastore_id: Optional[str] = None
@@ -94,6 +99,19 @@ class ResourceCrawler:
             except Exception:
                 self._metastore_id = ""
         return self._metastore_id
+
+    @property
+    def metastore_id(self) -> str:
+        """Return the metastore ID, using override if provided."""
+        if self._metastore_id_override:
+            return self._metastore_id_override
+        if self._cached_metastore_id is None:
+            try:
+                summary = self.w.metastores.current()
+                self._cached_metastore_id = summary.metastore_id or ""
+            except Exception:
+                self._cached_metastore_id = ""
+        return self._cached_metastore_id
 
     @property
     def inventory_table(self) -> str:
@@ -182,9 +200,11 @@ class ResourceCrawler:
         All crawlers produce rows through this method so the scan_id and
         timestamp are stamped consistently from the same crawl_all() call.
         tags and metadata default to empty dicts — never None in Delta.
+        metastore_id is stamped from the metastore_id property (override or auto-detect).
         """
         return (
             self.scan_id,
+            self.metastore_id,
             resource_type,
             resource_id,
             resource_name,

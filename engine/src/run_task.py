@@ -33,10 +33,11 @@ if src_dir not in sys.path:
     sys.path.insert(0, src_dir)
 
 ENTRYPOINTS = {
-    "crawl":    "watchdog.entrypoints:crawl",
-    "evaluate": "watchdog.entrypoints:evaluate",
-    "notify":   "watchdog.entrypoints:notify",
-    "adhoc":    "watchdog.entrypoints:adhoc",
+    "crawl":                  "watchdog.entrypoints:crawl",
+    "crawl_all_metastores":   "watchdog.entrypoints:crawl_all_metastores",
+    "evaluate":               "watchdog.entrypoints:evaluate",
+    "notify":                 "watchdog.entrypoints:notify",
+    "adhoc":                  "watchdog.entrypoints:adhoc",
 }
 
 

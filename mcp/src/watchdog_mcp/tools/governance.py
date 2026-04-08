@@ -16,6 +16,13 @@ from watchdog_mcp.config import WatchdogMcpConfig
 
 logger = logging.getLogger(__name__)
 
+_METASTORE_PROP = {
+    "metastore": {
+        "type": "string",
+        "description": "Filter to a specific metastore ID. Omit for all metastores.",
+    },
+}
+
 TOOLS = [
     Tool(
         name="get_violations",
@@ -53,6 +60,7 @@ TOOLS = [
                     "type": "integer",
                     "description": "Max results. Default: 50.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -63,7 +71,10 @@ TOOLS = [
             "total open violations by severity, recent trends, top offending "
             "resource types, and coverage metrics."
         ),
-        inputSchema={"type": "object", "properties": {}},
+        inputSchema={
+            "type": "object",
+            "properties": {**_METASTORE_PROP},
+        },
     ),
     Tool(
         name="get_policies",
@@ -78,6 +89,7 @@ TOOLS = [
                     "type": "boolean",
                     "description": "Only show active policies. Default: true.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -94,6 +106,7 @@ TOOLS = [
                     "type": "integer",
                     "description": "Number of recent scans. Default: 10.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
@@ -110,6 +123,7 @@ TOOLS = [
                     "type": "string",
                     "description": "The resource identifier to look up.",
                 },
+                **_METASTORE_PROP,
             },
             "required": ["resource_id"],
         },
@@ -127,10 +141,24 @@ TOOLS = [
                     "type": "boolean",
                     "description": "Only show non-expired exceptions. Default: true.",
                 },
+                **_METASTORE_PROP,
             },
         },
     ),
+    Tool(
+        name="list_metastores",
+        description=(
+            "List all metastores that Watchdog has scanned, with their latest "
+            "scan timestamp and resource count."
+        ),
+        inputSchema={"type": "object", "properties": {}},
+    ),
 ]
+
+
+def _resolve_metastore(args: dict[str, Any], config: WatchdogMcpConfig) -> str:
+    """Resolve metastore from args or config default. Empty string = no filter."""
+    return args.get("metastore") or config.default_metastore_id
 
 
 async def handle(
@@ -151,6 +179,8 @@ async def handle(
         return await _get_resource_violations(w, config, arguments)
     elif name == "get_exceptions":
         return await _get_exceptions(w, config, arguments)
+    elif name == "list_metastores":
+        return await _list_metastores(w, config, arguments)
     raise ValueError(f"Unknown governance tool: {name}")
 
 
@@ -191,10 +221,14 @@ async def _get_violations(
     if args.get("owner"):
         where_clauses.append(f"owner = '{args['owner']}'")
 
+    metastore = _resolve_metastore(args, config)
+    if metastore:
+        where_clauses.append(f"metastore_id = '{metastore}'")
+
     where = " AND ".join(where_clauses)
     query = f"""
         SELECT resource_id, resource_type, policy_id, severity, status,
-               owner, first_detected, last_detected, message
+               owner, first_detected, last_detected, message, metastore_id
         FROM {qs}.violations
         WHERE {where}
         ORDER BY
@@ -212,6 +246,9 @@ async def _get_governance_summary(
 ) -> list[TextContent]:
     qs = config.qualified_schema
 
+    metastore = _resolve_metastore(args, config)
+    metastore_where = f"AND metastore_id = '{metastore}'" if metastore else ""
+
     summary_query = f"""
         SELECT
             COUNT(*) FILTER (WHERE status = 'open') as open_violations,
@@ -222,12 +259,13 @@ async def _get_governance_summary(
             COUNT(*) FILTER (WHERE status = 'open' AND severity = 'medium') as medium_open,
             COUNT(*) FILTER (WHERE status = 'open' AND severity = 'low') as low_open
         FROM {qs}.violations
+        WHERE 1=1 {metastore_where}
     """
 
     by_type_query = f"""
         SELECT resource_type, COUNT(*) as count
         FROM {qs}.violations
-        WHERE status = 'open'
+        WHERE status = 'open' {metastore_where}
         GROUP BY resource_type
         ORDER BY count DESC
     """
@@ -235,7 +273,7 @@ async def _get_governance_summary(
     by_policy_query = f"""
         SELECT policy_id, severity, COUNT(*) as count
         FROM {qs}.violations
-        WHERE status = 'open'
+        WHERE status = 'open' {metastore_where}
         GROUP BY policy_id, severity
         ORDER BY count DESC
         LIMIT 10
@@ -258,11 +296,20 @@ async def _get_policies(
 ) -> list[TextContent]:
     qs = config.qualified_schema
     active_only = args.get("active_only", True)
-    where = "WHERE active = true" if active_only else ""
+
+    where_clauses = []
+    if active_only:
+        where_clauses.append("active = true")
+
+    metastore = _resolve_metastore(args, config)
+    if metastore:
+        where_clauses.append(f"metastore_id = '{metastore}'")
+
+    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     query = f"""
         SELECT policy_id, name, description, severity, resource_type,
-               active, last_updated
+               active, last_updated, metastore_id
         FROM {qs}.policies
         {where}
         ORDER BY severity, policy_id
@@ -277,10 +324,18 @@ async def _get_scan_history(
     qs = config.qualified_schema
     limit = args.get("limit", 10)
 
+    where_clauses = []
+    metastore = _resolve_metastore(args, config)
+    if metastore:
+        where_clauses.append(f"metastore_id = '{metastore}'")
+
+    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+
     query = f"""
         SELECT scan_id, scan_timestamp, resources_scanned,
-               violations_found, violations_resolved, duration_seconds
+               violations_found, violations_resolved, duration_seconds, metastore_id
         FROM {qs}.scan_results
+        {where}
         ORDER BY scan_timestamp DESC
         LIMIT {limit}
     """
@@ -294,11 +349,17 @@ async def _get_resource_violations(
     qs = config.qualified_schema
     resource_id = args["resource_id"]
 
+    where_clauses = [f"resource_id = '{resource_id}'"]
+    metastore = _resolve_metastore(args, config)
+    if metastore:
+        where_clauses.append(f"metastore_id = '{metastore}'")
+
+    where = " AND ".join(where_clauses)
     query = f"""
         SELECT policy_id, severity, status, first_detected, last_detected,
-               resolved_at, message
+               resolved_at, message, metastore_id
         FROM {qs}.violations
-        WHERE resource_id = '{resource_id}'
+        WHERE {where}
         ORDER BY first_detected DESC
     """
     result = _execute_sql(w, config, query)
@@ -310,14 +371,44 @@ async def _get_exceptions(
 ) -> list[TextContent]:
     qs = config.qualified_schema
     active_only = args.get("active_only", True)
-    where = "WHERE expires_at > current_timestamp() OR expires_at IS NULL" if active_only else ""
+
+    where_clauses = []
+    if active_only:
+        where_clauses.append(
+            "(expires_at > current_timestamp() OR expires_at IS NULL)"
+        )
+
+    metastore = _resolve_metastore(args, config)
+    if metastore:
+        where_clauses.append(f"metastore_id = '{metastore}'")
+
+    where = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
 
     query = f"""
         SELECT resource_id, policy_id, approved_by, approved_at,
-               expires_at, reason
+               expires_at, reason, metastore_id
         FROM {qs}.exceptions
         {where}
         ORDER BY approved_at DESC
+    """
+    result = _execute_sql(w, config, query)
+    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+
+async def _list_metastores(
+    w: WorkspaceClient, config: WatchdogMcpConfig, args: dict[str, Any]
+) -> list[TextContent]:
+    qs = config.qualified_schema
+    query = f"""
+        SELECT
+            metastore_id,
+            MAX(scan_id) as latest_scan,
+            COUNT(DISTINCT resource_id) as resource_count,
+            MAX(discovered_at) as last_scanned
+        FROM {qs}.resource_inventory
+        WHERE metastore_id IS NOT NULL AND metastore_id != ''
+        GROUP BY metastore_id
+        ORDER BY last_scanned DESC
     """
     result = _execute_sql(w, config, query)
     return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]

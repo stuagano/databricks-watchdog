@@ -28,6 +28,7 @@ class ResourceGovernanceState:
     """Governance state for a single resource from Watchdog."""
 
     resource_id: str
+    metastore_id: str = ""
     classes: list[str] = field(default_factory=list)
     ancestors: list[str] = field(default_factory=list)
     open_violations: list[dict[str, Any]] = field(default_factory=list)
@@ -96,15 +97,26 @@ def get_resource_governance(
     w: WorkspaceClient,
     config: AiDevkitConfig,
     resource_id: str,
+    metastore_id: str | None = None,
 ) -> ResourceGovernanceState:
     """Fetch full governance state for a resource from Watchdog tables.
 
     Queries resource_classifications, violations, and exceptions in
     parallel-ish (sequential SQL, but fast on serverless warehouse).
     Degrades gracefully if watchdog tables are inaccessible.
+
+    Args:
+        metastore_id: Optional metastore filter. When provided, restricts
+            queries to the given metastore. Omit for default behavior.
     """
-    state = ResourceGovernanceState(resource_id=resource_id)
+    state = ResourceGovernanceState(
+        resource_id=resource_id,
+        metastore_id=metastore_id or "",
+    )
     schema = config.watchdog_schema
+    metastore_clause = (
+        f"AND metastore_id = '{_esc(metastore_id)}'" if metastore_id else ""
+    )
 
     # 1. Classifications — what ontology classes does this resource belong to?
     try:
@@ -114,6 +126,7 @@ def get_resource_governance(
                 SELECT class_name, class_ancestors
                 FROM {schema}.resource_classifications
                 WHERE resource_id = '{_esc(resource_id)}'
+                {metastore_clause}
                 ORDER BY class_name
             """,
             wait_timeout="10s",
@@ -138,6 +151,7 @@ def get_resource_governance(
                 SELECT violation_id, policy_id, policy_name, severity, domain
                 FROM {schema}.violations
                 WHERE resource_id = '{_esc(resource_id)}' AND active = true
+                {metastore_clause}
                 ORDER BY
                     CASE severity
                         WHEN 'critical' THEN 0 WHEN 'high' THEN 1
@@ -163,6 +177,7 @@ def get_resource_governance(
                 WHERE resource_id = '{_esc(resource_id)}'
                   AND active = true
                   AND (expires_at IS NULL OR expires_at > current_timestamp())
+                  {metastore_clause}
             """,
             wait_timeout="10s",
         )
@@ -179,14 +194,22 @@ def get_policies_for_operation(
     w: WorkspaceClient,
     config: AiDevkitConfig,
     operation: str,
+    metastore_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Fetch active policies relevant to an operation type.
 
     Returns policies from the watchdog policies table that the guardrails
     should evaluate at query time. Useful for showing the user what rules
     apply to their intended operation.
+
+    Args:
+        metastore_id: Optional metastore filter. When provided, restricts
+            policies to the given metastore. Omit for all metastores.
     """
     schema = config.watchdog_schema
+    metastore_clause = (
+        f"AND metastore_id = '{_esc(metastore_id)}'" if metastore_id else ""
+    )
     try:
         resp = w.statement_execution.execute_statement(
             warehouse_id=config.warehouse_id,
@@ -195,6 +218,7 @@ def get_policies_for_operation(
                        description, remediation
                 FROM {schema}.policies
                 WHERE active = true
+                {metastore_clause}
                 ORDER BY
                     CASE severity
                         WHEN 'critical' THEN 0 WHEN 'high' THEN 1

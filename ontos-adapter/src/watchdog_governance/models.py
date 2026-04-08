@@ -243,3 +243,13 @@ class ValidationResult(BaseModel):
     valid: bool
     errors: list[str]
     warnings: list[str]
+
+
+# ── Metastores ───────────────────────────────────────────────────────────────
+
+
+class MetastoreInfo(BaseModel):
+    metastore_id: str
+    latest_scan: str | None = None
+    resource_count: int = 0
+    last_scanned: str | None = None

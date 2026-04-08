@@ -3,6 +3,7 @@
 -- or WHERE domain = :selected_domain for domain owner view
 
 SELECT
+    metastore_id,
     owner,
     domain,
     severity,
@@ -13,7 +14,7 @@ SELECT
     MAX(last_detected) AS latest_violation
 FROM platform.watchdog.violations
 WHERE status = 'open'
-GROUP BY owner, domain, severity
+GROUP BY metastore_id, owner, domain, severity
 ORDER BY
     CASE severity
         WHEN 'critical' THEN 1

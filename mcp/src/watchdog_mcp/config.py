@@ -30,9 +30,14 @@ class WatchdogMcpConfig:
         default_factory=lambda: os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
     )
 
+    # Default metastore filter — scope all queries to a single metastore
+    default_metastore_id: str = field(
+        default_factory=lambda: os.environ.get("WATCHDOG_DEFAULT_METASTORE_ID", "")
+    )
+
     # Server
     server_name: str = "watchdog-mcp"
-    server_version: str = "0.2.0"
+    server_version: str = "0.4.0"
 
     @property
     def qualified_schema(self) -> str:

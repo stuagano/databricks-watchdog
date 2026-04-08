@@ -23,6 +23,7 @@ from watchdog_governance.models import (
     ExceptionFilters,
     ExceptionRecord,
     ExceptionSummary,
+    MetastoreInfo,
     OntologyClass,
     OntologyTree,
     Policy,
@@ -49,13 +50,25 @@ class GovernanceProvider(Protocol):
     by the governance domain they serve.
     """
 
+    # ── Metastores ─────────────────────────────────────────────────────────
+
+    def list_metastores(self) -> list[MetastoreInfo]:
+        """List metastores with scan history."""
+        ...
+
+    def set_active_metastore(self, metastore_id: str | None) -> None:
+        """Set the active metastore filter for subsequent queries. None = all."""
+        ...
+
     # ── Violations (read-only) ────────────────────────────────────────────
 
-    def violations_summary(self) -> ViolationSummary:
+    def violations_summary(self, metastore_id: str | None = None) -> ViolationSummary:
         """Counts by severity and active status."""
         ...
 
-    def list_violations(self, filters: ViolationFilters) -> list[Violation]:
+    def list_violations(
+        self, filters: ViolationFilters, metastore_id: str | None = None
+    ) -> list[Violation]:
         """List violations with optional filters, ordered by severity."""
         ...
 
@@ -71,7 +84,9 @@ class GovernanceProvider(Protocol):
 
     # ── Resources (read-only) ─────────────────────────────────────────────
 
-    def list_resources(self, filters: ResourceFilters) -> list[Resource]:
+    def list_resources(
+        self, filters: ResourceFilters, metastore_id: str | None = None
+    ) -> list[Resource]:
         """List resources from inventory, defaulting to latest scan."""
         ...
 

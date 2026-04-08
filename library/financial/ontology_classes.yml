@@ -1,0 +1,70 @@
+# Financial Industry Resource Classes
+#
+# Derived classes for SOX, PCI-DSS, and GLBA regulatory compliance.
+# These extend the base classes from engine/ontologies/resource_classes.yml.
+#
+# Usage: Copy or merge into engine/ontologies/ to activate classification.
+
+derived_classes:
+
+  # ── SOX (Sarbanes-Oxley) ────────────────────────────────────────────────
+
+  FinancialReportingAsset:
+    parent: ConfidentialAsset
+    description: "Data used in SOX-regulated financial reporting"
+    classifier:
+      any_of:
+        - tag_equals:
+            regulatory_domain: "SOX"
+        - tag_in:
+            data_classification: ["financial_reporting", "sox"]
+
+  FinancialAuditTrail:
+    parent: DataAsset
+    description: "Audit trail for SOX-regulated financial data changes"
+    classifier:
+      any_of:
+        - tag_equals:
+            purpose: "sox_audit"
+        - tag_matches:
+            resource_name: "(?i)sox.*audit|financial.*audit|gl.*audit"
+
+  SeparationOfDutiesAsset:
+    parent: FinancialReportingAsset
+    description: "Financial data requiring separation of duties controls"
+    classifier:
+      tag_equals:
+        sox_control: "separation_of_duties"
+
+  # ── PCI-DSS (Payment Card Industry) ─────────────────────────────────────
+
+  PciAsset:
+    parent: ConfidentialAsset
+    description: "Contains payment card data subject to PCI-DSS"
+    classifier:
+      any_of:
+        - tag_equals:
+            data_classification: "pci"
+        - tag_equals:
+            regulatory_domain: "PCI-DSS"
+        - tag_in:
+            data_classification: ["pci", "cardholder", "pan"]
+
+  CardholderDataAsset:
+    parent: PciAsset
+    description: "Contains cardholder data (PAN, expiration, cardholder name)"
+    classifier:
+      tag_equals:
+        data_classification: "cardholder"
+
+  # ── GLBA (Gramm-Leach-Bliley Act) ──────────────────────────────────────
+
+  GlbaAsset:
+    parent: ConfidentialAsset
+    description: "Contains nonpublic personal information subject to GLBA"
+    classifier:
+      any_of:
+        - tag_equals:
+            regulatory_domain: "GLBA"
+        - tag_in:
+            data_classification: ["npi", "glba"]

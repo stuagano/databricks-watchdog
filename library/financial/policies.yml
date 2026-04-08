@@ -1,0 +1,145 @@
+# Financial Industry Policies
+# Domain: RegulatoryCompliance
+# Owner: compliance_officer
+#
+# SOX, PCI-DSS, and GLBA compliance policies for financial services.
+
+policies:
+
+  # ── SOX (Sarbanes-Oxley) ────────────────────────────────────────────────
+
+  - id: POL-SOX-001
+    name: "Financial reporting assets must have a control owner"
+    applies_to: FinancialReportingAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "SOX Section 302/404 requires designated control owners for all financial reporting data"
+    remediation: "Add 'sox_control_owner' tag (email of control owner) and 'data_steward' tag"
+    active: true
+    rule:
+      ref: has_sox_owner
+
+  - id: POL-SOX-002
+    name: "Financial data changes must have audit trails"
+    applies_to: FinancialReportingAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "SOX requires a complete audit trail for all changes to financial reporting data"
+    remediation: "Set 'audit_trail_enabled' tag to 'true' and configure Unity Catalog audit logging"
+    active: true
+    rule:
+      ref: has_sox_audit_trail
+
+  - id: POL-SOX-003
+    name: "Financial data must have change management controls"
+    applies_to: FinancialReportingAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "SOX requires documented change management processes for financial data modifications"
+    remediation: "Add 'change_management_process' and 'change_approval_required' tags"
+    active: true
+    rule:
+      ref: has_change_management
+
+  - id: POL-SOX-004
+    name: "SOX controls must have a review cycle"
+    applies_to: FinancialReportingAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "SOX controls must be periodically reviewed and tested for operating effectiveness"
+    remediation: "Add 'review_cycle' tag (e.g., 'quarterly') and 'last_review_date' tag (ISO date)"
+    active: true
+    rule:
+      ref: has_sox_review_cycle
+
+  - id: POL-SOX-005
+    name: "Separation of duties must be enforced on financial data"
+    applies_to: SeparationOfDutiesAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "SOX requires that the person who creates financial data cannot be the same person who approves it"
+    remediation: "Add 'data_creator' and 'data_approver' tags with distinct identities"
+    active: true
+    rule:
+      ref: separation_of_duties_enforced
+
+  # ── PCI-DSS (Payment Card Industry) ─────────────────────────────────────
+
+  - id: POL-PCI-001
+    name: "Cardholder data must be encrypted at rest and in transit"
+    applies_to: CardholderDataAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "PCI-DSS Requirement 3.4/4.1: cardholder data must be rendered unreadable at rest and encrypted in transit"
+    remediation: "Set 'encryption_at_rest' and 'encryption_in_transit' tags to 'true'"
+    active: true
+    rule:
+      ref: pci_data_encrypted
+
+  - id: POL-PCI-002
+    name: "PAN must be masked"
+    applies_to: CardholderDataAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "PCI-DSS Requirement 3.3: mask PAN when displayed (show only last 4 digits)"
+    remediation: "Set 'column_masking_enabled' tag to 'true' and configure Unity Catalog column masking"
+    active: true
+    rule:
+      ref: pci_data_masked
+
+  - id: POL-PCI-003
+    name: "Cardholder data retention must be limited"
+    applies_to: PciAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "PCI-DSS Requirement 3.1: limit storage amount and retention time of cardholder data"
+    remediation: "Add 'retention_policy' tag (e.g., '90_days') and 'data_purge_schedule' tag"
+    active: true
+    rule:
+      ref: pci_retention_limited
+
+  - id: POL-PCI-004
+    name: "PCI assets must have a data steward"
+    applies_to: PciAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "PCI-DSS requires clear accountability for cardholder data environments"
+    remediation: "Add a 'data_steward' tag with the email of the responsible person"
+    active: true
+    rule:
+      ref: has_data_steward
+
+  # ── GLBA (Gramm-Leach-Bliley Act) ──────────────────────────────────────
+
+  - id: POL-GLBA-001
+    name: "NPI must have a privacy notice reference"
+    applies_to: GlbaAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "GLBA Safeguards Rule requires privacy notices for collection of nonpublic personal information"
+    remediation: "Add 'privacy_notice_id' or 'glba_privacy_notice' tag referencing the applicable notice"
+    active: true
+    rule:
+      ref: has_glba_privacy_notice
+
+  - id: POL-GLBA-002
+    name: "NPI sharing must have opt-out mechanism"
+    applies_to: GlbaAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "GLBA requires consumers be given the opportunity to opt out of NPI sharing with nonaffiliated third parties"
+    remediation: "Add 'opt_out_mechanism' or 'sharing_opt_out' tag documenting the opt-out process"
+    active: true
+    rule:
+      ref: has_glba_opt_out
+
+  - id: POL-GLBA-003
+    name: "GLBA audit trail tables must be immutable"
+    applies_to: FinancialAuditTrail
+    domain: RegulatoryCompliance
+    severity: medium
+    description: "GLBA audit records must be append-only to prevent tampering with compliance evidence"
+    remediation: "Ensure audit trail tables are MANAGED type (append-only) in Unity Catalog"
+    active: true
+    rule:
+      ref: financial_audit_immutable

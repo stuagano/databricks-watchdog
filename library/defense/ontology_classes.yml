@@ -1,0 +1,50 @@
+# Defense Industry Ontology Classes
+#
+# NIST 800-171, CMMC, and ITAR resource classifications.
+# Extends the base resource_classes.yml with defense-specific derived classes.
+
+derived_classes:
+
+  # ── CUI / NIST 800-171 ──────────────────────────────────────────────────
+
+  CuiAsset:
+    parent: ConfidentialAsset
+    description: "Controlled Unclassified Information per NIST 800-171"
+    classifier:
+      any_of:
+        - tag_equals: { regulatory_domain: "NIST-800-171" }
+        - tag_in: { data_classification: [cui, controlled_unclassified] }
+
+  ItarAsset:
+    parent: CuiAsset
+    description: "ITAR-controlled technical data"
+    classifier:
+      tag_equals:
+        regulatory_domain: "ITAR"
+
+  # ── Export Control ───────────────────────────────────────────────────────
+
+  ExportControlledAsset:
+    parent: ConfidentialAsset
+    description: "Export-controlled data under EAR/ITAR"
+    classifier:
+      tag_exists: [export_control_classification]
+
+  # ── CMMC ─────────────────────────────────────────────────────────────────
+
+  CmmcLevel2Asset:
+    parent: CuiAsset
+    description: "Assets requiring CMMC Level 2 controls"
+    classifier:
+      tag_in:
+        cmmc_level: ["2", "3"]
+
+  # ── Audit ────────────────────────────────────────────────────────────────
+
+  DefenseAuditTrail:
+    parent: DataAsset
+    description: "Audit tables for defense data access and handling"
+    classifier:
+      any_of:
+        - tag_equals: { purpose: "defense_audit" }
+        - metadata_matches: { name: "defense.*audit" }

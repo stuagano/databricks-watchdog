@@ -1,0 +1,87 @@
+# General Governance Rule Primitives
+#
+# Reusable checks for CIS-style benchmark policy enforcement.
+# These extend the base rule_primitives.yml with general governance primitives.
+
+primitives:
+
+  # ── Tagging Hygiene ──────────────────────────────────────────────────────
+
+  has_data_classification:
+    type: tag_exists
+    description: "Data asset has a sensitivity classification label"
+    keys: [data_classification]
+
+  has_environment_tag:
+    type: tag_exists
+    description: "Resource has an environment designation"
+    keys: [environment]
+
+  has_lifecycle_status:
+    type: tag_exists
+    description: "Resource has a lifecycle status (active, deprecated, decommissioning)"
+    keys: [lifecycle_status]
+
+  # ── Documentation ────────────────────────────────────────────────────────
+
+  has_documentation:
+    type: any_of
+    description: "Asset has documentation via table comment or description tag"
+    rules:
+      - type: metadata_not_empty
+        field: comment
+      - type: tag_exists
+        keys: [description]
+
+  # ── Cost Attribution ─────────────────────────────────────────────────────
+
+  has_cost_center:
+    type: tag_exists
+    description: "Resource is attributed to a cost center"
+    keys: [cost_center]
+
+  # ── Ownership ────────────────────────────────────────────────────────────
+
+  has_owner:
+    type: any_of
+    description: "Resource has an identifiable owner"
+    rules:
+      - type: metadata_not_empty
+        field: owner
+      - type: tag_exists
+        keys: [owner]
+
+  # ── Operational ──────────────────────────────────────────────────────────
+
+  compute_has_auto_termination:
+    type: metadata_not_empty
+    description: "Cluster has auto-termination configured"
+    field: autotermination_minutes
+
+  data_has_quality_monitor:
+    type: any_of
+    description: "Table has a quality monitor enabled (LHM or DQM)"
+    rules:
+      - type: tag_equals
+        key: lhm_enabled
+        value: "true"
+      - type: tag_equals
+        key: dqm_enabled
+        value: "true"
+
+  # ── Conditional Compositions ─────────────────────────────────────────────
+
+  production_must_be_documented:
+    type: if_then
+    description: "If resource is production, it must have documentation"
+    condition:
+      type: tag_equals
+      key: environment
+      value: "prod"
+    then:
+      type: any_of
+      rules:
+        - type: metadata_not_empty
+          field: comment
+        - type: tag_exists
+          keys: [description]

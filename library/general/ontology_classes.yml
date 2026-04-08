@@ -1,0 +1,54 @@
+# General Governance Ontology Classes
+#
+# CIS-style benchmark classifications for tagging hygiene, lifecycle,
+# cost attribution, and documentation coverage.
+
+derived_classes:
+
+  # ── Tagging Hygiene ──────────────────────────────────────────────────────
+
+  UntaggedAsset:
+    parent: DataAsset
+    description: "Data asset missing a data_classification tag"
+    classifier:
+      none_of:
+        - tag_exists: [data_classification]
+
+  # ── Lifecycle ────────────────────────────────────────────────────────────
+
+  StaleAsset:
+    parent: DataAsset
+    description: "Data asset with no queries in 90+ days"
+    classifier:
+      any_of:
+        - tag_equals: { stale: "true" }
+        - metadata_matches: { last_query_date: "^$" }
+
+  # ── Documentation ────────────────────────────────────────────────────────
+
+  UndocumentedAsset:
+    parent: DataAsset
+    description: "Data asset with no comment or description"
+    classifier:
+      all_of:
+        - none_of:
+            - metadata_not_empty: { field: comment }
+        - none_of:
+            - tag_exists: [description]
+
+  # ── Cost Attribution ─────────────────────────────────────────────────────
+
+  CostUnattributedAsset:
+    parent: ComputeAsset
+    description: "Compute asset missing cost_center tag"
+    classifier:
+      none_of:
+        - tag_exists: [cost_center]
+
+  HighCostCompute:
+    parent: ComputeAsset
+    description: "Compute asset with cost_center but monthly cost exceeding threshold"
+    classifier:
+      all_of:
+        - tag_exists: [cost_center]
+        - metadata_gte: { field: monthly_cost, threshold: "1000" }

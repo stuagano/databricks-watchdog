@@ -1,0 +1,68 @@
+# Defense Industry Rule Primitives
+#
+# Reusable checks for NIST 800-171, CMMC, and ITAR policy enforcement.
+# These extend the base rule_primitives.yml with defense-specific primitives.
+
+primitives:
+
+  # ── CUI Marking & Handling ───────────────────────────────────────────────
+
+  has_cui_marking:
+    type: tag_exists
+    description: "CUI asset has a CUI marking category (e.g., CUI//SP-CTI, CUI//ITAR)"
+    keys: [cui_marking]
+
+  has_access_control_list:
+    type: tag_exists
+    description: "Asset has an access control list reference for need-to-know enforcement"
+    keys: [access_control_list]
+
+  cui_not_on_public_network:
+    type: none_of
+    description: "CUI must not be exposed on public-facing networks or endpoints"
+    rules:
+      - type: tag_equals
+        key: network_exposure
+        value: "public"
+
+  # ── Media Protection ─────────────────────────────────────────────────────
+
+  has_media_protection:
+    type: tag_exists
+    description: "Asset has media protection controls documented (encryption at rest, disposal)"
+    keys: [media_protection_plan]
+
+  # ── Incident Response ────────────────────────────────────────────────────
+
+  has_incident_response_plan:
+    type: tag_exists
+    description: "Asset references an incident response plan for security events"
+    keys: [incident_response_plan]
+
+  # ── Export Control ───────────────────────────────────────────────────────
+
+  has_export_control_classification:
+    type: tag_exists
+    description: "Asset has an export control classification (ECCN, USML category)"
+    keys: [export_control_classification]
+
+  # ── CMMC / System Security Plan ──────────────────────────────────────────
+
+  has_system_security_plan_ref:
+    type: tag_exists
+    description: "Asset references the System Security Plan (SSP) covering it"
+    keys: [system_security_plan]
+
+  has_fips_encryption:
+    type: tag_equals
+    description: "Asset uses FIPS 140-2 validated encryption"
+    key: encryption_standard
+    value: "FIPS-140-2"
+
+  # ── Audit Trail Immutability ─────────────────────────────────────────────
+
+  audit_trail_immutable:
+    type: tag_equals
+    description: "Audit trail table is configured as immutable (append-only, no deletes)"
+    key: immutable
+    value: "true"

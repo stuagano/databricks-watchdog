@@ -154,3 +154,58 @@ class TestAncestorChains:
     def test_base_class_is_root(self, engine):
         chain = engine.get_ancestor_chain("DataAsset")
         assert chain == ["DataAsset"]  # no parent
+
+
+# ── Grant classifications ────────────────────────────────────────────────────
+
+class TestGrantClassifications:
+    def test_grant_is_grant_asset(self, engine):
+        """A 'grant' resource_type should match GrantAsset base class."""
+        result = engine.classify("grant", {}, {})
+        assert "GrantAsset" in result.classes
+
+    def test_grant_not_data_asset(self, engine):
+        """grant should not be classified as DataAsset or ComputeAsset."""
+        result = engine.classify("grant", {}, {})
+        assert "DataAsset" not in result.classes
+        assert "ComputeAsset" not in result.classes
+
+    def test_overprivileged_grant_all_privileges(self, engine):
+        """Grant with privilege=ALL PRIVILEGES is OverprivilegedGrant."""
+        result = engine.classify("grant", {}, {"privilege": "ALL PRIVILEGES"})
+        assert "OverprivilegedGrant" in result.classes
+        assert "GrantAsset" in result.classes
+
+    def test_overprivileged_grant_manage(self, engine):
+        """Grant with privilege=MANAGE is OverprivilegedGrant."""
+        result = engine.classify("grant", {}, {"privilege": "MANAGE"})
+        assert "OverprivilegedGrant" in result.classes
+
+    def test_select_grant_not_overprivileged(self, engine):
+        """Grant with privilege=SELECT should NOT be OverprivilegedGrant."""
+        result = engine.classify("grant", {}, {"privilege": "SELECT"})
+        assert "OverprivilegedGrant" not in result.classes
+        assert "GrantAsset" in result.classes
+
+    def test_direct_user_grant(self, engine):
+        """Grant to a user (not prefixed with group:) is DirectUserGrant."""
+        result = engine.classify("grant", {}, {"grantee": "alice@example.com"})
+        assert "DirectUserGrant" in result.classes
+
+    def test_group_grant_not_direct_user(self, engine):
+        """Grant to a group should NOT be DirectUserGrant."""
+        result = engine.classify("grant", {}, {"grantee": "group:data_engineers"})
+        assert "DirectUserGrant" not in result.classes
+
+    def test_account_group_grant_not_direct_user(self, engine):
+        """Grant to an account group should NOT be DirectUserGrant."""
+        result = engine.classify("grant", {}, {"grantee": "account group:admins"})
+        assert "DirectUserGrant" not in result.classes
+
+    def test_overprivileged_grant_ancestor_chain(self, engine):
+        chain = engine.get_ancestor_chain("OverprivilegedGrant")
+        assert chain == ["OverprivilegedGrant", "GrantAsset"]
+
+    def test_direct_user_grant_ancestor_chain(self, engine):
+        chain = engine.get_ancestor_chain("DirectUserGrant")
+        assert chain == ["DirectUserGrant", "GrantAsset"]

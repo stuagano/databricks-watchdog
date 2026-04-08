@@ -24,6 +24,10 @@ base_classes:
     description: "Users, groups, service principals"
     matches_resource_types: [user, group, service_principal]
 
+  GrantAsset:
+    description: "Any grant (permission assignment) in Unity Catalog"
+    matches_resource_types: [grant]
+
 # --------------------------------------------------------------------------
 # Derived classes — classified by tags
 #
@@ -170,3 +174,23 @@ derived_classes:
     classifier:
       tag_equals:
         shared: "true"
+
+  # ── Grant specializations ─────────────────────────────────────────────
+
+  OverprivilegedGrant:
+    parent: GrantAsset
+    description: "Grant with overly broad privileges (ALL PRIVILEGES or MANAGE)"
+    classifier:
+      any_of:
+        - metadata_equals:
+            privilege: "ALL PRIVILEGES"
+        - metadata_equals:
+            privilege: "MANAGE"
+
+  DirectUserGrant:
+    parent: GrantAsset
+    description: "Grant assigned directly to a user rather than a group"
+    classifier:
+      none_of:
+        - metadata_matches:
+            grantee: "^(group:|account group:)"

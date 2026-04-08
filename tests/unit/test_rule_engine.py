@@ -5,6 +5,8 @@ path, plus any non-obvious edge cases documented in the engine's docstrings.
 
 Run with: pytest tests/unit/test_rule_engine.py -v
 """
+from pathlib import Path
+
 import pytest
 from watchdog.rule_engine import RuleEngine
 
@@ -411,3 +413,114 @@ class TestPrimitiveRefs:
         # Non-PII → vacuously true (condition doesn't match)
         result = engine.evaluate(rule, {"data_classification": "internal"}, {})
         assert result.passed
+
+
+# ── Access governance primitives ─────────────────────────────────────────────
+
+class TestAccessGovernancePrimitives:
+    """Tests for grant-related rule primitives added in Sprint 1-2."""
+
+    def test_no_all_privileges_pass(self, engine):
+        """no_all_privileges passes when privilege is not ALL PRIVILEGES."""
+        rule = {"ref": "no_all_privileges"}
+        result = engine.evaluate(rule, {}, {"privilege": "SELECT"})
+        assert result.passed
+
+    def test_no_all_privileges_fail(self, engine):
+        """no_all_privileges fails when privilege is ALL PRIVILEGES."""
+        rule = {"ref": "no_all_privileges"}
+        result = engine.evaluate(rule, {}, {"privilege": "ALL PRIVILEGES"})
+        assert not result.passed
+
+    def test_grant_uses_groups_pass(self, engine):
+        """grant_uses_groups passes for group grantee."""
+        rule = {"ref": "grant_uses_groups"}
+        result = engine.evaluate(rule, {}, {"grantee": "group:data_engineers"})
+        assert result.passed
+
+    def test_grant_uses_groups_account_group_pass(self, engine):
+        """grant_uses_groups passes for account group grantee."""
+        rule = {"ref": "grant_uses_groups"}
+        result = engine.evaluate(rule, {}, {"grantee": "account group:admins"})
+        assert result.passed
+
+    def test_grant_uses_groups_fail(self, engine):
+        """grant_uses_groups fails for direct user grantee."""
+        rule = {"ref": "grant_uses_groups"}
+        result = engine.evaluate(rule, {}, {"grantee": "alice@example.com"})
+        assert not result.passed
+
+    def test_sp_not_workspace_admin_pass(self, engine):
+        """sp_not_workspace_admin passes when entitlements don't include workspace-admin."""
+        rule = {"ref": "sp_not_workspace_admin"}
+        result = engine.evaluate(rule, {}, {"entitlements": "cluster-create"})
+        assert result.passed
+
+    def test_sp_not_workspace_admin_fail(self, engine):
+        """sp_not_workspace_admin fails when entitlements include workspace-admin."""
+        rule = {"ref": "sp_not_workspace_admin"}
+        result = engine.evaluate(rule, {}, {"entitlements": "workspace-admin"})
+        assert not result.passed
+
+    def test_group_has_multiple_members_pass(self, engine):
+        """group_has_multiple_members passes when member_count >= 2."""
+        rule = {"ref": "group_has_multiple_members"}
+        result = engine.evaluate(rule, {}, {"member_count": "3"})
+        assert result.passed
+
+    def test_group_has_multiple_members_fail(self, engine):
+        """group_has_multiple_members fails when member_count < 2."""
+        rule = {"ref": "group_has_multiple_members"}
+        result = engine.evaluate(rule, {}, {"member_count": "1"})
+        assert not result.passed
+
+
+# ── Policy loading ───────────────────────────────────────────────────────────
+
+class TestPolicyLoading:
+    """Verify that all policy YAML files load without errors.
+
+    Uses raw YAML parsing to avoid pyspark dependency in unit tests.
+    """
+
+    @staticmethod
+    def _load_policies_yaml(policies_dir):
+        """Load all policies from YAML files without pyspark dependency."""
+        import yaml
+        policies = []
+        for yaml_file in sorted(Path(policies_dir).glob("*.yml")):
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+            if data and "policies" in data:
+                for p in data["policies"]:
+                    policies.append(p)
+        return policies
+
+    def test_access_governance_policies_load(self, ontology_dir):
+        """access_governance.yml loads and contains all expected policy IDs."""
+        policies_dir = str(Path(ontology_dir).parent / "policies")
+        policies = self._load_policies_yaml(policies_dir)
+        access_ids = [p["id"] for p in policies if p["id"].startswith("POL-A")]
+        assert "POL-A001" in access_ids
+        assert "POL-A002" in access_ids
+        assert "POL-A003" in access_ids
+        assert "POL-A004" in access_ids
+
+    def test_access_governance_policies_have_required_fields(self, ontology_dir):
+        """Every access governance policy has all required fields populated."""
+        policies_dir = str(Path(ontology_dir).parent / "policies")
+        policies = self._load_policies_yaml(policies_dir)
+        required_keys = ["id", "name", "applies_to", "domain", "severity",
+                         "description", "remediation", "rule"]
+        for p in policies:
+            if not p["id"].startswith("POL-A"):
+                continue
+            for key in required_keys:
+                assert key in p and p[key], f"{p['id']} missing or empty: {key}"
+            assert p.get("active") is True, f"{p['id']} should be active"
+
+    def test_all_policy_files_load_without_errors(self, ontology_dir):
+        """Smoke test: all YAML policy files load without exceptions."""
+        policies_dir = str(Path(ontology_dir).parent / "policies")
+        policies = self._load_policies_yaml(policies_dir)
+        assert len(policies) > 0, "No policies loaded"

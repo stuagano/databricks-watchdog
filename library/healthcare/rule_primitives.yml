@@ -1,0 +1,88 @@
+# Healthcare (HIPAA) Rule Primitives
+# Copy into engine/ontologies/rule_primitives.yml
+#
+# Reusable checks for HIPAA governance policies. Each primitive can be
+# referenced by ID in policy definitions using `ref: <primitive_name>`.
+
+primitives:
+
+  # ── PHI Stewardship ────────────────────────────────────────────────────
+
+  has_phi_steward:
+    description: "PHI assets must have a designated data steward"
+    type: tag_exists
+    keys: [data_steward, phi_steward]
+
+  has_hipaa_retention_policy:
+    description: "HIPAA requires documented retention policies (minimum 6 years)"
+    type: tag_exists
+    keys: [retention_policy, retention_years]
+
+  # ── Security Controls ──────────────────────────────────────────────────
+
+  has_encryption_at_rest:
+    description: "ePHI must be encrypted at rest"
+    type: any_of
+    rules:
+      - type: tag_equals
+        key: encryption_at_rest
+        value: "true"
+      - type: metadata_equals
+        field: encryption_status
+        value: "encrypted"
+
+  has_access_logging:
+    description: "PHI access must be logged per HIPAA audit requirements"
+    type: tag_equals
+    key: access_logging_enabled
+    value: "true"
+
+  # ── Business Associate Agreements ──────────────────────────────────────
+
+  has_baa_reference:
+    description: "PHI shared with third parties must reference a Business Associate Agreement"
+    type: tag_exists
+    keys: [baa_id, business_associate_agreement]
+
+  # ── Minimum Necessary Standard ─────────────────────────────────────────
+
+  has_minimum_necessary:
+    description: "PHI access must follow minimum necessary standard"
+    type: all_of
+    rules:
+      - type: tag_exists
+        keys: [access_justification]
+      - type: tag_exists
+        keys: [data_steward]
+
+  # ── Environment Controls ───────────────────────────────────────────────
+
+  phi_not_in_dev:
+    description: "PHI must not exist in development or sandbox environments"
+    type: none_of
+    rules:
+      - type: tag_in
+        key: environment
+        values: ["dev", "development", "sandbox", "test"]
+
+  # ── Breach Notification ────────────────────────────────────────────────
+
+  has_breach_notification_plan:
+    description: "PHI assets must have a breach notification contact"
+    type: tag_exists
+    keys: [breach_notification_contact, incident_response_team]
+
+  # ── De-identification ──────────────────────────────────────────────────
+
+  has_de_identification_method:
+    description: "De-identified datasets must document the method used"
+    type: tag_exists
+    keys: [de_identification_method]
+
+  # ── Audit Trail Integrity ──────────────────────────────────────────────
+
+  audit_trail_immutable:
+    description: "HIPAA audit tables must be append-only (immutable)"
+    type: metadata_equals
+    field: table_type
+    value: "MANAGED"

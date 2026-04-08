@@ -1,0 +1,46 @@
+# Healthcare (HIPAA) Ontology Classes
+# Copy into engine/ontologies/resource_classes.yml under derived_classes
+#
+# These classes extend the base ontology to identify PHI, ePHI, audit trail,
+# and de-identified datasets per HIPAA regulatory requirements.
+
+derived_classes:
+
+  PhiAsset:
+    parent: ConfidentialAsset
+    description: "Contains Protected Health Information (PHI) subject to HIPAA"
+    classifier:
+      any_of:
+        - tag_equals:
+            data_classification: "phi"
+        - tag_equals:
+            regulatory_domain: "HIPAA"
+        - tag_in:
+            data_classification: ["phi", "ephi", "hipaa"]
+
+  EphiAsset:
+    parent: PhiAsset
+    description: "Contains electronic Protected Health Information (ePHI)"
+    classifier:
+      all_of:
+        - tag_equals:
+            data_classification: "ephi"
+        - tag_equals:
+            storage_type: "electronic"
+
+  HipaaAuditAsset:
+    parent: DataAsset
+    description: "Tables that store HIPAA audit trails and access logs"
+    classifier:
+      any_of:
+        - tag_equals:
+            purpose: "hipaa_audit"
+        - tag_matches:
+            resource_name: "(?i)hipaa.*audit|audit.*hipaa|phi.*access.*log"
+
+  DeIdentifiedDataset:
+    parent: DataAsset
+    description: "De-identified dataset per HIPAA Safe Harbor or Expert Determination"
+    classifier:
+      tag_in:
+        de_identification_method: ["safe_harbor", "expert_determination"]

@@ -32,7 +32,7 @@ class WatchdogMcpConfig:
 
     # Server
     server_name: str = "watchdog-mcp"
-    server_version: str = "0.2.0"
+    server_version: str = "0.3.0"
 
     @property
     def qualified_schema(self) -> str:

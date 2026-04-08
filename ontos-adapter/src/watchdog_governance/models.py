@@ -243,3 +243,31 @@ class ValidationResult(BaseModel):
     valid: bool
     errors: list[str]
     warnings: list[str]
+
+
+# ── Grants ───────────────────────────────────────────────────────────────────
+
+
+class Grant(BaseModel):
+    resource_id: str
+    securable_type: str
+    securable_full_name: str
+    grantee: str
+    privilege: str
+    grantor: str
+    inherited_from: str
+
+
+class GrantSummary(BaseModel):
+    resource_id: str
+    total_grants: int
+    grants_by_privilege: dict[str, int]
+    overprivileged_count: int
+    direct_user_grant_count: int
+
+
+class GrantFilters(BaseModel):
+    resource_id: str | None = None
+    grantee: str | None = None
+    privilege: str | None = None
+    securable_type: str | None = None

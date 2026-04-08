@@ -23,6 +23,9 @@ from watchdog_governance.models import (
     ExceptionFilters,
     ExceptionRecord,
     ExceptionSummary,
+    Grant,
+    GrantFilters,
+    GrantSummary,
     OntologyClass,
     OntologyTree,
     Policy,
@@ -149,6 +152,20 @@ class GovernanceProvider(Protocol):
 
     def bulk_revoke_expired(self, *, revoked_by: str = "unknown") -> dict:
         """Revoke all exceptions past their expiry date."""
+        ...
+
+    # ── Grants (read-only) ───────────────────────────────────────────────
+
+    def list_grants(
+        self,
+        resource_id: str | None = None,
+        grantee: str | None = None,
+    ) -> list[Grant]:
+        """List grants, optionally filtered by resource or grantee."""
+        ...
+
+    def grant_summary(self, resource_id: str) -> GrantSummary:
+        """Summary of grants for a specific resource: total, by privilege type, overprivileged count."""
         ...
 
     # ── Ontology (read-only) ──────────────────────────────────────────────

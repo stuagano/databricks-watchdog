@@ -65,6 +65,24 @@ class ResourceGovernanceState:
         return any(v.get("severity") == "high" for v in self.open_violations)
 
     @property
+    def has_overprivileged_grants(self) -> bool:
+        """True if any classification includes OverprivilegedGrant."""
+        return any("OverprivilegedGrant" in c for c in self.classes + self.ancestors)
+
+    @property
+    def has_direct_user_grants(self) -> bool:
+        """True if any classification includes DirectUserGrant."""
+        return any("DirectUserGrant" in c for c in self.classes + self.ancestors)
+
+    @property
+    def grant_violations(self) -> list[dict[str, Any]]:
+        """Open violations for grant-related policies (POL-A*)."""
+        return [
+            v for v in self.open_violations
+            if str(v.get("policy_id", "")).startswith("POL-A")
+        ]
+
+    @property
     def has_exception(self, policy_id: str | None = None) -> bool:
         if policy_id:
             return any(e.get("policy_id") == policy_id for e in self.active_exceptions)
@@ -76,20 +94,36 @@ class ResourceGovernanceState:
 
         Uses the class hierarchy to determine the most restrictive
         classification. Falls back to 'unclassified' if no classes match.
+
+        Escalates by one level when the resource has overprivileged grants,
+        since loose access controls increase the effective exposure risk.
         """
+        _ESCALATION = {
+            "unclassified": "internal",
+            "public": "internal",
+            "internal": "confidential",
+            "confidential": "restricted",
+            "restricted": "restricted",  # already max
+        }
+
         if self.is_export_controlled:
             return "restricted"
         if self.is_restricted:
             return "restricted"
         if self.is_confidential:
-            return "confidential"
-        if self.is_pii:
-            return "confidential"
-        if any("Internal" in c for c in self.classes + self.ancestors):
-            return "internal"
-        if any("Public" in c for c in self.classes + self.ancestors):
-            return "public"
-        return "unclassified"
+            base = "confidential"
+        elif self.is_pii:
+            base = "confidential"
+        elif any("Internal" in c for c in self.classes + self.ancestors):
+            base = "internal"
+        elif any("Public" in c for c in self.classes + self.ancestors):
+            base = "public"
+        else:
+            base = "unclassified"
+
+        if self.has_overprivileged_grants:
+            return _ESCALATION.get(base, base)
+        return base
 
 
 def get_resource_governance(
@@ -210,6 +244,55 @@ def get_policies_for_operation(
         logger.debug(f"Watchdog policies unavailable: {e}")
 
     return []
+
+
+def get_grants_for_resource(
+    w: WorkspaceClient,
+    config: AiDevkitConfig,
+    resource_id: str,
+) -> list[dict[str, Any]]:
+    """Get all grants associated with a resource from Watchdog inventory.
+
+    Queries the resource_inventory table for grant-type resources whose
+    ``metadata['securable_full_name']`` matches the given resource_id.
+    Uses the most recent scan.
+    """
+    schema = config.watchdog_schema
+    try:
+        resp = w.statement_execution.execute_statement(
+            warehouse_id=config.warehouse_id,
+            statement=f"""
+                SELECT resource_id, resource_name, resource_type, metadata
+                FROM {schema}.resource_inventory
+                WHERE scan_id = (
+                    SELECT MAX(scan_id) FROM {schema}.resource_inventory
+                )
+                  AND resource_type = 'grant'
+                  AND metadata['securable_full_name'] = '{_esc(resource_id)}'
+            """,
+            wait_timeout="10s",
+        )
+        if resp.result and resp.result.data_array:
+            cols = [c.name for c in resp.manifest.schema.columns]
+            return [dict(zip(cols, row)) for row in resp.result.data_array]
+    except Exception as e:
+        logger.debug(f"Watchdog grants unavailable for {resource_id}: {e}")
+
+    return []
+
+
+def get_service_principal_governance(
+    w: WorkspaceClient,
+    config: AiDevkitConfig,
+    sp_application_id: str,
+) -> ResourceGovernanceState:
+    """Get governance state for a service principal.
+
+    Constructs the canonical resource_id (``service_principal:<app_id>``)
+    and delegates to ``get_resource_governance``.
+    """
+    resource_id = f"service_principal:{sp_application_id}"
+    return get_resource_governance(w, config, resource_id)
 
 
 def _esc(value: str) -> str:

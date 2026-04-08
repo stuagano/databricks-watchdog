@@ -20,6 +20,8 @@ from watchdog_governance.models import (
     ExceptionFilters,
     ExceptionRecord,
     ExceptionSummary,
+    Grant,
+    GrantSummary,
     OntologyClass,
     OntologyTree,
     OntologyTreeNode,
@@ -646,6 +648,90 @@ class WatchdogProvider:
                 for r in expired
             ],
         }
+
+    # ── Grants ────────────────────────────────────────────────────────────
+
+    def list_grants(
+        self,
+        resource_id: str | None = None,
+        grantee: str | None = None,
+    ) -> list[Grant]:
+        conditions = ["resource_type = 'grant'"]
+        conditions.append(f"""
+            scan_id = (
+                SELECT MAX(scan_id) FROM {self._tbl('resource_inventory')}
+            )
+        """)
+        if resource_id:
+            conditions.append(
+                f"metadata['securable_full_name'] = '{self._esc(resource_id)}'"
+            )
+        if grantee:
+            conditions.append(f"metadata['grantee'] = '{self._esc(grantee)}'")
+        where = "WHERE " + " AND ".join(conditions)
+
+        rows = self._execute(f"""
+            SELECT
+                resource_id,
+                metadata['securable_type']     AS securable_type,
+                metadata['securable_full_name'] AS securable_full_name,
+                metadata['grantee']            AS grantee,
+                metadata['privilege']          AS privilege,
+                metadata['grantor']            AS grantor,
+                metadata['inherited_from']     AS inherited_from
+            FROM {self._tbl('resource_inventory')}
+            {where}
+            ORDER BY resource_id
+        """)
+        return [Grant(**r) for r in rows]
+
+    def grant_summary(self, resource_id: str) -> GrantSummary:
+        safe_id = self._esc(resource_id)
+        rows = self._execute(f"""
+            SELECT
+                metadata['privilege']          AS privilege,
+                metadata['grantee']            AS grantee
+            FROM {self._tbl('resource_inventory')}
+            WHERE resource_type = 'grant'
+              AND scan_id = (
+                  SELECT MAX(scan_id) FROM {self._tbl('resource_inventory')}
+              )
+              AND metadata['securable_full_name'] = '{safe_id}'
+        """)
+
+        grants_by_privilege: dict[str, int] = {}
+        for r in rows:
+            priv = r.get("privilege", "unknown")
+            grants_by_privilege[priv] = grants_by_privilege.get(priv, 0) + 1
+
+        # Count overprivileged (ALL PRIVILEGES) and direct user grants
+        overprivileged_count = sum(
+            1 for r in rows
+            if r.get("privilege", "").upper() == "ALL PRIVILEGES"
+        )
+
+        # Check violations for this resource to count direct user grants
+        violation_rows = self._execute(f"""
+            SELECT policy_id
+            FROM {self._tbl('violations')}
+            WHERE active = true
+              AND resource_id IN (
+                  SELECT resource_id
+                  FROM {self._tbl('resource_inventory')}
+                  WHERE resource_type = 'grant'
+                    AND metadata['securable_full_name'] = '{safe_id}'
+              )
+              AND policy_id = 'POL-A002'
+        """)
+        direct_user_grant_count = len(violation_rows)
+
+        return GrantSummary(
+            resource_id=resource_id,
+            total_grants=len(rows),
+            grants_by_privilege=grants_by_privilege,
+            overprivileged_count=overprivileged_count,
+            direct_user_grant_count=direct_user_grant_count,
+        )
 
     # ── Ontology ──────────────────────────────────────────────────────────
 

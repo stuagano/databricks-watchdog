@@ -1,0 +1,125 @@
+# Healthcare (HIPAA) Governance Policies
+# Domain: RegulatoryCompliance, SecurityGovernance
+# Owner: compliance_officer
+#
+# Policies covering HIPAA Privacy Rule, Security Rule, and Breach Notification
+# Rule requirements for PHI and ePHI assets in Databricks Unity Catalog.
+#
+# Copy into engine/policies/
+
+policies:
+
+  - id: POL-HIPAA-001
+    name: "PHI assets must have a designated data steward"
+    applies_to: PhiAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "HIPAA requires a designated individual responsible for PHI data governance. Every PHI asset must have a named steward who is accountable for access reviews, retention compliance, and breach response."
+    remediation: "Add a 'data_steward' or 'phi_steward' tag with the responsible person's email."
+    active: true
+    rule:
+      ref: has_phi_steward
+
+  - id: POL-HIPAA-002
+    name: "PHI assets must have a retention policy"
+    applies_to: PhiAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "HIPAA requires retention of PHI records for a minimum of 6 years. Assets must document their retention policy."
+    remediation: "Add a 'retention_policy' tag (e.g., '6_years', '10_years') or 'retention_years' tag with the numeric value."
+    active: true
+    rule:
+      ref: has_hipaa_retention_policy
+
+  - id: POL-HIPAA-003
+    name: "ePHI must be encrypted at rest"
+    applies_to: EphiAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: "HIPAA Security Rule requires encryption of electronic PHI at rest. While Databricks provides platform-level encryption, assets must explicitly confirm encryption status."
+    remediation: "Add tag 'encryption_at_rest' = 'true'. Verify the underlying storage uses AES-256 or equivalent."
+    active: true
+    rule:
+      ref: has_encryption_at_rest
+
+  - id: POL-HIPAA-004
+    name: "PHI access must be logged"
+    applies_to: PhiAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: "HIPAA requires audit trails of all PHI access. Tables containing PHI must have access logging enabled."
+    remediation: "Enable audit logging and add tag 'access_logging_enabled' = 'true'."
+    active: true
+    rule:
+      ref: has_access_logging
+
+  - id: POL-HIPAA-005
+    name: "PHI must not exist in development environments"
+    applies_to: PhiAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: "PHI must not be used in development, sandbox, or test environments. Use de-identified or synthetic data instead."
+    remediation: "Move PHI to production-only catalogs. Replace with synthetic or de-identified data in dev/test."
+    active: true
+    rule:
+      ref: phi_not_in_dev
+
+  - id: POL-HIPAA-006
+    name: "PHI shared with third parties must reference a BAA"
+    applies_to: PhiAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "HIPAA requires Business Associate Agreements for any third party handling PHI. Shared PHI assets must reference the BAA."
+    remediation: "Add a 'baa_id' tag referencing the Business Associate Agreement document."
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: tag_exists
+        keys: [shared_with, delta_sharing_enabled]
+      then:
+        ref: has_baa_reference
+
+  - id: POL-HIPAA-007
+    name: "PHI access must follow minimum necessary standard"
+    applies_to: PhiAsset
+    domain: SecurityGovernance
+    severity: high
+    description: "HIPAA's minimum necessary standard requires that PHI access be limited to the minimum amount needed. Assets must have documented access justification and steward approval."
+    remediation: "Add 'access_justification' tag describing why access is needed, and ensure 'data_steward' is set."
+    active: true
+    rule:
+      ref: has_minimum_necessary
+
+  - id: POL-HIPAA-008
+    name: "PHI assets must have a breach notification contact"
+    applies_to: PhiAsset
+    domain: SecurityGovernance
+    severity: high
+    description: "HIPAA Breach Notification Rule requires notification within 60 days. PHI assets must identify the breach notification contact or incident response team."
+    remediation: "Add 'breach_notification_contact' or 'incident_response_team' tag."
+    active: true
+    rule:
+      ref: has_breach_notification_plan
+
+  - id: POL-HIPAA-009
+    name: "De-identified datasets must document the method used"
+    applies_to: DeIdentifiedDataset
+    domain: RegulatoryCompliance
+    severity: medium
+    description: "HIPAA recognizes two de-identification methods: Safe Harbor (18 identifiers removed) and Expert Determination. The method must be documented."
+    remediation: "Add 'de_identification_method' tag with value 'safe_harbor' or 'expert_determination'."
+    active: true
+    rule:
+      ref: has_de_identification_method
+
+  - id: POL-HIPAA-010
+    name: "HIPAA audit tables must be append-only"
+    applies_to: HipaaAuditAsset
+    domain: RegulatoryCompliance
+    severity: high
+    description: "HIPAA audit trails must be immutable to prevent tampering. Audit tables should be managed (not external) and append-only."
+    remediation: "Convert to a managed Delta table and set delta.appendOnly = true."
+    active: true
+    rule:
+      ref: audit_trail_immutable

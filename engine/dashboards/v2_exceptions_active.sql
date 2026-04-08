@@ -2,6 +2,7 @@
 -- Shows all non-expired, active exceptions with resource context
 
 SELECT
+    e.metastore_id,
     e.exception_id,
     e.resource_id,
     v.resource_name,

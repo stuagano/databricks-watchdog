@@ -2,6 +2,7 @@
 -- Full history of all exceptions (active, expired, revoked)
 
 SELECT
+    e.metastore_id,
     e.exception_id,
     e.resource_id,
     v.resource_name,

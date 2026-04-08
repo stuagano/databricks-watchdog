@@ -2,6 +2,7 @@
 -- Use with AI/BI dashboard filter: WHERE owner = :selected_owner
 
 SELECT
+    v.metastore_id,
     v.resource_id,
     v.resource_name,
     v.resource_type,

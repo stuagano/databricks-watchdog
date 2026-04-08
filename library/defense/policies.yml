@@ -1,0 +1,104 @@
+# Defense Governance Policies
+# Domain: DefenseGovernance
+# Owner: security_admin
+#
+# NIST 800-171, CMMC Level 2, and ITAR compliance policies.
+
+policies:
+
+  # ── NIST 800-171 ─────────────────────────────────────────────────────────
+
+  - id: POL-NIST-001
+    name: "CUI must have proper markings"
+    applies_to: CuiAsset
+    domain: DefenseGovernance
+    severity: critical
+    description: "Controlled Unclassified Information must carry a CUI marking category per NIST 800-171 3.1.3"
+    remediation: "Add a 'cui_marking' tag (e.g., CUI//SP-CTI, CUI//ITAR, CUI//Basic)"
+    active: true
+    rule:
+      ref: has_cui_marking
+
+  - id: POL-NIST-002
+    name: "CUI access must be controlled"
+    applies_to: CuiAsset
+    domain: DefenseGovernance
+    severity: critical
+    description: "CUI must have an access control list enforcing need-to-know per NIST 800-171 3.1.1"
+    remediation: "Add an 'access_control_list' tag referencing the ACL document or group"
+    active: true
+    rule:
+      type: all_of
+      rules:
+        - ref: has_access_control_list
+        - ref: cui_not_on_public_network
+
+  - id: POL-NIST-003
+    name: "CUI must have media protection controls"
+    applies_to: CuiAsset
+    domain: DefenseGovernance
+    severity: high
+    description: "CUI storage must document media protection controls per NIST 800-171 3.8"
+    remediation: "Add a 'media_protection_plan' tag referencing the media protection document"
+    active: true
+    rule:
+      ref: has_media_protection
+
+  - id: POL-NIST-004
+    name: "CUI must have incident response plan"
+    applies_to: CuiAsset
+    domain: DefenseGovernance
+    severity: high
+    description: "CUI assets must reference an incident response plan per NIST 800-171 3.6"
+    remediation: "Add an 'incident_response_plan' tag referencing the IR plan document"
+    active: true
+    rule:
+      ref: has_incident_response_plan
+
+  - id: POL-NIST-005
+    name: "Defense audit trails must be immutable"
+    applies_to: DefenseAuditTrail
+    domain: DefenseGovernance
+    severity: high
+    description: "Audit trails for defense data must be append-only to prevent tampering per NIST 800-171 3.3"
+    remediation: "Set the 'immutable' tag to 'true' and configure the table as append-only"
+    active: true
+    rule:
+      ref: audit_trail_immutable
+
+  # ── CMMC Level 2 ────────────────────────────────────────────────────────
+
+  - id: POL-CMMC-001
+    name: "CMMC L2 assets must reference system security plan"
+    applies_to: CmmcLevel2Asset
+    domain: DefenseGovernance
+    severity: critical
+    description: "CMMC Level 2 requires all CUI assets to be covered by a System Security Plan (SSP)"
+    remediation: "Add a 'system_security_plan' tag referencing the SSP document ID"
+    active: true
+    rule:
+      ref: has_system_security_plan_ref
+
+  - id: POL-CMMC-002
+    name: "CMMC L2 assets must use FIPS-validated encryption"
+    applies_to: CmmcLevel2Asset
+    domain: DefenseGovernance
+    severity: critical
+    description: "CMMC Level 2 requires FIPS 140-2 validated encryption for CUI at rest and in transit"
+    remediation: "Set the 'encryption_standard' tag to 'FIPS-140-2' after verifying FIPS encryption is enabled"
+    active: true
+    rule:
+      ref: has_fips_encryption
+
+  # ── ITAR ─────────────────────────────────────────────────────────────────
+
+  - id: POL-ITAR-001
+    name: "ITAR data must have export control classification"
+    applies_to: ItarAsset
+    domain: DefenseGovernance
+    severity: critical
+    description: "ITAR-controlled data must have an export control classification (USML category)"
+    remediation: "Add an 'export_control_classification' tag with the USML category (e.g., XI, XII)"
+    active: true
+    rule:
+      ref: has_export_control_classification

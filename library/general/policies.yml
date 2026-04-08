@@ -1,0 +1,124 @@
+# General Governance Policies
+# Domain: GeneralGovernance
+# Owner: platform_admin
+#
+# CIS-style benchmark policies for tagging hygiene, documentation,
+# cost attribution, lifecycle, and operational best practices.
+
+policies:
+
+  - id: POL-GEN-001
+    name: "All tables must have data classification"
+    applies_to: DataAsset
+    domain: GeneralGovernance
+    severity: high
+    description: "Every data asset must be labeled with its sensitivity level for access control and compliance"
+    remediation: "Add a 'data_classification' tag (public, internal, confidential, restricted, pii)"
+    active: true
+    rule:
+      ref: has_data_classification
+
+  - id: POL-GEN-002
+    name: "All tables must have documentation"
+    applies_to: DataAsset
+    domain: GeneralGovernance
+    severity: medium
+    description: "Data assets must have a comment or description for discoverability"
+    remediation: "Run: ALTER TABLE <table> SET COMMENT '<description>' or add a 'description' tag"
+    active: true
+    rule:
+      ref: has_documentation
+
+  - id: POL-GEN-003
+    name: "All compute must have cost center attribution"
+    applies_to: ComputeAsset
+    domain: GeneralGovernance
+    severity: high
+    description: "Compute resources must be attributed to a cost center for chargeback and budgeting"
+    remediation: "Add a 'cost_center' tag to the compute resource"
+    active: true
+    rule:
+      ref: has_cost_center
+
+  - id: POL-GEN-004
+    name: "All resources must have an owner"
+    applies_to: "*"
+    domain: GeneralGovernance
+    severity: high
+    description: "Every resource must have an identifiable owner for accountability"
+    remediation: "Set the owner field or add an 'owner' tag to the resource"
+    active: true
+    rule:
+      ref: has_owner
+
+  - id: POL-GEN-005
+    name: "All resources must have environment tag"
+    applies_to: "*"
+    domain: GeneralGovernance
+    severity: medium
+    description: "Resources must be tagged with their environment for segmentation and access control"
+    remediation: "Add an 'environment' tag (dev, test, staging, prod)"
+    active: true
+    rule:
+      ref: has_environment_tag
+
+  - id: POL-GEN-006
+    name: "Clusters must have auto-termination enabled"
+    applies_to: ComputeAsset
+    domain: GeneralGovernance
+    severity: high
+    description: "Clusters without auto-termination waste compute budget when idle"
+    remediation: "Set autotermination_minutes in the cluster configuration"
+    active: true
+    rule:
+      ref: compute_has_auto_termination
+
+  - id: POL-GEN-007
+    name: "Production tables must have quality monitors"
+    applies_to: DataAsset
+    domain: GeneralGovernance
+    severity: medium
+    description: "Production data assets should have quality monitoring enabled to catch data issues early"
+    remediation: "Enable Lakehouse Monitoring or DQM on the table"
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: tag_equals
+        key: environment
+        value: "prod"
+      then:
+        ref: data_has_quality_monitor
+
+  - id: POL-GEN-008
+    name: "All resources must have lifecycle status"
+    applies_to: "*"
+    domain: GeneralGovernance
+    severity: low
+    description: "Resources should declare their lifecycle status for deprecation tracking"
+    remediation: "Add a 'lifecycle_status' tag (active, deprecated, decommissioning)"
+    active: true
+    rule:
+      ref: has_lifecycle_status
+
+  - id: POL-GEN-009
+    name: "Stale assets should be reviewed for deprecation"
+    applies_to: StaleAsset
+    domain: GeneralGovernance
+    severity: medium
+    description: "Assets with no queries in 90+ days should be reviewed and either deprecated or re-justified"
+    remediation: "Review the asset usage. If no longer needed, set lifecycle_status to 'deprecated'. Otherwise, update the 'stale' tag to 'false' with a justification."
+    active: true
+    rule:
+      ref: has_lifecycle_status
+
+  - id: POL-GEN-010
+    name: "Undocumented assets in production must be documented"
+    applies_to: UndocumentedAsset
+    domain: GeneralGovernance
+    severity: high
+    description: "Production assets without documentation create knowledge gaps and compliance risk"
+    remediation: "Add a table comment or description tag to the asset"
+    active: true
+    rule:
+      ref: production_must_be_documented

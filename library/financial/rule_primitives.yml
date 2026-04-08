@@ -1,0 +1,82 @@
+# Financial Industry Rule Primitives
+#
+# Reusable building blocks for SOX, PCI-DSS, and GLBA policy rules.
+# These extend the primitives from engine/ontologies/rule_primitives.yml.
+#
+# Usage: Copy or merge into engine/ontologies/ to make available to policies.
+
+primitives:
+
+  # ── SOX (Sarbanes-Oxley) ────────────────────────────────────────────────
+
+  has_sox_owner:
+    type: tag_exists
+    description: "SOX assets must have a designated control owner"
+    keys: [sox_control_owner, data_steward]
+
+  has_change_management:
+    type: tag_exists
+    description: "SOX requires documented change management for financial data"
+    keys: [change_management_process, change_approval_required]
+
+  has_sox_audit_trail:
+    type: tag_equals
+    description: "SOX requires complete audit trail for financial data changes"
+    key: audit_trail_enabled
+    value: "true"
+
+  has_sox_review_cycle:
+    type: tag_exists
+    description: "SOX controls must be reviewed on a defined cycle"
+    keys: [review_cycle, last_review_date]
+
+  separation_of_duties_enforced:
+    type: all_of
+    description: "SOX separation of duties: data creator cannot be approver"
+    rules:
+      - type: tag_exists
+        keys: [data_creator]
+      - type: tag_exists
+        keys: [data_approver]
+
+  financial_audit_immutable:
+    type: metadata_equals
+    description: "SOX audit tables must be append-only (managed table type)"
+    field: table_type
+    value: "MANAGED"
+
+  # ── PCI-DSS (Payment Card Industry) ─────────────────────────────────────
+
+  pci_data_encrypted:
+    type: all_of
+    description: "PCI-DSS requires encryption of cardholder data at rest and in transit"
+    rules:
+      - type: tag_equals
+        key: encryption_at_rest
+        value: "true"
+      - type: tag_equals
+        key: encryption_in_transit
+        value: "true"
+
+  pci_data_masked:
+    type: tag_equals
+    description: "PCI-DSS requires masking of PAN (show only last 4 digits)"
+    key: column_masking_enabled
+    value: "true"
+
+  pci_retention_limited:
+    type: tag_exists
+    description: "PCI-DSS requires limited retention of cardholder data"
+    keys: [retention_policy, data_purge_schedule]
+
+  # ── GLBA (Gramm-Leach-Bliley Act) ──────────────────────────────────────
+
+  has_glba_privacy_notice:
+    type: tag_exists
+    description: "GLBA requires privacy notice for NPI collection"
+    keys: [privacy_notice_id, glba_privacy_notice]
+
+  has_glba_opt_out:
+    type: tag_exists
+    description: "GLBA requires opt-out mechanism for NPI sharing"
+    keys: [opt_out_mechanism, sharing_opt_out]

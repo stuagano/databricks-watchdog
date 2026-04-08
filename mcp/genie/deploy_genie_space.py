@@ -63,24 +63,46 @@ def _build_space_config(
     datasets = _load_sql_datasets(catalog, schema)
     instructions = _load_instructions()
 
-    # Build table identifiers from the underlying tables
-    table_identifiers = sorted(set(
-        f"{catalog}.{schema}.{t}"
-        for t in [
-            "violations",
-            "resource_inventory",
-            "resource_classifications",
-            "policies",
-            "exceptions",
-        ]
-    ))
+    # Watchdog base tables
+    watchdog_tables = [
+        "violations",
+        "resource_inventory",
+        "resource_classifications",
+        "policies",
+        "exceptions",
+        "scan_results",
+    ]
+    # Watchdog semantic views
+    watchdog_views = [
+        "v_resource_compliance",
+        "v_class_compliance",
+        "v_domain_compliance",
+        "v_tag_policy_coverage",
+        "v_data_classification_summary",
+        "v_dq_monitoring_coverage",
+    ]
+    # UC system tables (Governance Hub data sources)
+    system_tables = [
+        "system.information_schema.tables",
+        "system.information_schema.columns",
+        "system.information_schema.table_privileges",
+        "system.information_schema.schema_privileges",
+        "system.information_schema.column_tags",
+        "system.information_schema.table_tags",
+        "system.access.audit",
+    ]
+
+    table_identifiers = sorted(
+        [f"{catalog}.{schema}.{t}" for t in watchdog_tables + watchdog_views]
+        + system_tables
+    )
 
     config = {
         "title": space_name,
         "description": (
-            "Watchdog Governance Genie Space -- natural language exploration "
-            "of compliance posture, violations, data classification, and "
-            "policy effectiveness across your Databricks workspace."
+            "Compliance posture + UC governance — Watchdog violations, "
+            "classifications, policies alongside UC system tables for "
+            "access, tags, and metadata."
         ),
         "table_identifiers": table_identifiers,
     }
@@ -88,17 +110,13 @@ def _build_space_config(
     if warehouse_id:
         config["warehouse_id"] = warehouse_id
 
-    # Build serialized_space with instructions and datasets as sample queries
+    # Build serialized_space.
+    # NOTE: The Genie API throws internal errors if instructions are included
+    # during CREATE. We create without instructions, then add them via a
+    # separate PATCH (without reading first — the etag changes on every PATCH,
+    # making read-then-write impossible).
     serialized = {
         "version": 2,
-        "instructions": {
-            "text_instructions": [
-                {
-                    "id": str(uuid.uuid4()),
-                    "content": [line + "\n" for line in instructions.splitlines()],
-                }
-            ]
-        },
         "data_sources": {
             "tables": sorted(
                 [{"identifier": tid} for tid in table_identifiers],
@@ -109,20 +127,62 @@ def _build_space_config(
 
     config["serialized_space"] = json.dumps(serialized)
 
-    # Sample questions go at the top level, not inside serialized_space
-    config["sample_questions"] = [
-        "What is our overall compliance posture by domain?",
-        "Who has the most critical open violations?",
-        "Which PII tables are missing a data steward?",
-        "What percentage of tables have data quality monitoring?",
-        "Which policies are generating the most violations?",
-        "Show me all critical violations for gold tables",
-    ]
-
     return config
 
 
-def _deploy(config: dict, profile: str | None, update_space_id: str | None) -> str:
+def _add_instructions(w, space_id: str, instructions: str, table_identifiers: list[str]) -> None:
+    """Add instructions to an existing Genie Space.
+
+    The Genie API throws internal errors when instructions are included in
+    the CREATE payload. So we add them via a separate PATCH.
+
+    Important: the etag changes on every PATCH (including empty ones), making
+    read-then-write impossible. We send the full serialized_space from scratch
+    without reading first.
+    """
+    if not instructions:
+        return
+
+    serialized = {
+        "version": 2,
+        "data_sources": {
+            "tables": sorted(
+                [{"identifier": tid} for tid in table_identifiers],
+                key=lambda t: t["identifier"],
+            )
+        },
+        "instructions": {
+            "text_instructions": [
+                {
+                    "id": str(uuid.uuid4()),
+                    "content": [line + "\n" for line in instructions.splitlines()],
+                }
+            ]
+        },
+    }
+
+    try:
+        w.api_client.do(
+            "PATCH",
+            f"/api/2.0/genie/spaces/{space_id}",
+            body={
+                "serialized_space": json.dumps(serialized),
+                "table_identifiers": table_identifiers,
+            },
+        )
+        print("  Added instructions to Genie Space")
+    except Exception as exc:
+        # Instructions via API are flaky — warn but don't fail
+        print(f"  WARNING: Could not add instructions via API: {exc}")
+        print("  You can add instructions manually in the Genie Space UI.")
+
+
+def _deploy(
+    config: dict,
+    profile: str | None,
+    update_space_id: str | None,
+    instructions: str = "",
+) -> str:
     """Create or update the Genie Space via the Databricks SDK."""
     try:
         from databricks.sdk import WorkspaceClient
@@ -141,7 +201,7 @@ def _deploy(config: dict, profile: str | None, update_space_id: str | None) -> s
     w = WorkspaceClient(**kwargs)
 
     if update_space_id:
-        # Update existing space
+        # Update existing space — send full config without reading first
         print(f"Updating Genie Space {update_space_id} ...")
         resp = w.api_client.do(
             "PATCH",
@@ -151,7 +211,7 @@ def _deploy(config: dict, profile: str | None, update_space_id: str | None) -> s
         space_id = update_space_id
         print(f"Updated Genie Space: {space_id}")
     else:
-        # Create new space
+        # Create new space (without instructions — added in follow-up PATCH)
         print("Creating Genie Space ...")
         resp = w.api_client.do(
             "POST",
@@ -160,6 +220,9 @@ def _deploy(config: dict, profile: str | None, update_space_id: str | None) -> s
         )
         space_id = resp.get("space_id", resp.get("id", "unknown"))
         print(f"Created Genie Space: {space_id}")
+
+        # Add instructions in a separate PATCH
+        _add_instructions(w, space_id, instructions, config.get("table_identifiers", []))
 
     return space_id
 
@@ -230,7 +293,8 @@ def main() -> None:
         print(f"Tables: {', '.join(config['table_identifiers'])}")
         return
 
-    space_id = _deploy(config, args.profile, args.update)
+    instructions = _load_instructions()
+    space_id = _deploy(config, args.profile, args.update, instructions)
     print(f"\nGenie Space is ready. Open it in your workspace to start asking questions.")
     print(f"Space ID: {space_id}")
 

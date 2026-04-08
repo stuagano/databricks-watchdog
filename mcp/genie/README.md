@@ -1,12 +1,21 @@
 # Watchdog Governance Genie Space
 
-A pre-built Genie Space template that lets business users explore governance
-compliance data in natural language. Powered by the Delta tables written by the
-Watchdog scanner in `platform.watchdog`.
+A pre-built Genie Space that lets business users explore governance data in
+natural language. Combines **Watchdog compliance posture** (violations, ontology
+classifications, policies) with **UC Governance Hub data** (system tables for
+access, tags, metadata, and audit logs).
 
 ## What it provides
 
-Six curated datasets that cover the most common governance questions:
+**19 data sources** across three layers:
+
+| Layer | Tables | Purpose |
+|-------|--------|---------|
+| Watchdog base tables (6) | violations, resource_inventory, resource_classifications, policies, exceptions, scan_results | Compliance posture and policy evaluation |
+| Watchdog views (6) | v_domain_compliance, v_class_compliance, v_resource_compliance, v_tag_policy_coverage, v_data_classification_summary, v_dq_monitoring_coverage | Pre-aggregated compliance metrics |
+| UC system tables (7) | information_schema.tables/columns/table_privileges/schema_privileges/table_tags/column_tags, access.audit | Native UC metadata, access, and audit |
+
+**Six curated SQL datasets** for common governance questions:
 
 | Dataset | Purpose |
 |---------|---------|
@@ -17,9 +26,9 @@ Six curated datasets that cover the most common governance questions:
 | `policy_effectiveness` | Which policies generate the most violations |
 | `dq_monitoring` | Data quality monitoring coverage (DQM/LHM) |
 
-The Genie Space also ships with curated instructions that teach the model about
-the Watchdog data model, ontology hierarchy, severity levels, and compliance
-domains so it can answer follow-up questions accurately.
+Curated instructions teach the model about both the Watchdog data model and
+UC system tables so it can answer cross-cutting questions like "who has access
+to tables with critical violations?"
 
 ## Prerequisites
 
@@ -91,11 +100,18 @@ To modify instructions, edit `instructions.md` and redeploy.
 
 Once deployed, users can ask questions like:
 
-- "What is our overall compliance posture?"
+**Compliance posture (Watchdog)**
+- "What is our overall compliance posture by domain?"
 - "Who has the most critical open violations?"
 - "Which PII tables don't have a data steward?"
-- "Show me all critical violations for gold tables"
 - "What percentage of tables have data quality monitoring?"
-- "Which policies are generating the most violations?"
-- "Are all production jobs compliant with operational governance?"
-- "Show me the trend of resolved violations by domain"
+
+**Access and security (UC system tables)**
+- "Who has access to tables with critical violations?"
+- "Which tables have ALL PRIVILEGES grants?"
+- "Show me tables tagged PII that are accessible to more than 5 groups"
+
+**Cross-cutting (Watchdog + UC)**
+- "Compare Watchdog ontology classifications to native UC table tags"
+- "Which violating resources were queried most in the last 30 days?"
+- "Show me undocumented tables in production that have no data classification"

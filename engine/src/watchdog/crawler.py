@@ -4,7 +4,7 @@ Discovers resources via the Databricks SDK and Unity Catalog information_schema,
 then writes a unified resource_inventory table to Delta.
 
 Resource types crawled:
-  - UC: catalogs, schemas, tables, volumes
+  - UC: catalogs, schemas, tables, volumes, grants
   - Workspace: jobs, clusters, dashboards, warehouses, pipelines
   - Identity: service principals, groups (for RBAC policy evaluation)
 """
@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.catalog import SecurableType
 from pyspark.sql import SparkSession, DataFrame
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
@@ -37,6 +38,7 @@ INVENTORY_SCHEMA = T.StructType([
     T.StructField("domain", T.StringType(), True),
     T.StructField("tags", T.MapType(T.StringType(), T.StringType()), True),
     T.StructField("metadata", T.MapType(T.StringType(), T.StringType()), True),
+    T.StructField("metastore_id", T.StringType(), True),
     T.StructField("discovered_at", T.TimestampType(), False),
 ])
 
@@ -59,6 +61,7 @@ def ensure_inventory_table(spark: SparkSession, catalog: str, schema: str) -> No
             domain STRING,
             tags MAP<STRING, STRING>,
             metadata MAP<STRING, STRING>,
+            metastore_id STRING,
             discovered_at TIMESTAMP NOT NULL
         )
         USING DELTA
@@ -76,6 +79,18 @@ class ResourceCrawler:
         self.schema = schema
         self.scan_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         self.now = datetime.now(timezone.utc)
+        self._metastore_id: Optional[str] = None
+
+    @property
+    def metastore_id(self) -> str:
+        """Lazily fetch and cache the workspace metastore ID."""
+        if self._metastore_id is None:
+            try:
+                summary = self.w.metastores.current()
+                self._metastore_id = summary.metastore_id or ""
+            except Exception:
+                self._metastore_id = ""
+        return self._metastore_id
 
     @property
     def inventory_table(self) -> str:
@@ -100,6 +115,15 @@ class ResourceCrawler:
         # Identity resources via SDK
         for crawler_fn in [
             self._crawl_groups,
+            self._crawl_service_principals,
+        ]:
+            result, rows = self._safe_crawl(crawler_fn)
+            results.append(result)
+            all_rows.extend(rows)
+
+        # UC grant resources via information_schema + SDK
+        for crawler_fn in [
+            self._crawl_grants,
         ]:
             result, rows = self._safe_crawl(crawler_fn)
             results.append(result)
@@ -165,6 +189,7 @@ class ResourceCrawler:
             domain,
             tags or {},
             metadata or {},
+            self.metastore_id,
             self.now,
         )
 
@@ -199,6 +224,31 @@ class ResourceCrawler:
                     "group_type": group_type,
                     "member_count": str(member_count),
                     "entitlements": ",".join(entitlements),
+                },
+            ))
+        return rows
+
+    def _crawl_service_principals(self) -> list:
+        """Crawl workspace service principals via the SDK.
+
+        Captures application_id, active status, and entitlements. Used by
+        identity governance policies to ensure SPs are properly managed,
+        have expected entitlements, and inactive SPs are detected.
+        """
+        rows = []
+        for sp in self.w.service_principals.list():
+            entitlements = ""
+            if sp.entitlements:
+                entitlements = ",".join(e.value for e in sp.entitlements if e.value)
+
+            rows.append(self._make_row(
+                resource_type="service_principal",
+                resource_id=f"service_principal:{sp.application_id}",
+                resource_name=sp.display_name or sp.application_id,
+                metadata={
+                    "application_id": sp.application_id or "",
+                    "active": str(sp.active) if sp.active is not None else "",
+                    "entitlements": entitlements,
                 },
             ))
         return rows
@@ -327,6 +377,106 @@ class ResourceCrawler:
                     "comment": row.comment or "",
                 },
             ))
+        return rows
+
+    def _crawl_grants(self) -> list:
+        """Crawl UC grants via information_schema and SDK.
+
+        Enumerates table-level and schema-level grants from information_schema,
+        plus catalog-level grants from the SDK. Used by access control policies
+        to detect overly broad grants, orphaned permissions, and privilege
+        escalation paths.
+
+        Only non-inherited grants are captured (inherited_from = 'NONE' in
+        information_schema). Catalog-level grants from the SDK don't have an
+        inherited_from field — they are always direct.
+        """
+        rows = []
+
+        # Table-level grants from information_schema (per catalog)
+        for cat in self.w.catalogs.list():
+            try:
+                table_grants = self.spark.sql(f"""
+                    SELECT grantee, table_catalog, table_schema, table_name,
+                           privilege_type, is_grantable
+                    FROM {cat.name}.information_schema.table_privileges
+                    WHERE inherited_from = 'NONE'
+                """).collect()
+                for row in table_grants:
+                    fqn = f"{row.table_catalog}.{row.table_schema}.{row.table_name}"
+                    rows.append(self._make_row(
+                        resource_type="grant",
+                        resource_id=f"table:{fqn}:{row.grantee}:{row.privilege_type}",
+                        resource_name=f"{row.privilege_type} on table {fqn}",
+                        owner=row.grantee,
+                        metadata={
+                            "securable_type": "table",
+                            "securable_full_name": fqn,
+                            "grantee": row.grantee,
+                            "privilege": row.privilege_type,
+                            "grantor": "",
+                            "inherited_from": "",
+                        },
+                    ))
+            except Exception:
+                continue  # Skip catalogs we can't read
+
+            # Schema-level grants from information_schema (per catalog)
+            try:
+                schema_grants = self.spark.sql(f"""
+                    SELECT grantee, catalog_name, schema_name,
+                           privilege_type, is_grantable
+                    FROM {cat.name}.information_schema.schema_privileges
+                    WHERE inherited_from = 'NONE'
+                """).collect()
+                for row in schema_grants:
+                    fqn = f"{row.catalog_name}.{row.schema_name}"
+                    rows.append(self._make_row(
+                        resource_type="grant",
+                        resource_id=f"schema:{fqn}:{row.grantee}:{row.privilege_type}",
+                        resource_name=f"{row.privilege_type} on schema {fqn}",
+                        owner=row.grantee,
+                        metadata={
+                            "securable_type": "schema",
+                            "securable_full_name": fqn,
+                            "grantee": row.grantee,
+                            "privilege": row.privilege_type,
+                            "grantor": "",
+                            "inherited_from": "",
+                        },
+                    ))
+            except Exception:
+                continue  # Skip catalogs we can't read
+
+            # Catalog-level grants via SDK
+            try:
+                catalog_grants = self.w.grants.get(
+                    securable_type=SecurableType.CATALOG,
+                    full_name=cat.name,
+                )
+                if catalog_grants.privilege_assignments:
+                    for assignment in catalog_grants.privilege_assignments:
+                        grantee = assignment.principal or ""
+                        for priv in (assignment.privileges or []):
+                            privilege = priv.privilege.value if priv.privilege else ""
+                            inherited = priv.inherited_from_name or ""
+                            rows.append(self._make_row(
+                                resource_type="grant",
+                                resource_id=f"catalog:{cat.name}:{grantee}:{privilege}",
+                                resource_name=f"{privilege} on catalog {cat.name}",
+                                owner=grantee,
+                                metadata={
+                                    "securable_type": "catalog",
+                                    "securable_full_name": cat.name,
+                                    "grantee": grantee,
+                                    "privilege": privilege,
+                                    "grantor": "",
+                                    "inherited_from": inherited,
+                                },
+                            ))
+            except Exception:
+                continue  # Skip catalogs we can't read grants for
+
         return rows
 
     # ------------------------------------------------------------------

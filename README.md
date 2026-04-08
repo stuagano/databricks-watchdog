@@ -4,7 +4,7 @@ A config-driven governance scanner for Databricks. Write policies in YAML, Watch
 
 ## What You Get
 
-- **Resource crawler** — enumerates 12 resource types (tables, jobs, clusters, pipelines, warehouses, volumes, catalogs, schemas, users, groups, service principals) via SDK + Unity Catalog
+- **Resource crawler** — enumerates 14 resource types (tables, jobs, clusters, pipelines, warehouses, volumes, catalogs, schemas, users, groups, service principals, grants) via SDK + Unity Catalog, with per-row `metastore_id` for multi-workspace correlation
 - **Ontology engine** — tag-based classification hierarchy (e.g., a table tagged `data_classification=pii` becomes a `PiiAsset` which inherits all `DataAsset` policies)
 - **Policy engine** — declarative rules evaluated against resource tags/metadata with support for composition (`all_of`, `any_of`, `none_of`, `if_then`)
 - **Violation tracking** — deduplication via MERGE, status lifecycle (open → resolved/exception), exception management with expiration
@@ -42,7 +42,7 @@ A config-driven governance scanner for Databricks. Write policies in YAML, Watch
 
 | Table | Purpose |
 |-------|---------|
-| `resource_inventory` | All discovered resources per scan (scan_id, resource_type, resource_id, tags, metadata) |
+| `resource_inventory` | All discovered resources per scan (scan_id, resource_type, resource_id, tags, metadata, metastore_id) |
 | `resource_classifications` | Ontology class assignments per scan (resource_id → class_name with ancestors) |
 | `policies` | Policy definitions — YAML-synced + user-created (hybrid management) |
 | `policies_history` | Append-only audit trail of policy changes |
@@ -151,7 +151,7 @@ databricks-watchdog/
 │   ├── databricks.yml               #   Bundle manifest (customize targets here)
 │   ├── setup.py                     #   Python package definition
 │   ├── src/watchdog/                #   Core engine source code
-│   │   ├── crawler.py               #     Resource enumeration (12 types)
+│   │   ├── crawler.py               #     Resource enumeration (14 types)
 │   │   ├── ontology.py              #     Tag-based classification engine
 │   │   ├── rule_engine.py           #     Declarative rule evaluator
 │   │   ├── policy_engine.py         #     Two-pass evaluation orchestrator

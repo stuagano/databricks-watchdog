@@ -62,7 +62,6 @@ def ensure_inventory_table(spark: SparkSession, catalog: str, schema: str) -> No
             domain STRING,
             tags MAP<STRING, STRING>,
             metadata MAP<STRING, STRING>,
-            metastore_id STRING,
             discovered_at TIMESTAMP NOT NULL
         )
         USING DELTA
@@ -86,22 +85,10 @@ class ResourceCrawler:
         self._cached_metastore_id: Optional[str] = None
         self.scan_id = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         self.now = datetime.now(timezone.utc)
-        self._metastore_id: Optional[str] = None
 
     @property
     def metastore_id(self) -> str:
-        """Lazily fetch and cache the workspace metastore ID."""
-        if self._metastore_id is None:
-            try:
-                summary = self.w.metastores.current()
-                self._metastore_id = summary.metastore_id or ""
-            except Exception:
-                self._metastore_id = ""
-        return self._metastore_id
-
-    @property
-    def metastore_id(self) -> str:
-        """Return the metastore ID, using override if provided."""
+        """Return the metastore ID, using override if provided, else auto-detect."""
         if self._metastore_id_override:
             return self._metastore_id_override
         if self._cached_metastore_id is None:

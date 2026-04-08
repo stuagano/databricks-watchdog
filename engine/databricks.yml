@@ -29,6 +29,17 @@ targets:
       catalog: <YOUR_DEV_CATALOG>             # e.g., main or dev_catalog
       schema: watchdog
 
+  # ── FE Stable (demo workspace with sample data) ──────────────────────
+  fe-stable:
+    mode: development
+    workspace:
+      host: https://fevm-serverless-stable-s0v155.cloud.databricks.com
+      root_path: ~/.bundle/${bundle.name}/${bundle.target}
+      profile: fe-stable
+    variables:
+      catalog: serverless_stable_s0v155_catalog
+      schema: watchdog
+
   # ── Customer non-production ───────────────────────────────────────────
   nonprod:
     mode: development

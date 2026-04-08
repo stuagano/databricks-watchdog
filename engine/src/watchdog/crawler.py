@@ -63,6 +63,9 @@ def ensure_inventory_table(spark: SparkSession, catalog: str, schema: str) -> No
         )
         USING DELTA
         CLUSTER BY (scan_id, resource_type)
+        TBLPROPERTIES (
+            'delta.enableChangeDataFeed' = 'true'
+        )
     """)
 
 
@@ -463,6 +466,9 @@ class ResourceCrawler:
                 checked_at TIMESTAMP NOT NULL
             )
             USING DELTA
+            TBLPROPERTIES (
+                'delta.enableChangeDataFeed' = 'true'
+            )
         """)
 
         # Query DQM system table for latest results per table

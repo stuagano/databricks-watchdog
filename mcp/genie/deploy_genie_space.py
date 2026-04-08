@@ -90,6 +90,7 @@ def _build_space_config(
 
     # Build serialized_space with instructions and datasets as sample queries
     serialized = {
+        "version": 2,
         "instructions": {
             "text_instructions": [
                 {
@@ -104,17 +105,19 @@ def _build_space_config(
                 key=lambda t: t["identifier"],
             )
         },
-        "sample_questions": [
-            {"question": "What is our overall compliance posture by domain?"},
-            {"question": "Who has the most critical open violations?"},
-            {"question": "Which PII tables are missing a data steward?"},
-            {"question": "What percentage of tables have data quality monitoring?"},
-            {"question": "Which policies are generating the most violations?"},
-            {"question": "Show me all critical violations for gold tables"},
-        ],
     }
 
     config["serialized_space"] = json.dumps(serialized)
+
+    # Sample questions go at the top level, not inside serialized_space
+    config["sample_questions"] = [
+        "What is our overall compliance posture by domain?",
+        "Who has the most critical open violations?",
+        "Which PII tables are missing a data steward?",
+        "What percentage of tables have data quality monitoring?",
+        "Which policies are generating the most violations?",
+        "Show me all critical violations for gold tables",
+    ]
 
     return config
 

@@ -23,9 +23,5 @@ resources:
           - name: DATABRICKS_WAREHOUSE_ID
             value: ${var.warehouse_id}
       permissions:
-        - service_principal_name: spWatchdog
+        - user_name: stuart.gano@databricks.com
           level: CAN_MANAGE
-        - group_name: <YOUR_ADMIN_GROUP>       # e.g., db-platform-admins
-          level: CAN_USE
-        - group_name: <YOUR_USER_GROUP>        # e.g., db-engineers
-          level: CAN_USE

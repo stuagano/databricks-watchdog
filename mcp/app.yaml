@@ -7,6 +7,8 @@ command:
   - "8000"
 env:
   - name: DATABRICKS_CATALOG
-    value: platform
+    value: serverless_stable_s0v155_catalog
   - name: DATABRICKS_SCHEMA
     value: watchdog
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: 2053827451af25b6

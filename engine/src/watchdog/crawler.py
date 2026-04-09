@@ -358,11 +358,14 @@ class ResourceCrawler:
         return rows
 
     def _crawl_agent_traces(self) -> list:
-        """Crawl recent MLflow agent traces as agent_execution resources.
+        """Crawl recent serving endpoint usage as agent_execution resources.
 
-        Reads from system.serving.served_entities_inference_log to find
-        recent agent execution traces. Falls back gracefully if trace
-        tables don't exist on this workspace.
+        Reads from system.serving.endpoint_usage joined with
+        system.serving.served_entities to get per-requester usage
+        aggregated by endpoint. Each (endpoint, requester) pair in the
+        last 7 days becomes an agent_execution resource.
+
+        Falls back gracefully if serving system tables don't exist.
 
         Used by AI governance policies to monitor agent execution patterns,
         detect anomalies, and enforce execution controls.
@@ -370,44 +373,60 @@ class ResourceCrawler:
         rows = []
 
         try:
-            # Try to read from MLflow experiment traces
-            # This query gets recent traces with their metadata
             trace_query = """
                 SELECT
-                    request_id,
-                    experiment_id,
-                    timestamp_ms,
-                    execution_duration_ms,
-                    status,
-                    request_metadata,
-                    tags
-                FROM system.serving.served_entities_inference_log
-                WHERE timestamp_ms > unix_timestamp(date_sub(current_date(), 7)) * 1000
+                    se.endpoint_name,
+                    se.served_entity_name,
+                    eu.requester,
+                    COUNT(*) as request_count,
+                    SUM(COALESCE(eu.input_token_count, 0)) as total_input_tokens,
+                    SUM(COALESCE(eu.output_token_count, 0)) as total_output_tokens,
+                    SUM(CASE WHEN eu.status_code != 200 THEN 1 ELSE 0 END) as error_count,
+                    MIN(eu.request_time) as first_request,
+                    MAX(eu.request_time) as last_request
+                FROM system.serving.endpoint_usage eu
+                JOIN system.serving.served_entities se
+                    ON eu.served_entity_id = se.served_entity_id
+                WHERE eu.request_time >= date_sub(current_date(), 7)
+                GROUP BY se.endpoint_name, se.served_entity_name, eu.requester
+                ORDER BY request_count DESC
                 LIMIT 500
             """
 
             result = self.spark.sql(trace_query)
             for row in result.collect():
-                request_id = row.request_id or str(row.timestamp_ms)
+                endpoint = row.endpoint_name or ""
+                requester = row.requester or ""
+                request_id = f"{endpoint}:{requester}"
 
                 tags = {
                     "trace_id": request_id,
-                    "execution_completed": "true" if row.status == "OK" else "false",
+                    "execution_completed": "true" if row.error_count == 0 else "false",
+                    "model_endpoint": endpoint,
                 }
 
+                # Flag high-volume users for governance review
+                if row.request_count and row.request_count > 10000:
+                    tags["high_volume_requester"] = "true"
+
                 metadata = {
-                    "request_id": request_id,
-                    "experiment_id": str(row.experiment_id or ""),
-                    "duration_ms": str(row.execution_duration_ms or 0),
-                    "status": row.status or "",
+                    "endpoint_name": endpoint,
+                    "served_entity_name": row.served_entity_name or "",
+                    "requester": requester,
+                    "request_count": str(row.request_count or 0),
+                    "total_input_tokens": str(row.total_input_tokens or 0),
+                    "total_output_tokens": str(row.total_output_tokens or 0),
+                    "error_count": str(row.error_count or 0),
+                    "first_request": str(row.first_request or ""),
+                    "last_request": str(row.last_request or ""),
                     "resource_type": "agent_execution",
                 }
 
                 rows.append(self._make_row(
                     resource_type="agent_execution",
                     resource_id=f"execution:{request_id}",
-                    resource_name=f"Execution {request_id[:12]}",
-                    owner="",
+                    resource_name=f"{endpoint} ({requester[:30]})",
+                    owner=requester,
                     domain="",
                     tags=tags,
                     metadata=metadata,

@@ -1,307 +1,403 @@
-# Databricks Watchdog — Governance Scanner
+# Databricks Watchdog
 
-A config-driven governance scanner for Databricks. Write policies in YAML, Watchdog scans your workspace daily and writes results to Delta tables. Query compliance through AI/BI dashboards or an MCP server that plugs into any AI assistant.
+**Compliance posture evaluator for Unity Catalog.**
 
-## What You Get
+The platform enforces governance at query time (ABAC, tag policies, column masks). Watchdog answers the question nobody else answers: *"across all my policies, how compliant is my estate right now, who owns the gaps, and is it getting better or worse?"*
 
-- **Resource crawler** — enumerates 14 resource types (tables, jobs, clusters, pipelines, warehouses, volumes, catalogs, schemas, users, groups, service principals, grants) via SDK + Unity Catalog, with per-row `metastore_id` for multi-workspace correlation
-- **Ontology engine** — tag-based classification hierarchy (e.g., a table tagged `data_classification=pii` becomes a `PiiAsset` which inherits all `DataAsset` policies)
-- **Policy engine** — declarative rules evaluated against resource tags/metadata with support for composition (`all_of`, `any_of`, `none_of`, `if_then`)
-- **Violation tracking** — deduplication via MERGE, status lifecycle (open → resolved/exception), exception management with expiration
-- **Notification service** — dual-path: Delta queue for enterprise email integration + optional Azure Communication Services direct email
-- **AI/BI dashboards** — 8 pre-built SQL queries for Lakeview dashboards (compliance summary, violations by owner, data quality coverage)
-- **MCP server** — 8 governance tools (get_violations, get_governance_summary, get_policies, get_scan_history, get_resource_violations, get_exceptions, explain_violation, what_if_policy) with on-behalf-of auth
-- **Terraform module** — provisions service principal, secret scope, catalog, schema, and UC grants
+## What You Get in 30 Minutes
+
+Deploy Watchdog to a workspace and run one scan. Here's what comes back:
+
+### Cross-Domain Compliance Posture
+
+One view across security, data quality, cost, and operations:
+
+| Domain | Resources | Critical | High | Medium |
+|---|---|---|---|---|
+| SecurityGovernance | 2,352 | 8 | 4,480 | 10 |
+| CostGovernance | 2,374 | 0 | 40 | 2,431 |
+| DataQuality | 2,134 | 0 | 3 | 3,492 |
+| OperationalGovernance | 22 | 0 | 0 | 22 |
+
+*The Governance Hub shows tag policies, ABAC rules, and DQ monitors separately. Nobody aggregates across all of them.*
+
+### Owner Accountability
+
+Every violation is attributed to a resource owner with remediation steps:
+
+| Owner | Total | Critical | High | Policies Violated | Domains |
+|---|---|---|---|---|---|
+| stuart.gano@ | 358 | 1 | 96 | 20 | 4 |
+| System user | 896 | 0 | 296 | 7 | 3 |
+| eric.popowich@ | 870 | 0 | 268 | 7 | 3 |
+
+*The platform has no concept of "violations per owner" or accountability tracking.*
+
+### Ontology Classification with Inheritance
+
+Resources are classified into a hierarchy. One policy on `ConfidentialAsset` automatically covers every `PiiAsset`, `HipaaAsset`, and `SoxAsset`:
+
+```
+PiiTable → PiiAsset → ConfidentialAsset → DataAsset
+```
+
+*UC has flat tags. Change a policy at the ConfidentialAsset level? With tags, you'd edit every child policy individually.*
+
+### Actionable Remediation Lists
+
+Watchdog caught 211 direct-user grants (POL-A002):
+
+```
+3f550a6e-...  has USE_SCHEMA  on schema  explain_my_bill
+account users has SELECT      on table   property_listing_sample
+```
+
+An admin takes this list and migrates every grant to group-based access. The platform shows grants in `information_schema` but doesn't flag which ones violate your policies.
+
+### Composable Rules the Platform Can't Express
+
+| Rule | What It Checks | Platform Equivalent |
+|---|---|---|
+| IF `data_classification = pii` THEN must have BOTH `data_steward` AND `retention_days` | Cross-tag conditional | **None** |
+| Grant grantee must match regex `^(group:\|account group:)` | Grant metadata evaluation | **None** |
+| IF `environment = prod` THEN must have `on_call_team` AND `alert_channel` | Conditional tag requirement | **None** |
+
+Tag Policies enforce "this tag must use these values." Watchdog rules express arbitrary logic across tags and metadata.
+
+---
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│  Daily Scan Job (Databricks Workflow)                           │
-│                                                                 │
-│  Task 1: crawl_resources                                        │
-│    SDK + information_schema → resource_inventory (Delta)         │
-│                                                                 │
-│  Task 2: evaluate_policies                                      │
-│    ontology classify → rule engine evaluate → violations MERGE   │
-│    YAML policies synced to policies table                        │
-│                                                                 │
-│  Task 3: send_notifications                                     │
-│    Per-owner digests → notification_queue + optional ACS email   │
-└─────────────────────────────────────────────────────────────────┘
-
-┌─────────────────────┐  ┌──────────────────────────────────────┐
-│  AI/BI Dashboards    │  │  MCP Server (Databricks App)          │
-│  (Lakeview)          │  │  On-behalf-of auth — each user's      │
-│  SQL queries against │  │  UC grants govern data access          │
-│  watchdog schema     │  │  8 governance tools for AI assistants  │
-└─────────────────────┘  └──────────────────────────────────────┘
+│  Watchdog Engine (Daily Scan Job)                                │
+│  Crawl 14 resource types → Classify via ontology → Evaluate     │
+│  37+ policies → Track violations with lifecycle → Notify owners  │
+└───────────┬───────────────────┬──────────────────┬──────────────┘
+            │                   │                  │
+    ┌───────▼───────┐  ┌───────▼────────┐  ┌──────▼──────────────┐
+    │ Lakeview       │  │ Watchdog MCP   │  │ Guardrails MCP      │
+    │ Dashboard      │  │ 9 AI tools     │  │ 9 build-time tools  │
+    │ 5 pages        │  │ for assistants │  │ for AI agents       │
+    ├────────────────┤  ├────────────────┤  │ "Is this table      │
+    │ Genie Space    │  │ Ontos Adapter  │  │  safe to use?"      │
+    │ 19 tables      │  │ Business       │  └─────────────────────┘
+    │ NL governance  │  │ catalog views  │
+    └────────────────┘  └────────────────┘
 ```
 
-### Data Model
+**Delta tables are the contract.** Every consumer reads the same tables. No APIs between layers.
+
+---
+
+## Quickstart (30 minutes)
+
+### Prerequisites
+
+- Databricks workspace with **Unity Catalog** enabled
+- **Databricks CLI** v0.230+ (`databricks --version`)
+- A catalog where Watchdog can create a `watchdog` schema
+- A SQL warehouse (Starter Warehouse works)
+
+### Step 1: Clone and configure
+
+```bash
+git clone https://github.com/stuagano/databricks-watchdog.git
+cd databricks-watchdog
+```
+
+Edit `engine/databricks.yml` — add a target for your workspace:
+
+```yaml
+targets:
+  my-workspace:
+    mode: development
+    default: true
+    workspace:
+      host: https://your-workspace.cloud.databricks.com
+      profile: your-profile
+    variables:
+      catalog: your_catalog
+      schema: watchdog
+```
+
+### Step 2: Deploy the engine
+
+```bash
+cd engine
+databricks bundle validate -t my-workspace
+databricks bundle deploy -t my-workspace
+```
+
+### Step 3: Run your first scan
+
+```bash
+databricks bundle run watchdog_adhoc_scan -t my-workspace
+```
+
+This crawls all resources, classifies them, evaluates 37+ policies, and writes violations. Takes 2-3 minutes.
+
+### Step 4: Check results
+
+```sql
+-- How many violations?
+SELECT severity, COUNT(*) FROM your_catalog.watchdog.violations
+WHERE status = 'open' GROUP BY severity;
+
+-- Who owns the most?
+SELECT owner, COUNT(*) as violations
+FROM your_catalog.watchdog.violations
+WHERE status = 'open' GROUP BY owner ORDER BY violations DESC LIMIT 10;
+
+-- What's the compliance posture by domain?
+SELECT * FROM your_catalog.watchdog.v_domain_compliance;
+```
+
+### Step 5: Deploy the Lakeview dashboard (optional)
+
+```bash
+python engine/dashboards/lakeview/deploy_dashboard.py \
+  --profile your-profile \
+  --catalog your_catalog \
+  --schema watchdog \
+  --warehouse-id your_warehouse_id \
+  --publish
+```
+
+5-page governance dashboard: Compliance Overview, Owner Accountability, Resource Compliance, Access Governance, Data Quality.
+
+### Step 6: Deploy the MCP server (optional)
+
+Edit `mcp/databricks.yml` with your workspace target, then:
+
+```bash
+cd mcp
+databricks bundle deploy -t my-workspace
+databricks apps start watchdog-mcp-my-workspace --profile your-profile
+# Wait for compute to be ACTIVE, then:
+databricks apps deploy watchdog-mcp-my-workspace \
+  --source-code-path /Workspace/Users/you@company.com/.bundle/watchdog-mcp/my-workspace/files \
+  --profile your-profile
+```
+
+Connect from Claude Code: `https://<app-url>/mcp/sse`
+
+### Step 7: Deploy the Genie Space (optional)
+
+```bash
+python mcp/genie/deploy_genie_space.py \
+  --catalog your_catalog \
+  --schema watchdog \
+  --warehouse-id your_warehouse_id \
+  --profile your-profile
+```
+
+Business users can ask: "Who has the most critical violations?" or "Which PII tables lack a data steward?"
+
+### Step 8: Deploy AI guardrails (optional)
+
+Edit `guardrails/databricks.yml` with your workspace target, then:
+
+```bash
+cd guardrails
+databricks bundle deploy -t my-workspace
+databricks apps start mcp-ai-guardrails-my-workspace --profile your-profile
+# Wait for ACTIVE, then deploy code (same pattern as MCP server)
+```
+
+AI agents get build-time governance: "Is this table safe to use in my agent?"
+
+---
+
+## Industry Policy Packs
+
+Drop-in YAML packs for regulated industries. Copy into `engine/ontologies/` and `engine/policies/`:
+
+| Pack | Policies | Ontology Classes | Covers |
+|---|---|---|---|
+| `library/healthcare/` | 10 (POL-HIPAA-*) | 4 (PhiAsset, EphiAsset, HipaaAuditAsset, DeIdentifiedDataset) | HIPAA: PHI stewardship, encryption, access logging, retention, BAA, minimum necessary, breach notification |
+| `library/financial/` | 12 (POL-SOX-*, POL-PCI-*, POL-GLBA-*) | 6 (FinancialReportingAsset, PciAsset, GlbaAsset, ...) | SOX audit trails, separation of duties. PCI encryption/masking. GLBA privacy notices. |
+| `library/defense/` | 8 (POL-NIST-*, POL-CMMC-*, POL-ITAR-*) | 5 (CuiAsset, ItarAsset, CmmcLevel2Asset, ...) | NIST 800-171, CMMC Level 2, ITAR export control |
+| `library/general/` | 10 (POL-GEN-*) | 5 (UntaggedAsset, StaleAsset, UndocumentedAsset, ...) | CIS-style benchmarks: classification, documentation, cost attribution, lifecycle, monitoring |
+
+Each pack includes ontology classes, rule primitives, policies, and dashboard SQL queries.
+
+---
+
+## What's Deployed (Full Stack)
+
+| Component | What | Deploy Command |
+|---|---|---|
+| **Engine** | Daily scan job — crawl, classify, evaluate, track violations | `cd engine && databricks bundle deploy` |
+| **Lakeview Dashboard** | 5-page governance posture dashboard | `python engine/dashboards/lakeview/deploy_dashboard.py` |
+| **Watchdog MCP** | 9 AI tools for compliance queries | `cd mcp && databricks bundle deploy` + app deploy |
+| **Genie Space** | NL governance exploration (19 tables: Watchdog + UC system tables) | `python mcp/genie/deploy_genie_space.py` |
+| **Guardrails MCP** | 9 build-time governance tools for AI agents | `cd guardrails && databricks bundle deploy` + app deploy |
+| **Ontos Adapter** | Pluggable governance module for Ontos business catalog | Drop-in to Ontos fork |
+
+---
+
+## Data Model
+
+### Tables
 
 | Table | Purpose |
-|-------|---------|
-| `resource_inventory` | All discovered resources per scan (scan_id, resource_type, resource_id, tags, metadata, metastore_id) |
-| `resource_classifications` | Ontology class assignments per scan (resource_id → class_name with ancestors) |
+|---|---|
+| `resource_inventory` | All discovered resources per scan (14 types, tags, metadata, metastore_id) |
+| `resource_classifications` | Ontology class assignments (resource_id → class_name with ancestor chain) |
 | `policies` | Policy definitions — YAML-synced + user-created (hybrid management) |
 | `policies_history` | Append-only audit trail of policy changes |
 | `scan_results` | Every (resource, policy) evaluation result per scan |
-| `violations` | Open violations — deduplicated, with status lifecycle |
+| `violations` | Open violations — deduplicated, with status lifecycle (open/resolved/exception) |
 | `exceptions` | Approved policy exceptions with expiration dates |
-| `notification_queue` | Per-owner notification digests (CDF-enabled for downstream consumers) |
-| `audit_log` | All system activity |
+| `notification_queue` | Per-owner notification digests (CDF-enabled) |
 
 ### Semantic Views
 
 | View | Purpose |
-|------|---------|
-| `v_resource_compliance` | Per-resource, per-class compliance posture |
-| `v_class_compliance` | Aggregated by ontology class ("how are GoldTables doing?") |
-| `v_domain_compliance` | Aggregated by governance domain (executive summary) |
+|---|---|
+| `v_resource_compliance` | Per-resource violation counts by severity |
+| `v_class_compliance` | Compliance % per ontology class |
+| `v_domain_compliance` | Executive posture by governance domain |
+| `v_tag_policy_coverage` | Tag policy satisfaction per resource |
+| `v_data_classification_summary` | Classification coverage % by catalog |
+| `v_dq_monitoring_coverage` | DQM/LHM monitoring status per table |
+| `v_cross_metastore_compliance` | Compliance % per metastore (multi-metastore) |
+| `v_cross_metastore_inventory` | Resource counts per metastore |
 
-## Prerequisites
+---
 
-- Databricks workspace with **Unity Catalog** enabled
-- **Databricks CLI** v0.230+ with bundle support (`databricks bundle --version`)
-- **Terraform** >= 1.5 (for infrastructure provisioning)
-- **Azure service principal** credentials (client_id, client_secret, tenant_id)
-- Python 3.10+ (for local testing)
+## MCP Tools
 
-## Quickstart
+### Watchdog MCP (compliance posture queries)
 
-### 1. Clone and configure
+| Tool | Description |
+|---|---|
+| `get_violations` | Filter violations by status, severity, resource_type, policy, owner, metastore |
+| `get_governance_summary` | High-level compliance metrics across all domains |
+| `get_policies` | List all active policies |
+| `get_scan_history` | View recent scan results |
+| `get_resource_violations` | Full compliance history for a specific resource |
+| `get_exceptions` | List approved exceptions |
+| `explain_violation` | Plain-language explanation with remediation steps |
+| `what_if_policy` | Simulate a proposed policy against current inventory |
+| `list_metastores` | List scanned metastores with resource counts |
 
-```bash
-git clone <this-repo>
-cd databricks-watchdog
+### Guardrails MCP (AI build-time governance)
+
+| Tool | Description |
+|---|---|
+| `validate_table_usage` | Check if a table is safe for an AI agent to use |
+| `discover_governed_assets` | Find assets with ontology classes and compliance status |
+| `check_policy_compliance` | Evaluate resource against all applicable policies |
+| `build_safely` | Combined classification + violation + policy check |
+| + 5 more | SQL validation, cost estimation, column safety, audit logging |
+
+---
+
+## Customization
+
+### Adding ontology classes
+
+```yaml
+# engine/ontologies/resource_classes.yml
+derived_classes:
+  HipaaAsset:
+    parent: ConfidentialAsset
+    description: "Subject to HIPAA regulations"
+    classifier:
+      tag_equals:
+        regulatory_domain: "HIPAA"
 ```
 
-### 2. Provision infrastructure (Terraform)
+Classifiers: `tag_equals`, `tag_in`, `tag_exists`, `tag_matches`, `metadata_equals`, `metadata_matches`, `all_of`, `any_of`, `none_of`.
 
-The Terraform module creates the service principal registration, secret scope, platform catalog, watchdog schema, and UC grants.
+### Writing policies
 
-```bash
-cd terraform/modules/watchdog
-
-# Create a terraform.tfvars with your values:
-cat > terraform.tfvars <<EOF
-service_principal_application_id = "<SP_APP_ID>"
-service_principal_secret         = "<SP_SECRET>"
-tenant_id                        = "<AZURE_TENANT_ID>"
-subscription_id                  = "<AZURE_SUBSCRIPTION_ID>"
-catalog_name                     = "platform"
-schema_name                      = "watchdog"
-EOF
-
-terraform init
-terraform plan
-terraform apply
-cd ../../..
+```yaml
+# engine/policies/my_policies.yml
+policies:
+  - id: POL-CUSTOM-001
+    name: "PII must have a data steward"
+    applies_to: PiiAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: "Every PII asset needs a named steward"
+    remediation: "Add a 'data_steward' tag"
+    active: true
+    rule:
+      ref: has_data_steward
 ```
 
-### 3. Customize for your customer
+Rules support: `tag_exists`, `tag_equals`, `tag_in`, `metadata_equals`, `all_of`, `any_of`, `none_of`, `if_then`, `metadata_gte`, and references to named primitives.
 
-**Required:**
-- Edit `engine/databricks.yml` — replace `<YOUR_*>` placeholders with workspace URLs
-- Edit `engine/ontologies/compliance_domains.yml` — set escalation emails
+### Multi-metastore scanning
 
-**Optional (recommended):**
-- Add customer-specific ontology classes to `engine/ontologies/resource_classes.yml`
-- Add customer-specific policies to `engine/policies/` (any `.yml` file is auto-loaded)
-- Add customer-specific rule primitives to `engine/ontologies/rule_primitives.yml`
+Set `WATCHDOG_METASTORE_IDS=ms-123,ms-456` and use the `crawl_all_metastores` entrypoint. All results go to the same tables with a `metastore_id` discriminator.
 
-Use `template/` as a starting point — it has skeleton files with commented examples. See `customer/` for a complete worked example (HIPAA/SOX regulatory, business unit scoping).
+---
 
-### 4. Deploy the engine
+## Why Watchdog Exists
 
-```bash
-cd engine
-databricks bundle validate -t dev
-databricks bundle deploy -t dev
-```
+| What the Platform Does | What Watchdog Does |
+|---|---|
+| ABAC masks a column at query time | Measures "what % of PII tables have ABAC coverage" |
+| Tag Policies reject invalid values | Evaluates cross-tag rules ("if PII then must have steward AND retention") |
+| DQ Monitoring detects anomalies | Evaluates "do all gold tables have DQ monitors enabled" |
+| Governance Hub shows dashboards | Tracks violations as stateful objects with owner accountability |
+| Nothing | Provides cross-domain compliance posture over time |
+| Nothing | Ontology-based classification with policy inheritance |
+| Nothing | Per-owner violation digests with remediation steps |
+| Nothing | AI interface (MCP) for governance posture queries |
 
-### 5. Verify
+The platform is the immune system — it blocks bad things at runtime.
+Watchdog is the annual physical — it measures overall health, tracks trends, and tells you what to fix.
 
-Run the ad-hoc scan job to confirm everything works:
-
-```bash
-databricks bundle run watchdog_adhoc_scan -t dev
-```
-
-Check results:
-```sql
-SELECT * FROM platform.watchdog.resource_inventory LIMIT 10;
-SELECT * FROM platform.watchdog.violations WHERE status = 'open';
-```
-
-### 6. Deploy the MCP server (optional)
-
-```bash
-cd ../mcp
-# Edit databricks.yml with workspace URL and warehouse ID
-databricks bundle deploy -t nonprod
-```
+---
 
 ## Directory Structure
 
 ```
 databricks-watchdog/
-├── engine/                          # DAB bundle root — the governance scanner
-│   ├── databricks.yml               #   Bundle manifest (customize targets here)
-│   ├── setup.py                     #   Python package definition
-│   ├── src/watchdog/                #   Core engine source code
-│   │   ├── crawler.py               #     Resource enumeration (14 types)
-│   │   ├── ontology.py              #     Tag-based classification engine
-│   │   ├── rule_engine.py           #     Declarative rule evaluator
-│   │   ├── policy_engine.py         #     Two-pass evaluation orchestrator
-│   │   ├── policy_loader.py         #     YAML + Delta hybrid policy loading
-│   │   ├── violations.py            #     MERGE logic + exception handling
-│   │   ├── views.py                 #     Semantic compliance views
-│   │   ├── notifications.py         #     Delta queue + ACS email
-│   │   ├── ontology_export.py       #     OWL/Turtle export for Ontos
-│   │   └── entrypoints.py           #     CLI entrypoints for workflow tasks
-│   ├── src/run_task.py              #   Task dispatcher (used by job YAML)
-│   ├── ontologies/                  #   Classification hierarchy + rule primitives
+├── engine/                          # Core — DAB bundle for the governance scanner
+│   ├── databricks.yml               #   Bundle config (add your workspace targets here)
+│   ├── src/watchdog/                #   Engine source: crawler, ontology, rules, violations
+│   ├── ontologies/                  #   Classification hierarchy + rule primitives (YAML)
 │   ├── policies/                    #   Governance policies by domain (YAML)
-│   ├── dashboards/                  #   AI/BI dashboard SQL queries
-│   ├── notebooks/                   #   Exception management notebooks
-│   └── resources/                   #   Job + warehouse definitions
+│   ├── dashboards/                  #   Lakeview dashboard template + SQL queries
+│   └── resources/                   #   Workflow job definitions
 │
-├── mcp/                             # Separate DAB — MCP server (Databricks App)
-│   ├── databricks.yml
-│   ├── src/watchdog_mcp/
-│   └── resources/
+├── mcp/                             # Watchdog MCP server (Databricks App)
+│   ├── src/watchdog_mcp/            #   9 governance tools over SSE
+│   └── genie/                       #   Genie Space template + deploy script
 │
-├── ontos-adapter/                   # Pluggable governance UI for Ontos
-│   ├── pyproject.toml               #   watchdog-governance package
-│   ├── src/watchdog_governance/     #   Provider protocol + FastAPI routers
-│   └── frontend/                    #   React views (drop into Ontos fork)
+├── guardrails/                      # AI DevKit guardrails MCP (Databricks App)
+│   └── src/ai_devkit/               #   9 build-time governance tools
 │
-├── guardrails/                      # AI DevKit guardrails MCP server
-│   ├── databricks.yml               #   DAB bundle (mcp-ai-guardrails app)
-│   ├── src/ai_devkit/               #   9 MCP tools + watchdog integration
-│   │   ├── server.py                #     FastAPI + SSE transport
-│   │   ├── tools/governance.py      #     Validate, discover, build safely
-│   │   ├── watchdog_client.py       #     Reads classifications + violations
-│   │   ├── guardrails.py            #     Defense-in-depth rules
-│   │   └── audit.py                 #     Structured compliance logging
-│   └── resources/                   #   App resource definition
+├── ontos-adapter/                   # Governance module for Ontos business catalog
+│   └── src/watchdog_governance/     #   GovernanceProvider protocol + routers
 │
-├── terraform/                       # Infrastructure as Code
-│   └── modules/watchdog/            #   Reusable TF module (SP, catalog, grants)
+├── library/                         # Industry policy packs
+│   ├── healthcare/                  #   HIPAA (10 policies, 4 classes)
+│   ├── financial/                   #   SOX/PCI/GLBA (12 policies, 6 classes)
+│   ├── defense/                     #   NIST/CMMC/ITAR (8 policies, 5 classes)
+│   └── general/                     #   CIS benchmarks (10 policies, 5 classes)
 │
-├── customer/                        # Worked example (regulatory + business unit classes)
-│   ├── ontologies/                  #   Example classes, domains, primitives
-│   └── policies/                    #   Example regulatory policies
-│
+├── terraform/                       # Infrastructure as Code (SP, catalog, grants)
 ├── template/                        # Blank starting point for new customers
-│   ├── ontologies/                  #   Skeleton with commented examples
-│   └── policies/
-│
-├── library/                         # Industry policy packs (future)
-│   ├── defense/
-│   ├── financial/
-│   └── healthcare/
-│
-└── tests/                           # Unit + integration + E2E tests
-    ├── unit/
-    └── integration/
+├── customer/                        # Worked example
+├── docs/                            # Roadmap, positioning, integration plan
+└── tests/                           # 289 unit tests
 ```
-
-## Customization Guide
-
-### Adding ontology classes
-
-Classes go in `engine/ontologies/resource_classes.yml` under `derived_classes`. Each class specifies a parent (for policy inheritance) and a classifier (tag-based rules):
-
-```yaml
-# Example: classify tables by regulatory domain
-HipaaAsset:
-  parent: ConfidentialAsset
-  description: "Subject to HIPAA regulations"
-  classifier:
-    tag_equals:
-      regulatory_domain: "HIPAA"
-```
-
-Classifier operators: `tag_equals`, `tag_in`, `tag_exists`, `tag_matches`, `metadata_equals`, `metadata_matches`, `all_of`, `any_of`, `none_of`.
-
-### Writing policies
-
-Policies go in any `.yml` file under `engine/policies/`. Each policy targets an ontology class (or `"*"` for all resources) and defines a rule:
-
-```yaml
-policies:
-  - id: POL-HIPAA-001
-    name: "HIPAA assets must have a data steward"
-    applies_to: HipaaAsset
-    domain: RegulatoryCompliance
-    severity: critical
-    description: "HIPAA data requires a named steward"
-    remediation: "Add a 'data_steward' tag"
-    active: true
-    rule:
-      ref: has_data_steward          # reference a reusable primitive
-```
-
-Rules can be inline or reference named primitives from `engine/ontologies/rule_primitives.yml`. Inline rules support the same operators as classifiers plus `if_then` conditionals and `metadata_gte` (version-aware comparison).
-
-### Hybrid policy management
-
-Policies have two origins:
-- **YAML** (origin=`yaml`) — version-controlled in git, synced to Delta on each deploy
-- **User** (origin=`user`) — created directly in the policies Delta table by platform admins
-
-The YAML sync never overwrites user-created policies. Both are merged at evaluation time.
-
-## MCP Server
-
-The MCP server exposes Watchdog governance data as tools for AI assistants. It uses on-behalf-of authentication — each request runs as the calling user's identity, with UC grants on the watchdog schema governing access.
-
-**Tools:**
-| Tool | Description |
-|------|-------------|
-| `get_violations` | Filter violations by status, severity, resource_type, policy, owner |
-| `get_governance_summary` | High-level compliance metrics |
-| `get_policies` | List all active policies |
-| `get_scan_history` | View recent scan results |
-| `get_resource_violations` | Full compliance history for a specific resource |
-| `get_exceptions` | List approved exceptions |
-| `explain_violation` | Explain a violation in plain language with remediation steps |
-| `what_if_policy` | Simulate a proposed policy against current inventory |
-
-Deploy as a Databricks App:
-```bash
-cd mcp
-databricks bundle deploy -t nonprod
-```
-
-Connect from Claude Code or any MCP client using the app's SSE endpoint: `https://<app-url>/mcp/sse`
-
-## Ontos Integration
-
-The `ontos-adapter/` directory contains a pluggable governance UI module for [Ontos](https://github.com/databrickslabs/ontos) (Databricks Labs governance platform). It follows the **Prometheus/Grafana pattern**:
-
-- **Watchdog** (engine) = Prometheus — crawls resources, evaluates policies, writes violations to Delta tables
-- **Ontos adapter** = Grafana data source plugin — reads those tables and exposes a governance UI
-- **Delta tables** = the wire protocol — the contract between engine and UI
-
-The adapter defines a `GovernanceProvider` protocol that any backend can implement. The default `WatchdogProvider` reads from `platform.watchdog.*` Delta tables. Ontos consumes it with 3 additive lines in its fork.
-
-See [`ontos-adapter/README.md`](ontos-adapter/README.md) for integration details.
 
 ## Testing
 
 ```bash
-# Unit tests (no Spark required)
-cd tests && pip install pytest pyyaml
-pytest unit/
-
-# Integration tests (requires Spark session)
-pytest integration/
+pip install pytest pyyaml
+python -m pytest tests/unit/ -q
+# 289 passed
 ```
 
 ## Acknowledgments
 
-Original concept by Ben Sivoravong. Engine implementation by Stuart Gano.
+Original concept by Ben Sivoravong. Engine and platform implementation by Stuart Gano.

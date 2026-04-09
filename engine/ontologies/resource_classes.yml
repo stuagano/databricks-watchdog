@@ -28,6 +28,10 @@ base_classes:
     description: "Any grant (permission assignment) in Unity Catalog"
     matches_resource_types: [grant]
 
+  AgentAsset:
+    description: "AI agent or agent execution"
+    matches_resource_types: [agent, agent_execution]
+
 # --------------------------------------------------------------------------
 # Derived classes — classified by tags
 #
@@ -194,3 +198,53 @@ derived_classes:
       none_of:
         - metadata_matches:
             grantee: "^(group:|account group:)"
+
+  # ── Agent specializations ─────────────────────────────────────────────
+
+  AgentWithPiiAccess:
+    parent: AgentAsset
+    description: "Agent that has accessed PII data in recent executions"
+    classifier:
+      tag_equals:
+        accessed_pii: "true"
+
+  AgentWithExternalAccess:
+    parent: AgentAsset
+    description: "Agent that calls external endpoints or APIs"
+    classifier:
+      tag_equals:
+        used_external_tool: "true"
+
+  AgentWithDataExport:
+    parent: AgentAsset
+    description: "Agent that exports data outside the lakehouse"
+    classifier:
+      tag_equals:
+        exported_data: "true"
+
+  UngovernedAgent:
+    parent: AgentAsset
+    description: "Agent with no governance metadata (no owner, no audit config)"
+    classifier:
+      all_of:
+        - none_of:
+            - tag_exists: [agent_owner]
+        - none_of:
+            - tag_exists: [audit_logging_enabled]
+
+  HighRiskExecution:
+    parent: AgentAsset
+    description: "Agent execution that accessed sensitive data"
+    classifier:
+      all_of:
+        - metadata_equals:
+            resource_type: "agent_execution"
+        - tag_equals:
+            accessed_pii: "true"
+
+  ProductionAgent:
+    parent: AgentAsset
+    description: "Agent deployed in production environment"
+    classifier:
+      tag_equals:
+        environment: "prod"

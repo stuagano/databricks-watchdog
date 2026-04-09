@@ -231,5 +231,66 @@ primitives:
     field: member_count
     threshold: "2"
 
+  # ── Agent Governance ──────────────────────────────────────────────────
+
+  agent_has_audit_logging:
+    description: "Agent must have audit logging enabled"
+    type: tag_equals
+    key: audit_logging_enabled
+    value: "true"
+
+  has_agent_owner:
+    description: "Agent must have a designated owner"
+    type: tag_exists
+    keys: [agent_owner, deployed_by]
+
+  has_data_export_approval:
+    description: "Agents exporting data must have documented approval"
+    type: all_of
+    rules:
+      - type: tag_exists
+        keys: [data_export_approved_by]
+      - type: tag_exists
+        keys: [data_export_justification]
+
+  has_external_access_registration:
+    description: "Agents calling external endpoints must be registered"
+    type: tag_exists
+    keys: [external_access_registered, external_endpoints_approved]
+
+  not_accessing_production:
+    description: "Resource must not be accessing production data"
+    type: none_of
+    rules:
+      - type: tag_equals
+        key: accesses_production
+        value: "true"
+
+  execution_has_trace:
+    description: "Agent execution must have an MLflow trace"
+    type: tag_exists
+    keys: [trace_id, mlflow_trace_id]
+
+  pii_table_count_under_threshold:
+    description: "Agent should not access more than 10 PII tables in one execution"
+    type: metadata_gte
+    field: pii_tables_accessed_count
+    value: "0"
+
+  agent_has_model_governance:
+    description: "Agent must specify which model endpoint it uses"
+    type: tag_exists
+    keys: [model_endpoint, serving_endpoint]
+
+  agent_execution_under_duration_limit:
+    description: "Agent executions should complete within timeout"
+    type: tag_exists
+    keys: [execution_completed]
+
+  agent_has_error_handling:
+    description: "Agent must have error handling/fallback configured"
+    type: tag_exists
+    keys: [error_handler, fallback_behavior]
+
   # Customer-specific conditional compositions go here.
   # See customer/ontologies/rule_primitives.yml for examples.

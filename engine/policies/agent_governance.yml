@@ -1,0 +1,110 @@
+# Agent Governance Policies
+# Domain: AgentGovernance / SecurityGovernance / OperationalGovernance
+# Owner: ai_platform_admin
+#
+# AI agent behavior, data access patterns, and compliance.
+
+policies:
+
+  # ── Agent-level policies ────────────────────────────────────────────
+
+  - id: POL-AGENT-001
+    name: "Agents accessing PII must have audit logging enabled"
+    applies_to: AgentWithPiiAccess
+    domain: AgentGovernance
+    severity: critical
+    description: "AI agents that access PII data must have full audit logging enabled so all data access events are captured for compliance review."
+    remediation: "Enable audit logging for this agent. Set tag 'audit_logging_enabled' = 'true' and configure MLflow trace integration."
+    active: true
+    rule:
+      ref: agent_has_audit_logging
+
+  - id: POL-AGENT-002
+    name: "All agents must have a designated owner"
+    applies_to: AgentAsset
+    domain: AgentGovernance
+    severity: high
+    description: "Every deployed AI agent must have a named owner accountable for its behavior, data access patterns, and compliance posture."
+    remediation: "Add 'agent_owner' tag with the responsible person's email, or ensure 'deployed_by' is set."
+    active: true
+    rule:
+      ref: has_agent_owner
+
+  - id: POL-AGENT-003
+    name: "Agents exporting data must have documented approval"
+    applies_to: AgentWithDataExport
+    domain: SecurityGovernance
+    severity: critical
+    description: "AI agents that export data outside the lakehouse (to external APIs, file systems, or third-party services) must have explicit documented approval from a data steward."
+    remediation: "Add 'data_export_approved_by' tag with the approver's email and 'data_export_justification' tag describing why export is needed."
+    active: true
+    rule:
+      ref: has_data_export_approval
+
+  - id: POL-AGENT-004
+    name: "Agents calling external endpoints must be registered"
+    applies_to: AgentWithExternalAccess
+    domain: SecurityGovernance
+    severity: high
+    description: "AI agents that call external APIs or endpoints must have those endpoints registered and approved. Unregistered external access creates data exfiltration risk."
+    remediation: "Add 'external_access_registered' = 'true' tag after registering all external endpoints in the agent's configuration."
+    active: true
+    rule:
+      ref: has_external_access_registration
+
+  - id: POL-AGENT-005
+    name: "Ungoverned agents must not access production data"
+    applies_to: UngovernedAgent
+    domain: SecurityGovernance
+    severity: critical
+    description: "Agents without governance metadata (no owner, no audit logging) must not access production data. This prevents ungoverned AI from operating on sensitive production assets."
+    remediation: "Either add governance metadata (agent_owner + audit_logging_enabled) or restrict the agent to non-production catalogs."
+    active: true
+    rule:
+      ref: not_accessing_production
+
+  - id: POL-AGENT-006
+    name: "Production agents must specify their model endpoint"
+    applies_to: ProductionAgent
+    domain: OperationalGovernance
+    severity: high
+    description: "Production agents must document which model endpoint they use for traceability and cost attribution."
+    remediation: "Add 'model_endpoint' or 'serving_endpoint' tag with the endpoint name."
+    active: true
+    rule:
+      ref: agent_has_model_governance
+
+  - id: POL-AGENT-007
+    name: "Production agents must have error handling configured"
+    applies_to: ProductionAgent
+    domain: OperationalGovernance
+    severity: medium
+    description: "Production agents should have error handling and fallback behavior defined to prevent cascading failures."
+    remediation: "Add 'error_handler' or 'fallback_behavior' tag describing the agent's error handling strategy."
+    active: true
+    rule:
+      ref: agent_has_error_handling
+
+  # ── Execution-level policies ────────────────────────────────────────
+
+  - id: POL-EXEC-001
+    name: "High-risk agent executions must have MLflow traces"
+    applies_to: HighRiskExecution
+    domain: AgentGovernance
+    severity: critical
+    description: "Agent executions that access PII data must have complete MLflow traces for audit and compliance review."
+    remediation: "Ensure the agent framework is configured with MLflow tracing. Verify trace_id is captured per execution."
+    active: true
+    rule:
+      ref: execution_has_trace
+
+  - id: POL-EXEC-002
+    name: "Agent executions must complete within timeout"
+    applies_to: HighRiskExecution
+    domain: OperationalGovernance
+    severity: medium
+    description: "Agent executions accessing sensitive data should complete within configured timeout to prevent resource exhaustion and reduce exposure window."
+    remediation: "Verify the agent completed execution. If it timed out, investigate and add timeout configuration."
+    active: true
+    rule:
+      ref: agent_execution_under_duration_limit

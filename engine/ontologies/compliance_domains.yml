@@ -61,6 +61,16 @@ domains:
       - DataRetention
       - DataPrivacy
 
+  AgentGovernance:
+    description: "Governance of AI agent behavior, data access patterns, and compliance"
+    owner_role: "ai_platform_admin"
+    severity_floor: high
+    escalation: "ai-governance@<company>.com"
+    sub_domains:
+      - AgentAccessControl
+      - AgentAuditCompliance
+      - AgentDataExportControl
+
   DataClassification:
     description: "Ensuring all data assets are properly classified and labeled"
     owner_role: "data_steward"

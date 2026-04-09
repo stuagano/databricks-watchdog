@@ -264,24 +264,29 @@ class TestCrawlAgentsEndpoints:
 # ── _crawl_agent_traces ─────────────────────────────────────────────────────
 
 class TestCrawlAgentTraces:
-    def _make_trace_row(self, request_id="req-001", experiment_id="exp-42",
-                        timestamp_ms=1700000000000, execution_duration_ms=150,
-                        status="OK", request_metadata=None, tags=None):
+    def _make_usage_row(self, endpoint_name="my-endpoint", served_entity_name="my-entity",
+                        requester="user@example.com", request_count=100,
+                        total_input_tokens=5000, total_output_tokens=2000,
+                        error_count=0, first_request="2025-01-01T00:00:00Z",
+                        last_request="2025-01-07T00:00:00Z"):
+        """Create a mock row matching the endpoint_usage aggregation query."""
         return SimpleNamespace(
-            request_id=request_id,
-            experiment_id=experiment_id,
-            timestamp_ms=timestamp_ms,
-            execution_duration_ms=execution_duration_ms,
-            status=status,
-            request_metadata=request_metadata,
-            tags=tags,
+            endpoint_name=endpoint_name,
+            served_entity_name=served_entity_name,
+            requester=requester,
+            request_count=request_count,
+            total_input_tokens=total_input_tokens,
+            total_output_tokens=total_output_tokens,
+            error_count=error_count,
+            first_request=first_request,
+            last_request=last_request,
         )
 
     def test_trace_row_format(self):
         crawler = _make_crawler()
-        trace = self._make_trace_row(request_id="req-abc-123")
+        usage = self._make_usage_row(endpoint_name="agent-ep", requester="alice@co.com")
         result_mock = MagicMock()
-        result_mock.collect.return_value = [trace]
+        result_mock.collect.return_value = [usage]
         crawler.spark.sql.return_value = result_mock
 
         rows = crawler._crawl_agent_traces()
@@ -291,29 +296,33 @@ class TestCrawlAgentTraces:
         assert row[0] == crawler.scan_id
         assert row[1] == "ms-abc-123"
         assert row[2] == "agent_execution"
-        assert row[3] == "execution:req-abc-123"
-        assert row[4] == "Execution req-abc-123"  # first 12 chars of request_id
-        assert row[5] == ""  # owner
+        assert row[3] == "execution:agent-ep:alice@co.com"
+        assert row[4] == "agent-ep (alice@co.com)"
+        assert row[5] == "alice@co.com"  # owner is the requester
         assert row[6] == ""  # domain
         # tags
         tags = row[7]
-        assert tags["trace_id"] == "req-abc-123"
+        assert tags["trace_id"] == "agent-ep:alice@co.com"
         assert tags["execution_completed"] == "true"
+        assert tags["model_endpoint"] == "agent-ep"
         # metadata
         metadata = row[8]
-        assert metadata["request_id"] == "req-abc-123"
-        assert metadata["experiment_id"] == "exp-42"
-        assert metadata["duration_ms"] == "150"
-        assert metadata["status"] == "OK"
+        assert metadata["endpoint_name"] == "agent-ep"
+        assert metadata["served_entity_name"] == "my-entity"
+        assert metadata["requester"] == "alice@co.com"
+        assert metadata["request_count"] == "100"
+        assert metadata["total_input_tokens"] == "5000"
+        assert metadata["total_output_tokens"] == "2000"
+        assert metadata["error_count"] == "0"
         assert metadata["resource_type"] == "agent_execution"
         assert len(row) == 10
 
     def test_failed_execution_tag(self):
-        """Failed executions get execution_completed=false."""
+        """Rows with errors get execution_completed=false."""
         crawler = _make_crawler()
-        trace = self._make_trace_row(status="ERROR")
+        usage = self._make_usage_row(error_count=5)
         result_mock = MagicMock()
-        result_mock.collect.return_value = [trace]
+        result_mock.collect.return_value = [usage]
         crawler.spark.sql.return_value = result_mock
 
         rows = crawler._crawl_agent_traces()
@@ -321,9 +330,9 @@ class TestCrawlAgentTraces:
         assert rows[0][7]["execution_completed"] == "false"
 
     def test_missing_trace_table(self):
-        """If trace table doesn't exist, returns empty list gracefully."""
+        """If endpoint_usage table doesn't exist, returns empty list gracefully."""
         crawler = _make_crawler()
-        crawler.spark.sql.side_effect = Exception("TABLE_NOT_FOUND: system.serving.served_entities_inference_log")
+        crawler.spark.sql.side_effect = Exception("TABLE_NOT_FOUND: system.serving.endpoint_usage")
 
         rows = crawler._crawl_agent_traces()
         assert rows == []
@@ -339,28 +348,28 @@ class TestCrawlAgentTraces:
         assert rows == []
 
     def test_fallback_request_id(self):
-        """When request_id is None, falls back to timestamp_ms."""
+        """When endpoint_name is None, falls back to empty string in composite key."""
         crawler = _make_crawler()
-        trace = self._make_trace_row(request_id=None, timestamp_ms=1700000000000)
+        usage = self._make_usage_row(endpoint_name=None, requester="bob@co.com")
         result_mock = MagicMock()
-        result_mock.collect.return_value = [trace]
+        result_mock.collect.return_value = [usage]
         crawler.spark.sql.return_value = result_mock
 
         rows = crawler._crawl_agent_traces()
 
-        assert rows[0][3] == "execution:1700000000000"
-        assert rows[0][7]["trace_id"] == "1700000000000"
+        assert rows[0][3] == "execution::bob@co.com"
+        assert rows[0][7]["trace_id"] == ":bob@co.com"
 
     def test_multiple_traces(self):
-        """Multiple traces produce multiple rows."""
+        """Multiple usage rows produce multiple rows."""
         crawler = _make_crawler()
-        traces = [
-            self._make_trace_row(request_id="req-001"),
-            self._make_trace_row(request_id="req-002", status="ERROR"),
-            self._make_trace_row(request_id="req-003"),
+        usages = [
+            self._make_usage_row(endpoint_name="ep-1", requester="alice@co.com"),
+            self._make_usage_row(endpoint_name="ep-1", requester="bob@co.com", error_count=3),
+            self._make_usage_row(endpoint_name="ep-2", requester="alice@co.com"),
         ]
         result_mock = MagicMock()
-        result_mock.collect.return_value = traces
+        result_mock.collect.return_value = usages
         crawler.spark.sql.return_value = result_mock
 
         rows = crawler._crawl_agent_traces()
@@ -368,7 +377,11 @@ class TestCrawlAgentTraces:
         assert len(rows) == 3
         assert all(r[2] == "agent_execution" for r in rows)
         ids = {r[3] for r in rows}
-        assert ids == {"execution:req-001", "execution:req-002", "execution:req-003"}
+        assert ids == {
+            "execution:ep-1:alice@co.com",
+            "execution:ep-1:bob@co.com",
+            "execution:ep-2:alice@co.com",
+        }
 
 
 # ── crawl_all() registration ────────────────────────────────────────────────

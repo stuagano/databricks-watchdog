@@ -64,6 +64,33 @@ An admin takes this list and migrates every grant to group-based access. The pla
 
 Tag Policies enforce "this tag must use these values." Watchdog rules express arbitrary logic across tags and metadata.
 
+### AI Agent Runtime Governance
+
+Watchdog crawls deployed AI agents (Apps + serving endpoints) and their execution traces from `system.serving.endpoint_usage`. Real results from fe-stable:
+
+| What | Count |
+|---|---|
+| Agents discovered | 38 (5 Databricks Apps + 33 serving endpoints) |
+| Agent execution traces | 500 (per-requester usage from last 7 days) |
+| Ungoverned agents | 533 (no owner metadata → POL-AGENT-002 violation) |
+| Top requester | 8.9M requests, 31B input tokens (flagged as high-volume) |
+
+```
+Agent starts task
+  → check_before_access("my-agent", "catalog.schema.pii_table")
+  ← DENY: "Table is PII (PhiAsset), agent has no audit logging.
+           Suggest: catalog.schema.pii_table_masked"
+  → check_before_access("my-agent", "catalog.schema.public_table")
+  ← ALLOW: "No violations, DataAsset classification"
+  → log_agent_action("my-agent", "data_access", "catalog.schema.public_table")
+  ... agent does work ...
+  → report_agent_execution("my-agent", "Generated sales report")
+  ← {compliance_status: "needs_review", risk_level: "medium",
+     checks: {passed: 1, denied: 1, warned: 0}}
+```
+
+*The platform has no concept of AI agent governance. MLflow traces what agents did. Watchdog evaluates whether what they did complied with your policies.*
+
 ---
 
 ## Architecture
@@ -71,19 +98,22 @@ Tag Policies enforce "this tag must use these values." Watchdog rules express ar
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │  Watchdog Engine (Daily Scan Job)                                │
-│  Crawl 14 resource types → Classify via ontology → Evaluate     │
-│  37+ policies → Track violations with lifecycle → Notify owners  │
+│                                                                  │
+│  Crawl 16 resource types (data + compute + identity + agents)    │
+│  → Classify via ontology (28 classes)                            │
+│  → Evaluate 46 policies (data governance + agent governance)     │
+│  → Track violations with lifecycle → Notify owners               │
 └───────────┬───────────────────┬──────────────────┬──────────────┘
             │                   │                  │
     ┌───────▼───────┐  ┌───────▼────────┐  ┌──────▼──────────────┐
     │ Lakeview       │  │ Watchdog MCP   │  │ Guardrails MCP      │
-    │ Dashboard      │  │ 9 AI tools     │  │ 9 build-time tools  │
-    │ 5 pages        │  │ for assistants │  │ for AI agents       │
-    ├────────────────┤  ├────────────────┤  │ "Is this table      │
-    │ Genie Space    │  │ Ontos Adapter  │  │  safe to use?"      │
-    │ 19 tables      │  │ Business       │  └─────────────────────┘
-    │ NL governance  │  │ catalog views  │
-    └────────────────┘  └────────────────┘
+    │ Dashboard      │  │ 9 AI tools     │  │ 13 tools:           │
+    │ 5 pages        │  │ for assistants │  │  9 build-time +     │
+    ├────────────────┤  ├────────────────┤  │  4 runtime agent    │
+    │ Genie Space    │  │ Ontos Adapter  │  │  governance         │
+    │ 19 tables      │  │ Business       │  │  check_before_access│
+    │ NL governance  │  │ catalog views  │  │  log_agent_action   │
+    └────────────────┘  └────────────────┘  └─────────────────────┘
 ```
 
 **Delta tables are the contract.** Every consumer reads the same tables. No APIs between layers.
@@ -135,7 +165,7 @@ databricks bundle deploy -t my-workspace
 databricks bundle run watchdog_adhoc_scan -t my-workspace
 ```
 
-This crawls all resources, classifies them, evaluates 37+ policies, and writes violations. Takes 2-3 minutes.
+This crawls all resources (tables, volumes, jobs, clusters, warehouses, grants, service principals, agents, agent execution traces), classifies them via the ontology (28 classes), evaluates 46 policies, and writes violations. Takes 2-3 minutes.
 
 ### Step 4: Check results
 
@@ -218,7 +248,11 @@ databricks apps start mcp-ai-guardrails-my-workspace --profile your-profile
 # Wait for ACTIVE, then deploy code (same pattern as MCP server)
 ```
 
-AI agents get build-time governance: "Is this table safe to use in my agent?"
+AI agents get build-time AND runtime governance:
+- **Build-time**: "Is this table safe to use in my agent?" (`validate_table_usage`, `build_safely`)
+- **Runtime**: "Check this table before I access it" (`check_before_access` — returns allow/deny/warn with reasons)
+- **Audit**: "Log what my agent did" (`log_agent_action` — structured compliance audit trail)
+- **Post-execution**: "How did my agent do?" (`report_agent_execution` — compliance report with risk level)
 
 ---
 
@@ -241,11 +275,11 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 
 | Component | What | Deploy Command |
 |---|---|---|
-| **Engine** | Daily scan job — crawl, classify, evaluate, track violations | `cd engine && databricks bundle deploy` |
-| **Lakeview Dashboard** | 5-page governance posture dashboard | `python engine/dashboards/lakeview/deploy_dashboard.py` |
+| **Engine** | Daily scan — 16 resource types (data + compute + identity + agents), 28 ontology classes, 46 policies | `cd engine && databricks bundle deploy` |
+| **Lakeview Dashboard** | 5-page governance posture + unified Hub dashboard | `python engine/dashboards/lakeview/deploy_dashboard.py` |
 | **Watchdog MCP** | 9 AI tools for compliance queries | `cd mcp && databricks bundle deploy` + app deploy |
 | **Genie Space** | NL governance exploration (19 tables: Watchdog + UC system tables) | `python mcp/genie/deploy_genie_space.py` |
-| **Guardrails MCP** | 9 build-time governance tools for AI agents | `cd guardrails && databricks bundle deploy` + app deploy |
+| **Guardrails MCP** | 13 tools: 9 build-time + 4 runtime agent governance | `cd guardrails && databricks bundle deploy` + app deploy |
 | **Ontos Adapter** | Pluggable governance module for Ontos business catalog | Drop-in to Ontos fork |
 
 ---
@@ -256,7 +290,7 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 
 | Table | Purpose |
 |---|---|
-| `resource_inventory` | All discovered resources per scan (14 types, tags, metadata, metastore_id) |
+| `resource_inventory` | All discovered resources per scan (16 types incl. agents + traces, tags, metadata, metastore_id) |
 | `resource_classifications` | Ontology class assignments (resource_id → class_name with ancestor chain) |
 | `policies` | Policy definitions — YAML-synced + user-created (hybrid management) |
 | `policies_history` | Append-only audit trail of policy changes |
@@ -296,7 +330,9 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `what_if_policy` | Simulate a proposed policy against current inventory |
 | `list_metastores` | List scanned metastores with resource counts |
 
-### Guardrails MCP (AI build-time governance)
+### Guardrails MCP (AI build-time + runtime governance)
+
+**Build-time tools** (check before coding):
 
 | Tool | Description |
 |---|---|
@@ -305,6 +341,15 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `check_policy_compliance` | Evaluate resource against all applicable policies |
 | `build_safely` | Combined classification + violation + policy check |
 | + 5 more | SQL validation, cost estimation, column safety, audit logging |
+
+**Runtime tools** (check during agent execution):
+
+| Tool | Description |
+|---|---|
+| `check_before_access` | Real-time pre-access governance — returns allow/deny/warn with reasons and suggested alternatives |
+| `log_agent_action` | Structured audit logging of agent actions (data access, API calls, exports) |
+| `get_agent_compliance` | Current session compliance status — checks passed/denied, risk level, classifications seen |
+| `report_agent_execution` | Post-execution compliance report — compliant/needs_review/non_compliant with full detail |
 
 ---
 
@@ -358,13 +403,17 @@ Set `WATCHDOG_METASTORE_IDS=ms-123,ms-456` and use the `crawl_all_metastores` en
 | Tag Policies reject invalid values | Evaluates cross-tag rules ("if PII then must have steward AND retention") |
 | DQ Monitoring detects anomalies | Evaluates "do all gold tables have DQ monitors enabled" |
 | Governance Hub shows dashboards | Tracks violations as stateful objects with owner accountability |
-| Nothing | Provides cross-domain compliance posture over time |
+| MLflow traces agent execution | Evaluates "did this agent's behavior comply with our policies?" |
+| AI Gateway routes model requests | Evaluates "which agents are ungoverned? who's a high-volume requester?" |
+| Nothing | Cross-domain compliance posture over time |
 | Nothing | Ontology-based classification with policy inheritance |
 | Nothing | Per-owner violation digests with remediation steps |
+| Nothing | Runtime agent governance (check_before_access, compliance reports) |
 | Nothing | AI interface (MCP) for governance posture queries |
 
 The platform is the immune system — it blocks bad things at runtime.
 Watchdog is the annual physical — it measures overall health, tracks trends, and tells you what to fix.
+For AI agents, Watchdog is also the safety briefing — it checks governance before agents access data and produces compliance reports after they finish.
 
 ---
 
@@ -385,7 +434,7 @@ databricks-watchdog/
 │   └── genie/                       #   Genie Space template + deploy script
 │
 ├── guardrails/                      # AI DevKit guardrails MCP (Databricks App)
-│   └── src/ai_devkit/               #   9 build-time governance tools
+│   └── src/ai_devkit/               #   13 tools: 9 build-time + 4 runtime agent governance
 │
 ├── ontos-adapter/                   # Governance module for Ontos business catalog
 │   └── src/watchdog_governance/     #   GovernanceProvider protocol + routers
@@ -400,7 +449,7 @@ databricks-watchdog/
 ├── template/                        # Blank starting point for new customers
 ├── customer/                        # Worked example
 ├── docs/                            # Roadmap, positioning, integration plan
-└── tests/                           # 289 unit tests
+└── tests/                           # 405 unit tests
 ```
 
 ## Testing
@@ -408,7 +457,7 @@ databricks-watchdog/
 ```bash
 pip install pytest pyyaml
 python -m pytest tests/unit/ -q
-# 289 passed
+# 405 passed
 ```
 
 ## Acknowledgments

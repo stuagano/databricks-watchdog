@@ -11,11 +11,14 @@ what metadata the user can see.
 
 import json
 import logging
+import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 from databricks.sdk import WorkspaceClient
 from mcp.types import TextContent, Tool
 
+from ai_devkit.audit import log_tool_call as audit_log
 from ai_devkit.config import AiDevkitConfig
 from ai_devkit.watchdog_client import (
     get_grants_for_resource,
@@ -25,6 +28,9 @@ from ai_devkit.watchdog_client import (
 )
 
 logger = logging.getLogger(__name__)
+
+# ── Runtime agent session state (per server instance) ──────────────────────
+_agent_sessions: dict[str, dict] = {}
 
 TOOLS = [
     Tool(
@@ -280,6 +286,95 @@ TOOLS = [
             "required": ["table_name", "operation"],
         },
     ),
+    # ── Runtime governance tools (Phase 5D) ────────────────────────────────
+    Tool(
+        name="check_before_access",
+        description=(
+            "Runtime governance check — call BEFORE an agent accesses a table. "
+            "Returns allow/deny based on the table's classification, the agent's "
+            "governance status, and applicable policies. Includes suggested "
+            "alternatives when access is denied (e.g., a masked view)."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "Identifier of the calling agent.",
+                },
+                "table": {
+                    "type": "string",
+                    "description": "Fully qualified table name (catalog.schema.table).",
+                },
+                "operation": {
+                    "type": "string",
+                    "enum": ["SELECT", "INSERT", "UPDATE", "DELETE"],
+                    "description": "Operation the agent intends to perform. Default: SELECT.",
+                },
+                "columns": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Specific columns the agent will access. If omitted, checks all columns.",
+                },
+            },
+            "required": ["agent_id", "table"],
+        },
+    ),
+    Tool(
+        name="log_agent_action",
+        description=(
+            "Log an agent action for governance audit trail. Call this after "
+            "each significant action (data access, external API call, data export). "
+            "Logged to the Watchdog audit tables for compliance review."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string", "description": "Agent identifier."},
+                "action": {
+                    "type": "string",
+                    "enum": ["data_access", "data_export", "external_api_call", "model_invocation", "tool_call"],
+                    "description": "Type of action being logged.",
+                },
+                "target": {"type": "string", "description": "What was accessed (table name, API URL, endpoint name)."},
+                "details": {"type": "object", "description": "Additional action context (columns, row_count, response_status)."},
+                "classification": {"type": "string", "description": "Data classification of the target (if known)."},
+            },
+            "required": ["agent_id", "action", "target"],
+        },
+    ),
+    Tool(
+        name="get_agent_compliance",
+        description=(
+            "Get the current compliance status of an agent. Returns how many "
+            "governance checks passed/failed in the current session, which "
+            "data classifications were accessed, and overall risk assessment."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string", "description": "Agent identifier."},
+            },
+            "required": ["agent_id"],
+        },
+    ),
+    Tool(
+        name="report_agent_execution",
+        description=(
+            "Generate a post-execution compliance report for an agent. "
+            "Summarizes all governance checks, data accessed, policies "
+            "triggered, and overall compliance assessment. Call when the "
+            "agent finishes its task."
+        ),
+        inputSchema={
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string", "description": "Agent identifier."},
+                "execution_summary": {"type": "string", "description": "Brief description of what the agent did."},
+            },
+            "required": ["agent_id"],
+        },
+    ),
 ]
 
 
@@ -304,6 +399,14 @@ async def handle(
         return await _safe_columns(w, config, arguments)
     elif name == "estimate_cost":
         return await _estimate_cost(w, config, arguments)
+    elif name == "check_before_access":
+        return await _check_before_access(w, config, arguments)
+    elif name == "log_agent_action":
+        return await _log_agent_action(w, config, arguments)
+    elif name == "get_agent_compliance":
+        return await _get_agent_compliance(w, config, arguments)
+    elif name == "report_agent_execution":
+        return await _report_agent_execution(w, config, arguments)
     raise ValueError(f"Unknown governance tool: {name}")
 
 
@@ -1136,3 +1239,321 @@ async def _estimate_cost(
         )
 
     return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+
+# ---------------------------------------------------------------------------
+# Runtime governance tools (Phase 5D) — agent-time checks and audit
+# ---------------------------------------------------------------------------
+
+
+def _init_agent_session(agent_id: str) -> dict:
+    """Initialize or return an existing agent session."""
+    if agent_id not in _agent_sessions:
+        _agent_sessions[agent_id] = {
+            "agent_id": agent_id,
+            "checks_passed": 0,
+            "checks_denied": 0,
+            "checks_warned": 0,
+            "tables_accessed": [],
+            "pii_tables_accessed": [],
+            "classifications_seen": set(),
+            "actions_logged": 0,
+            "risk_level": "low",
+            "session_start": datetime.now(timezone.utc).isoformat(),
+        }
+    return _agent_sessions[agent_id]
+
+
+def _calculate_risk_level(session: dict) -> str:
+    """Calculate risk level from session state.
+
+    - critical: accessed PII with denied checks, or exported data without approval
+    - high: accessed PII with warnings, or has denied checks
+    - medium: warnings but no denials
+    - low: all checks passed
+    """
+    has_pii = len(session.get("pii_tables_accessed", [])) > 0
+    denied = session.get("checks_denied", 0)
+    warned = session.get("checks_warned", 0)
+
+    if has_pii and denied > 0:
+        return "critical"
+    if has_pii and warned > 0:
+        return "high"
+    if denied > 0:
+        return "high"
+    if warned > 0:
+        return "medium"
+    return "low"
+
+
+async def _check_before_access(
+    w: WorkspaceClient, config: AiDevkitConfig, args: dict[str, Any]
+) -> list[TextContent]:
+    agent_id = args["agent_id"]
+    table = args["table"]
+    operation = args.get("operation", "SELECT")
+    columns = args.get("columns")
+
+    # Initialize session tracking
+    session = _init_agent_session(agent_id)
+
+    # Look up governance state
+    gov = get_resource_governance(w, config, table)
+
+    reasons: list[str] = []
+    alternatives: list[str] = []
+    decision = "allow"
+
+    # Check for critical violations
+    if gov.has_critical_violations:
+        reasons.append(
+            f"Table has {sum(1 for v in gov.open_violations if v.get('severity') == 'critical')} "
+            f"critical violation(s)."
+        )
+        decision = "deny"
+        # Suggest contacting owner
+        owner = None
+        try:
+            table_info = w.tables.get(full_name=table)
+            owner = table_info.owner
+        except Exception:
+            pass
+        if owner:
+            alternatives.append(f"Resolve violations first, contact {owner}.")
+        else:
+            alternatives.append("Resolve critical violations before access.")
+
+    # Check for PII + ungoverned agent
+    if gov.is_pii:
+        reasons.append("Table is classified as PII.")
+        decision = "deny"
+        # Suggest masked view
+        try:
+            cat, sch, tbl = _parse_table_name(table)
+            masked_view = f"{cat}.{sch}.{tbl}_masked"
+            alternatives.append(f"Use masked view if available: {masked_view}")
+        except ValueError:
+            pass
+
+    # Check for restricted classification
+    if gov.is_restricted and decision != "deny":
+        reasons.append("Table is classified as restricted.")
+        decision = "deny"
+        alternatives.append("Request a governance exception via Watchdog.")
+
+    # Check for high violations (warn)
+    if gov.has_high_violations and decision != "deny":
+        reasons.append(
+            f"Table has {sum(1 for v in gov.open_violations if v.get('severity') == 'high')} "
+            f"open high-severity violation(s)."
+        )
+        if decision != "deny":
+            decision = "warn"
+
+    # Check for confidential + sensitive columns (warn)
+    if gov.is_confidential and columns and decision != "deny":
+        pii_patterns = {
+            "ssn", "social_security", "tax_id", "passport", "drivers_license",
+            "date_of_birth", "dob", "home_address", "personal_email",
+            "phone_number", "mobile", "salary", "compensation",
+        }
+        sensitive_cols = [
+            c for c in columns
+            if any(p in c.lower() for p in pii_patterns)
+        ]
+        if sensitive_cols:
+            reasons.append(
+                f"Confidential table with sensitive column(s): {', '.join(sensitive_cols)}."
+            )
+            if decision != "deny":
+                decision = "warn"
+
+    # Update session state
+    if decision == "allow":
+        session["checks_passed"] += 1
+    elif decision == "deny":
+        session["checks_denied"] += 1
+    elif decision == "warn":
+        session["checks_warned"] += 1
+
+    if table not in session["tables_accessed"]:
+        session["tables_accessed"].append(table)
+    if gov.is_pii and table not in session["pii_tables_accessed"]:
+        session["pii_tables_accessed"].append(table)
+    for cls in gov.classes:
+        session["classifications_seen"].add(cls)
+
+    session["risk_level"] = _calculate_risk_level(session)
+
+    result = {
+        "decision": decision,
+        "table": table,
+        "agent_id": agent_id,
+        "operation": operation,
+        "classifications": gov.classes,
+        "open_violations": len(gov.open_violations),
+        "critical_violations": gov.has_critical_violations,
+        "reasons": reasons,
+        "alternatives": alternatives,
+        "policies_checked": len(gov.policies_applied),
+    }
+
+    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+
+async def _log_agent_action(
+    w: WorkspaceClient, config: AiDevkitConfig, args: dict[str, Any]
+) -> list[TextContent]:
+    agent_id = args["agent_id"]
+    action = args["action"]
+    target = args["target"]
+    details = args.get("details", {})
+    classification = args.get("classification")
+
+    event_id = str(uuid.uuid4())
+
+    # Update session state
+    session = _init_agent_session(agent_id)
+    session["actions_logged"] += 1
+
+    # Emit structured audit event
+    audit_event = {
+        "event_id": event_id,
+        "event_type": "agent_action",
+        "agent_id": agent_id,
+        "action": action,
+        "target": target,
+        "details": details,
+        "classification": classification,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    logger.info(json.dumps(audit_event, default=str))
+
+    result = {
+        "status": "logged",
+        "event_id": event_id,
+        "agent_id": agent_id,
+        "action": action,
+        "target": target,
+    }
+
+    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+
+async def _get_agent_compliance(
+    w: WorkspaceClient, config: AiDevkitConfig, args: dict[str, Any]
+) -> list[TextContent]:
+    agent_id = args["agent_id"]
+
+    session = _init_agent_session(agent_id)
+
+    result = {
+        "agent_id": agent_id,
+        "checks_passed": session["checks_passed"],
+        "checks_denied": session["checks_denied"],
+        "checks_warned": session["checks_warned"],
+        "tables_accessed": session["tables_accessed"],
+        "pii_tables_accessed": session["pii_tables_accessed"],
+        "classifications_seen": list(session["classifications_seen"]),
+        "actions_logged": session["actions_logged"],
+        "risk_level": session["risk_level"],
+        "session_start": session["session_start"],
+    }
+
+    return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+
+async def _report_agent_execution(
+    w: WorkspaceClient, config: AiDevkitConfig, args: dict[str, Any]
+) -> list[TextContent]:
+    agent_id = args["agent_id"]
+    execution_summary = args.get("execution_summary", "")
+
+    session = _agent_sessions.get(agent_id)
+    if session is None:
+        # No session tracked — return minimal report
+        result = {
+            "agent_id": agent_id,
+            "execution_summary": execution_summary,
+            "compliance_status": "compliant",
+            "risk_level": "low",
+            "governance_checks": {"total": 0, "passed": 0, "denied": 0, "warned": 0},
+            "data_access": {
+                "tables_accessed": [],
+                "pii_tables_accessed": [],
+                "classifications_seen": [],
+            },
+            "actions_logged": 0,
+            "policy_violations": [],
+            "recommendations": ["No governance activity recorded for this agent."],
+        }
+        return [TextContent(type="text", text=json.dumps(result, indent=2, default=str))]
+
+    passed = session["checks_passed"]
+    denied = session["checks_denied"]
+    warned = session["checks_warned"]
+    risk_level = session["risk_level"]
+
+    # Determine compliance status
+    if denied > 0 or risk_level == "critical":
+        compliance_status = "non_compliant"
+    elif warned > 0:
+        compliance_status = "needs_review"
+    else:
+        compliance_status = "compliant"
+
+    # Calculate duration
+    try:
+        start = datetime.fromisoformat(session["session_start"])
+        duration_seconds = (datetime.now(timezone.utc) - start).total_seconds()
+        duration = f"{duration_seconds:.1f}s"
+    except Exception:
+        duration = "unknown"
+
+    # Build recommendations
+    recommendations: list[str] = []
+    if denied > 0:
+        recommendations.append(
+            f"{denied} access check(s) were denied. Review denied tables and "
+            f"resolve governance violations before re-running."
+        )
+    if session["pii_tables_accessed"]:
+        recommendations.append(
+            f"PII tables accessed: {', '.join(session['pii_tables_accessed'])}. "
+            f"Ensure data handling complies with privacy policies."
+        )
+    if risk_level in ("high", "critical"):
+        recommendations.append(
+            "High/critical risk level detected. Consider adding audit logging "
+            "and governance metadata to this agent."
+        )
+    if not recommendations:
+        recommendations.append("Agent execution was fully compliant. No action needed.")
+
+    report = {
+        "agent_id": agent_id,
+        "execution_summary": execution_summary,
+        "compliance_status": compliance_status,
+        "risk_level": risk_level,
+        "duration": duration,
+        "governance_checks": {
+            "total": passed + denied + warned,
+            "passed": passed,
+            "denied": denied,
+            "warned": warned,
+        },
+        "data_access": {
+            "tables_accessed": session["tables_accessed"],
+            "pii_tables_accessed": session["pii_tables_accessed"],
+            "classifications_seen": list(session["classifications_seen"]),
+        },
+        "actions_logged": session["actions_logged"],
+        "policy_violations": [],
+        "recommendations": recommendations,
+    }
+
+    # Clear session state after report
+    del _agent_sessions[agent_id]
+
+    return [TextContent(type="text", text=json.dumps(report, indent=2, default=str))]

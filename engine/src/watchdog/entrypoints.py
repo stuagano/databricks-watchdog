@@ -116,7 +116,8 @@ def evaluate():
     from watchdog.views import ensure_semantic_views
     ensure_semantic_views(spark, args.catalog, args.schema)
     print("Refreshed semantic views: v_resource_compliance, v_class_compliance, v_domain_compliance, "
-          "v_tag_policy_coverage, v_data_classification_summary, v_dq_monitoring_coverage")
+          "v_tag_policy_coverage, v_data_classification_summary, v_dq_monitoring_coverage, "
+          "v_compliance_trend")
 
 
 def notify():

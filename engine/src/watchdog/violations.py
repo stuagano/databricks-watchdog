@@ -299,3 +299,122 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
         "exception": counts.get("exception", 0),
         "new_this_scan": new_violations,
     }
+
+
+def ensure_scan_summary_table(spark: SparkSession, catalog: str, schema: str) -> None:
+    """Create the scan_summary table if it doesn't exist.
+
+    Append-only, one row per scan. Captures posture metrics at scan time
+    so trend views can show compliance direction over 30/60/90 day windows.
+    """
+    table = f"{catalog}.{schema}.scan_summary"
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {table} (
+            scan_id STRING NOT NULL,
+            scanned_at TIMESTAMP NOT NULL,
+            metastore_id STRING,
+            total_resources INT,
+            total_policies_evaluated INT,
+            total_classifications INT,
+            open_violations INT,
+            resolved_violations INT,
+            exception_violations INT,
+            new_violations INT,
+            newly_resolved INT,
+            critical_open INT,
+            high_open INT,
+            medium_open INT,
+            low_open INT,
+            compliance_pct DOUBLE
+        )
+        USING DELTA
+        CLUSTER BY (scanned_at)
+        TBLPROPERTIES (
+            'delta.appendOnly' = 'true'
+        )
+    """)
+
+
+def write_scan_summary(spark: SparkSession, catalog: str, schema: str,
+                        scan_id: str, scanned_at, metastore_id: str | None,
+                        total_resources: int, total_policies_evaluated: int,
+                        total_classifications: int,
+                        violation_summary: dict) -> None:
+    """Write a single summary row for this scan.
+
+    Called after merge_violations so violation_summary has final counts.
+    Queries violations table for severity breakdown and compliance_pct.
+    """
+    ensure_scan_summary_table(spark, catalog, schema)
+    violations_table = f"{catalog}.{schema}.violations"
+
+    # Severity breakdown from current violations state
+    severity_counts = spark.sql(f"""
+        SELECT
+            COUNT(CASE WHEN status = 'open' AND severity = 'critical' THEN 1 END) AS critical_open,
+            COUNT(CASE WHEN status = 'open' AND severity = 'high' THEN 1 END) AS high_open,
+            COUNT(CASE WHEN status = 'open' AND severity = 'medium' THEN 1 END) AS medium_open,
+            COUNT(CASE WHEN status = 'open' AND severity = 'low' THEN 1 END) AS low_open
+        FROM {violations_table}
+    """).first()
+
+    # Compliance %: resources with zero open violations / total resources
+    inventory_table = f"{catalog}.{schema}.resource_inventory"
+    compliance_row = spark.sql(f"""
+        SELECT
+            COUNT(DISTINCT ri.resource_id) AS total,
+            COUNT(DISTINCT CASE WHEN v.resource_id IS NOT NULL THEN ri.resource_id END) AS with_violations
+        FROM {inventory_table} ri
+        LEFT JOIN {violations_table} v
+            ON ri.resource_id = v.resource_id AND v.status = 'open'
+        WHERE ri.scan_id = '{scan_id}'
+    """).first()
+
+    total = compliance_row.total or 0
+    with_violations = compliance_row.with_violations or 0
+    compliance_pct = round((total - with_violations) * 100.0 / total, 1) if total > 0 else 100.0
+
+    # Count newly resolved this scan (resolved_at within last few seconds of scanned_at)
+    newly_resolved = violation_summary.get("resolved", 0)
+
+    summary_schema = T.StructType([
+        T.StructField("scan_id", T.StringType()),
+        T.StructField("scanned_at", T.TimestampType()),
+        T.StructField("metastore_id", T.StringType()),
+        T.StructField("total_resources", T.IntegerType()),
+        T.StructField("total_policies_evaluated", T.IntegerType()),
+        T.StructField("total_classifications", T.IntegerType()),
+        T.StructField("open_violations", T.IntegerType()),
+        T.StructField("resolved_violations", T.IntegerType()),
+        T.StructField("exception_violations", T.IntegerType()),
+        T.StructField("new_violations", T.IntegerType()),
+        T.StructField("newly_resolved", T.IntegerType()),
+        T.StructField("critical_open", T.IntegerType()),
+        T.StructField("high_open", T.IntegerType()),
+        T.StructField("medium_open", T.IntegerType()),
+        T.StructField("low_open", T.IntegerType()),
+        T.StructField("compliance_pct", T.DoubleType()),
+    ])
+
+    row = [(
+        scan_id,
+        scanned_at,
+        metastore_id,
+        total_resources,
+        total_policies_evaluated,
+        total_classifications,
+        violation_summary.get("open", 0),
+        violation_summary.get("resolved", 0),
+        violation_summary.get("exception", 0),
+        violation_summary.get("new_this_scan", 0),
+        newly_resolved,
+        severity_counts.critical_open or 0,
+        severity_counts.high_open or 0,
+        severity_counts.medium_open or 0,
+        severity_counts.low_open or 0,
+        compliance_pct,
+    )]
+
+    table = f"{catalog}.{schema}.scan_summary"
+    df = spark.createDataFrame(row, schema=summary_schema)
+    df.write.mode("append").saveAsTable(table)

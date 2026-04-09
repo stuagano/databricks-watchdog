@@ -27,7 +27,7 @@ import pyspark.sql.types as T
 
 from watchdog.ontology import OntologyEngine
 from watchdog.rule_engine import RuleEngine, RuleResult
-from watchdog.violations import merge_violations, write_classifications
+from watchdog.violations import merge_violations, write_classifications, write_scan_summary
 
 # Fallback mapping: ontology class name → resource_types it covers.
 # Used when ontology files are absent so policies with applies_to set to a
@@ -246,6 +246,20 @@ class PolicyEngine:
         # Merge violations
         violation_summary = merge_violations(
             self.spark, self.catalog, self.schema, scan_id
+        )
+
+        # Snapshot posture for trend tracking
+        # Determine metastore_id from the first resource (all share the same scan)
+        metastore_id = inventory[0].metastore_id if inventory and hasattr(inventory[0], "metastore_id") else None
+        write_scan_summary(
+            self.spark, self.catalog, self.schema,
+            scan_id=scan_id,
+            scanned_at=self.now,
+            metastore_id=metastore_id,
+            total_resources=len(inventory),
+            total_policies_evaluated=len(active_policies),
+            total_classifications=total_classifications,
+            violation_summary=violation_summary,
         )
 
         return EvaluationSummary(

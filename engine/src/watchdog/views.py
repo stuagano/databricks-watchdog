@@ -1,6 +1,6 @@
 """Semantic Views — ontology-shaped compliance views for Ontos and Genie.
 
-Six views are created in the watchdog schema after each evaluate run:
+Nine views are created in the watchdog schema after each evaluate run:
 
   v_resource_compliance
     One row per (resource_id, class_name). Starting point for navigating
@@ -31,7 +31,11 @@ Six views are created in the watchdog schema after each evaluate run:
     One row per table. Shows which tables have DQM, LHM, both, or neither,
     along with anomaly counts and ontology class assignments.
 
-All six are regular views (not materialized) so they always reflect the
+  v_compliance_trend
+    One row per scan. Reads from scan_summary with LAG() deltas so
+    dashboards can show posture direction over 30/60/90 day windows.
+
+All nine are regular views (not materialized) so they always reflect the
 current state of the underlying tables.
 """
 
@@ -52,6 +56,7 @@ def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> Non
     _ensure_dq_monitoring_coverage_view(spark, catalog, schema)
     _ensure_cross_metastore_compliance_view(spark, catalog, schema)
     _ensure_cross_metastore_inventory_view(spark, catalog, schema)
+    _ensure_compliance_trend_view(spark, catalog, schema)
 
 
 def _ensure_resource_compliance_view(spark: SparkSession, catalog: str,
@@ -384,4 +389,70 @@ def _ensure_cross_metastore_inventory_view(spark: SparkSession, catalog: str,
         )
         GROUP BY metastore_id, resource_type
         ORDER BY metastore_id, resource_count DESC
+    """)
+
+
+def _ensure_compliance_trend_view(spark: SparkSession, catalog: str,
+                                   schema: str) -> None:
+    """v_compliance_trend: compliance posture over time from scan_summary.
+
+    One row per scan. Enriched with deltas from the previous scan so
+    dashboards can show direction (improving/declining/stable) and trend
+    lines over 30/60/90 day windows.
+
+    Uses LAG() window function to compute scan-over-scan changes.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_compliance_trend AS
+        SELECT
+            scan_id,
+            scanned_at,
+            metastore_id,
+            total_resources,
+            total_policies_evaluated,
+            total_classifications,
+            open_violations,
+            resolved_violations,
+            exception_violations,
+            new_violations,
+            newly_resolved,
+            critical_open,
+            high_open,
+            medium_open,
+            low_open,
+            compliance_pct,
+            -- Deltas from previous scan
+            open_violations - LAG(open_violations, 1, open_violations)
+                OVER (PARTITION BY metastore_id ORDER BY scanned_at)
+                AS open_violations_delta,
+            compliance_pct - LAG(compliance_pct, 1, compliance_pct)
+                OVER (PARTITION BY metastore_id ORDER BY scanned_at)
+                AS compliance_pct_delta,
+            total_resources - LAG(total_resources, 1, total_resources)
+                OVER (PARTITION BY metastore_id ORDER BY scanned_at)
+                AS resources_delta,
+            critical_open - LAG(critical_open, 1, critical_open)
+                OVER (PARTITION BY metastore_id ORDER BY scanned_at)
+                AS critical_delta,
+            -- Direction indicator
+            CASE
+                WHEN compliance_pct > LAG(compliance_pct, 1, compliance_pct)
+                    OVER (PARTITION BY metastore_id ORDER BY scanned_at)
+                    THEN 'improving'
+                WHEN compliance_pct < LAG(compliance_pct, 1, compliance_pct)
+                    OVER (PARTITION BY metastore_id ORDER BY scanned_at)
+                    THEN 'declining'
+                ELSE 'stable'
+            END AS trend_direction,
+            -- Rolling averages (approximate via last N scans)
+            AVG(compliance_pct)
+                OVER (PARTITION BY metastore_id ORDER BY scanned_at
+                      ROWS BETWEEN 6 PRECEDING AND CURRENT ROW)
+                AS compliance_pct_7scan_avg,
+            AVG(open_violations)
+                OVER (PARTITION BY metastore_id ORDER BY scanned_at
+                      ROWS BETWEEN 29 PRECEDING AND CURRENT ROW)
+                AS open_violations_30scan_avg
+        FROM {catalog}.{schema}.scan_summary
+        ORDER BY scanned_at DESC
     """)

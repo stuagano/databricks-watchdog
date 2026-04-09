@@ -49,6 +49,7 @@ _pyspark_sql_types.BooleanType = _dummy_type
 _pyspark_sql_types.IntegerType = _dummy_type
 _pyspark_sql_types.TimestampType = _dummy_type
 _pyspark_sql_types.MapType = _dummy_type
+_pyspark_sql_types.DoubleType = _dummy_type
 
 _pyspark.sql = _pyspark_sql
 
@@ -75,6 +76,7 @@ from watchdog.views import (  # noqa: E402
     _ensure_tag_policy_coverage_view,
     _ensure_data_classification_summary_view,
     _ensure_dq_monitoring_coverage_view,
+    _ensure_compliance_trend_view,
 )
 
 
@@ -111,13 +113,13 @@ def _get_view_sql(mock_spark, view_fn):
 # ── ensure_semantic_views registration ───────────────────────────────────────
 
 class TestEnsureSemanticViews:
-    """Verify all eight views are registered in the top-level orchestrator."""
+    """Verify all nine views are registered in the top-level orchestrator."""
 
-    def test_calls_all_eight_view_functions(self, mock_spark):
+    def test_calls_all_nine_view_functions(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
-        assert mock_spark.sql.call_count == 8
+        assert mock_spark.sql.call_count == 9
 
-    def test_creates_all_eight_views(self, mock_spark):
+    def test_creates_all_nine_views(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
         view_names = []
         for call_args in mock_spark.sql_calls:
@@ -136,6 +138,7 @@ class TestEnsureSemanticViews:
             "v_dq_monitoring_coverage",
             "v_cross_metastore_compliance",
             "v_cross_metastore_inventory",
+            "v_compliance_trend",
         }
         assert set(view_names) == expected
 
@@ -152,6 +155,7 @@ class TestViewSqlSyntax:
         (_ensure_tag_policy_coverage_view, "v_tag_policy_coverage"),
         (_ensure_data_classification_summary_view, "v_data_classification_summary"),
         (_ensure_dq_monitoring_coverage_view, "v_dq_monitoring_coverage"),
+        (_ensure_compliance_trend_view, "v_compliance_trend"),
     ])
     def test_creates_correct_view_name(self, mock_spark, view_fn, view_name):
         sql = _get_view_sql(mock_spark, view_fn)
@@ -165,6 +169,7 @@ class TestViewSqlSyntax:
         _ensure_tag_policy_coverage_view,
         _ensure_data_classification_summary_view,
         _ensure_dq_monitoring_coverage_view,
+        _ensure_compliance_trend_view,
     ])
     def test_sql_starts_with_create_or_replace(self, mock_spark, view_fn):
         sql = _get_view_sql(mock_spark, view_fn).strip()
@@ -177,6 +182,7 @@ class TestViewSqlSyntax:
         _ensure_tag_policy_coverage_view,
         _ensure_data_classification_summary_view,
         _ensure_dq_monitoring_coverage_view,
+        _ensure_compliance_trend_view,
     ])
     def test_sql_has_no_unresolved_fstring_braces(self, mock_spark, view_fn):
         """Ensure all {catalog} and {schema} placeholders were resolved."""
@@ -191,6 +197,7 @@ class TestViewSqlSyntax:
         _ensure_tag_policy_coverage_view,
         _ensure_data_classification_summary_view,
         _ensure_dq_monitoring_coverage_view,
+        _ensure_compliance_trend_view,
     ])
     def test_sql_has_select_keyword(self, mock_spark, view_fn):
         sql = _get_view_sql(mock_spark, view_fn).upper()
@@ -373,3 +380,55 @@ class TestCdfEnablement:
         assert len(sql_calls) == 1
         sql = sql_calls[0]
         assert "delta.enableChangeDataFeed" in sql
+
+    def test_scan_summary_is_append_only(self):
+        """scan_summary table should be append-only for immutable trend data."""
+        from watchdog.violations import ensure_scan_summary_table
+        spark = MagicMock()
+        sql_calls = []
+        spark.sql.side_effect = lambda s: sql_calls.append(s) or MagicMock()
+
+        ensure_scan_summary_table(spark, CATALOG, SCHEMA)
+
+        assert len(sql_calls) == 1
+        sql = sql_calls[0]
+        assert "delta.appendOnly" in sql
+        assert "'true'" in sql
+
+
+# ── Compliance trend view ────────────────────────────────────────────────────
+
+class TestComplianceTrendView:
+    """Verify v_compliance_trend SQL structure and computed columns."""
+
+    def test_references_scan_summary(self, mock_spark):
+        sql = _get_view_sql(mock_spark, _ensure_compliance_trend_view)
+        assert f"{CATALOG}.{SCHEMA}.scan_summary" in sql
+
+    def test_has_lag_deltas(self, mock_spark):
+        sql = _get_view_sql(mock_spark, _ensure_compliance_trend_view)
+        assert "open_violations_delta" in sql
+        assert "compliance_pct_delta" in sql
+        assert "resources_delta" in sql
+        assert "critical_delta" in sql
+
+    def test_has_trend_direction(self, mock_spark):
+        sql = _get_view_sql(mock_spark, _ensure_compliance_trend_view)
+        assert "trend_direction" in sql
+        assert "'improving'" in sql
+        assert "'declining'" in sql
+        assert "'stable'" in sql
+
+    def test_has_rolling_averages(self, mock_spark):
+        sql = _get_view_sql(mock_spark, _ensure_compliance_trend_view)
+        assert "compliance_pct_7scan_avg" in sql
+        assert "open_violations_30scan_avg" in sql
+
+    def test_partitions_by_metastore(self, mock_spark):
+        """LAG windows should partition by metastore_id for multi-metastore support."""
+        sql = _get_view_sql(mock_spark, _ensure_compliance_trend_view)
+        assert "PARTITION BY metastore_id" in sql
+
+    def test_orders_by_scanned_at_desc(self, mock_spark):
+        sql = _get_view_sql(mock_spark, _ensure_compliance_trend_view)
+        assert "ORDER BY scanned_at DESC" in sql

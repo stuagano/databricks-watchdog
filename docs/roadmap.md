@@ -6,7 +6,7 @@
 
 ## Identity
 
-Watchdog is a **compliance posture evaluator** for Databricks Unity Catalog.
+Watchdog is a **compliance posture evaluator** for Databricks Unity Catalog — and increasingly, for **AI agents running on the platform**.
 
 The platform enforces governance at query time (ABAC masks a column, a tag policy rejects an invalid value). Watchdog answers the question nobody else answers: **"across all my policies, how compliant is my estate right now, who owns the gaps, and is it getting better or worse?"**
 
@@ -179,6 +179,154 @@ Focus: opinionated, regulation-specific policy sets that customers can adopt in 
 - `library/general/` — CIS benchmarks, data lifecycle, cost governance
 - Each pack: ontology classes + rule primitives + policies + dashboard SQL
 
+### Phase 5 — AI Agent Runtime Governance
+
+Focus: extend Watchdog from data compliance to **agent compliance** — govern AI agent behavior at runtime, not just data assets at rest.
+
+The platform governs data access (ABAC at query time). MLflow traces agent execution. But nobody governs **agent behavior against policies** — does this agent's data access pattern comply with our governance rules? Did it access PII without approval? Did it export sensitive data?
+
+**5A: Agent Crawler — crawl agent definitions and traces**
+
+New resource type `agent` in the engine:
+- Source: Agent Bricks API (list deployed agents) + MLflow traces (agent execution history)
+- `resource_type = "agent"`, `resource_id = "agent:{agent_name}"`
+- Metadata: `deployed_by`, `model_endpoint`, `tools_available`, `last_execution`, `total_executions`
+- Enrichment crawler: `_crawl_agent_traces()` — reads MLflow traces for each agent, extracts tables accessed, columns read, tools called, external endpoints hit
+
+New resource type `agent_execution` (from traces):
+- `resource_type = "agent_execution"`, `resource_id = "execution:{trace_id}"`
+- Metadata: `agent_name`, `tables_accessed`, `columns_read`, `pii_tables_accessed`, `external_calls`, `duration_ms`, `user_identity`
+- Tags derived from trace analysis: `accessed_pii=true`, `exported_data=true`, `used_external_tool=true`
+
+**5B: Agent Ontology Classes**
+
+```yaml
+# New base class
+AgentAsset:
+  matches_resource_types: [agent]
+
+# Derived classes based on behavior
+AgentWithPiiAccess:
+  parent: AgentAsset
+  description: "Agent that has accessed PII data in recent executions"
+  classifier:
+    tag_equals:
+      accessed_pii: "true"
+
+AgentWithExternalAccess:
+  parent: AgentAsset
+  description: "Agent that calls external endpoints or APIs"
+  classifier:
+    tag_equals:
+      used_external_tool: "true"
+
+AgentWithDataExport:
+  parent: AgentAsset
+  description: "Agent that exports data outside the lakehouse"
+  classifier:
+    tag_equals:
+      exported_data: "true"
+
+UngovernedAgent:
+  parent: AgentAsset
+  description: "Agent with no governance metadata (no owner, no audit config)"
+  classifier:
+    none_of:
+      - tag_exists: [agent_owner, audit_logging_enabled]
+
+# Execution-level classes
+HighRiskExecution:
+  parent: DataAsset
+  description: "Agent execution that accessed sensitive data"
+  classifier:
+    all_of:
+      - metadata_equals:
+          resource_type: "agent_execution"
+      - tag_equals:
+          accessed_pii: "true"
+```
+
+**5C: Agent Governance Policies**
+
+```yaml
+policies:
+  # Agent-level policies
+  - id: POL-AGENT-001
+    name: "Agents accessing PII must have audit logging enabled"
+    applies_to: AgentWithPiiAccess
+    severity: critical
+    rule:
+      ref: agent_has_audit_logging
+
+  - id: POL-AGENT-002
+    name: "Agents must have a designated owner"
+    applies_to: AgentAsset
+    severity: high
+    rule:
+      ref: has_agent_owner
+
+  - id: POL-AGENT-003
+    name: "Agents exporting data must have approval"
+    applies_to: AgentWithDataExport
+    severity: critical
+    rule:
+      ref: has_data_export_approval
+
+  - id: POL-AGENT-004
+    name: "Agents calling external endpoints must be registered"
+    applies_to: AgentWithExternalAccess
+    severity: high
+    rule:
+      ref: has_external_access_registration
+
+  - id: POL-AGENT-005
+    name: "Ungoverned agents must not access production data"
+    applies_to: UngovernedAgent
+    severity: critical
+    rule:
+      ref: not_accessing_production
+
+  # Execution-level policies
+  - id: POL-EXEC-001
+    name: "Agent executions accessing PII must be traced"
+    applies_to: HighRiskExecution
+    severity: critical
+    rule:
+      ref: execution_has_trace
+
+  - id: POL-EXEC-002
+    name: "No agent execution should access more than 10 PII tables in one run"
+    applies_to: HighRiskExecution
+    severity: high
+    rule:
+      ref: pii_table_count_under_threshold
+```
+
+**5D: Runtime Guardrails (agent middleware)**
+
+Extend the guardrails MCP with runtime tools that agents call during execution:
+
+- `check_before_access(agent_id, table, operation, columns)` — real-time governance check before the agent reads data. Returns allow/deny with reason and suggested alternative (e.g., masked view).
+- `log_agent_action(agent_id, action, target, metadata)` — structured audit logging of agent behavior for post-execution compliance.
+- `get_agent_compliance(agent_id)` — current compliance status of an agent based on its recent execution traces.
+- `report_agent_execution(trace_id)` — post-execution compliance report: which policies were triggered, which data was accessed, risk score.
+
+**5E: Agent Compliance Dashboard**
+
+New Lakeview dashboard page and Genie Space datasets:
+- Agent inventory with governance status (governed/ungoverned, PII access, external access)
+- Execution compliance: % of executions that triggered policy violations
+- PII access patterns: which agents access PII most frequently
+- Risk heatmap: agents × data sensitivity × access frequency
+- Trend: agent compliance posture over 30/60/90 days
+
+**5F: Integration with AI Gateway**
+
+Read AI Gateway audit logs and usage data:
+- Model routing decisions correlated with data sensitivity
+- Cost governance per agent (token usage × data classification)
+- Rate limiting enforcement for agents accessing sensitive data
+
 ---
 
 ## Dropped from Scope
@@ -238,3 +386,6 @@ Watchdog is succeeding if:
 6. Ontos displays compliance posture in its governance views via the adapter
 7. Compliance posture trends are visible over 30/60/90 day windows
 8. The engine runs daily on 10,000+ resources in under 15 minutes
+9. An AI agent accessing PII is flagged before the query executes (runtime governance)
+10. A compliance officer can see "which agents accessed sensitive data this week" in one query
+11. Agent executions that violate governance policies produce tracked violations with the same lifecycle as data violations

@@ -7,10 +7,42 @@ connection required.
 
 import sys
 from pathlib import Path
+from unittest.mock import MagicMock
 
 # Ensure watchdog_mcp package is importable
 MCP_SRC = Path(__file__).parent.parent.parent / "mcp" / "src"
 sys.path.insert(0, str(MCP_SRC))
+
+# Mock the mcp package so tests run without installing the MCP server deps.
+# governance.py uses Tool (a dataclass-like with name/inputSchema) and
+# TextContent (a dataclass-like with type/text). We provide lightweight
+# stand-ins that support attribute access.
+_mcp_types = MagicMock()
+
+
+class _StubTool:
+    """Minimal stand-in for mcp.types.Tool."""
+    def __init__(self, *, name, description="", inputSchema=None):
+        self.name = name
+        self.description = description
+        self.inputSchema = inputSchema or {}
+
+
+class _StubTextContent:
+    """Minimal stand-in for mcp.types.TextContent."""
+    def __init__(self, *, type="text", text=""):
+        self.type = type
+        self.text = text
+
+
+_mcp_types.Tool = _StubTool
+_mcp_types.TextContent = _StubTextContent
+
+_mcp_mock = MagicMock()
+_mcp_mock.types = _mcp_types
+
+sys.modules.setdefault("mcp", _mcp_mock)
+sys.modules.setdefault("mcp.types", _mcp_types)
 
 import pytest
 
@@ -28,8 +60,8 @@ class TestToolRegistration:
     """Verify all tools are registered with correct names and schemas."""
 
     def test_total_tool_count(self):
-        assert len(TOOLS) == 8, (
-            f"Expected 8 registered tools, got {len(TOOLS)}: "
+        assert len(TOOLS) == 9, (
+            f"Expected 9 registered tools, got {len(TOOLS)}: "
             f"{[t.name for t in TOOLS]}"
         )
 
@@ -44,6 +76,7 @@ class TestToolRegistration:
             "get_exceptions",
             "explain_violation",
             "what_if_policy",
+            "list_metastores",
         }
         assert names == expected
 

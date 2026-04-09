@@ -7,6 +7,7 @@ Resource types crawled:
   - UC: catalogs, schemas, tables, volumes, grants
   - Workspace: jobs, clusters, dashboards, warehouses, pipelines
   - Identity: service principals, groups (for RBAC policy evaluation)
+  - AI Agents: deployed agents (Apps + serving endpoints), agent execution traces
 """
 
 from dataclasses import dataclass, field
@@ -127,6 +128,15 @@ class ResourceCrawler:
             result, rows = self._safe_crawl(crawler_fn)
             results.append(result)
             all_rows.extend(rows)
+
+        # ── AI Agent resources ────────────────────────────────────────
+        result, agent_rows = self._safe_crawl(self._crawl_agents)
+        results.append(result)
+        all_rows.extend(agent_rows)
+
+        result, trace_rows = self._safe_crawl(self._crawl_agent_traces)
+        results.append(result)
+        all_rows.extend(trace_rows)
 
         # UC grant resources via information_schema + SDK
         for crawler_fn in [
@@ -259,6 +269,153 @@ class ResourceCrawler:
                     "entitlements": entitlements,
                 },
             ))
+        return rows
+
+    # ------------------------------------------------------------------
+    # AI Agent resources (via SDK + system tables)
+    # ------------------------------------------------------------------
+
+    def _crawl_agents(self) -> list:
+        """Crawl deployed AI agents from Apps and serving endpoints.
+
+        Source 1: Databricks Apps that look like agents — filtered by
+        heuristic keywords (agent, mcp, assistant, bot, ai) in name or
+        description. Captures app metadata, compute status, and URL.
+
+        Source 2: Model serving endpoints — all endpoints are included
+        since they commonly serve agent models. Captures endpoint state,
+        creator, and creation timestamp.
+
+        Used by AI governance policies to enforce agent registration,
+        ownership, and access controls.
+        """
+        rows = []
+
+        # Source 1: Databricks Apps that look like agents
+        try:
+            apps = self.w.apps.list()
+            for app in apps:
+                # Heuristic: apps with 'agent' or 'mcp' in name/description
+                name = (app.name or "").lower()
+                desc = (app.description or "").lower()
+                if any(k in name or k in desc for k in ["agent", "mcp", "assistant", "bot", "ai"]):
+                    tags = {}
+                    metadata = {
+                        "app_name": app.name or "",
+                        "deployed_by": app.creator or "",
+                        "compute_status": getattr(app, "compute_status", {}).get("state", "") if isinstance(getattr(app, "compute_status", None), dict) else str(getattr(getattr(app, "compute_status", None), "state", "")),
+                        "url": app.url or "",
+                        "created_at": str(getattr(app, "create_time", "")),
+                    }
+
+                    # Set governance tags from app metadata
+                    if app.creator:
+                        tags["agent_owner"] = app.creator
+                        tags["deployed_by"] = app.creator
+
+                    rows.append(self._make_row(
+                        resource_type="agent",
+                        resource_id=f"agent:app:{app.name}",
+                        resource_name=app.name or "",
+                        owner=app.creator,
+                        domain="",
+                        tags=tags,
+                        metadata=metadata,
+                    ))
+        except Exception as e:
+            print(f"  Apps crawl partial failure: {e}")
+
+        # Source 2: Model serving endpoints (agents deployed as endpoints)
+        try:
+            endpoints = self.w.serving_endpoints.list()
+            for ep in endpoints:
+                tags = {}
+                metadata = {
+                    "endpoint_name": ep.name or "",
+                    "deployed_by": getattr(ep, "creator", "") or "",
+                    "endpoint_state": str(getattr(getattr(ep, "state", None), "ready", "")),
+                    "created_at": str(getattr(ep, "creation_timestamp", "")),
+                }
+
+                creator = getattr(ep, "creator", "") or ""
+                if creator:
+                    tags["agent_owner"] = creator
+                    tags["deployed_by"] = creator
+                tags["model_endpoint"] = ep.name or ""
+
+                rows.append(self._make_row(
+                    resource_type="agent",
+                    resource_id=f"agent:endpoint:{ep.name}",
+                    resource_name=ep.name or "",
+                    owner=creator,
+                    domain="",
+                    tags=tags,
+                    metadata=metadata,
+                ))
+        except Exception as e:
+            print(f"  Serving endpoints crawl partial failure: {e}")
+
+        return rows
+
+    def _crawl_agent_traces(self) -> list:
+        """Crawl recent MLflow agent traces as agent_execution resources.
+
+        Reads from system.serving.served_entities_inference_log to find
+        recent agent execution traces. Falls back gracefully if trace
+        tables don't exist on this workspace.
+
+        Used by AI governance policies to monitor agent execution patterns,
+        detect anomalies, and enforce execution controls.
+        """
+        rows = []
+
+        try:
+            # Try to read from MLflow experiment traces
+            # This query gets recent traces with their metadata
+            trace_query = """
+                SELECT
+                    request_id,
+                    experiment_id,
+                    timestamp_ms,
+                    execution_duration_ms,
+                    status,
+                    request_metadata,
+                    tags
+                FROM system.serving.served_entities_inference_log
+                WHERE timestamp_ms > unix_timestamp(date_sub(current_date(), 7)) * 1000
+                LIMIT 500
+            """
+
+            result = self.spark.sql(trace_query)
+            for row in result.collect():
+                request_id = row.request_id or str(row.timestamp_ms)
+
+                tags = {
+                    "trace_id": request_id,
+                    "execution_completed": "true" if row.status == "OK" else "false",
+                }
+
+                metadata = {
+                    "request_id": request_id,
+                    "experiment_id": str(row.experiment_id or ""),
+                    "duration_ms": str(row.execution_duration_ms or 0),
+                    "status": row.status or "",
+                    "resource_type": "agent_execution",
+                }
+
+                rows.append(self._make_row(
+                    resource_type="agent_execution",
+                    resource_id=f"execution:{request_id}",
+                    resource_name=f"Execution {request_id[:12]}",
+                    owner="",
+                    domain="",
+                    tags=tags,
+                    metadata=metadata,
+                ))
+        except Exception as e:
+            # Trace tables may not exist on all workspaces
+            print(f"  Agent traces not available: {e}")
+
         return rows
 
     # ------------------------------------------------------------------

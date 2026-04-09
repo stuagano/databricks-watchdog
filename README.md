@@ -153,7 +153,18 @@ WHERE status = 'open' GROUP BY owner ORDER BY violations DESC LIMIT 10;
 SELECT * FROM your_catalog.watchdog.v_domain_compliance;
 ```
 
-### Step 5: Deploy the Lakeview dashboard (optional)
+### Step 5: Run the demo notebook (recommended)
+
+Import `engine/notebooks/governance_posture_demo.py` into your workspace. It walks through:
+
+1. **What the Governance Hub shows** — UC asset inventory, tag coverage, privilege distribution (system tables)
+2. **Where the gaps are** — cross-domain posture, cross-tag rules, violation tracking, owner accountability
+3. **What Watchdog adds** — compliance posture by domain, ontology classification, owner violation detail, composable rules, remediation lists
+4. **The unified view** — cross-join queries that combine Hub system tables with Watchdog data (who has access to violated resources, untagged tables with violations)
+
+This is the best way to demonstrate the value to a customer or stakeholder.
+
+### Step 6: Deploy the Lakeview dashboards (optional)
 
 ```bash
 python engine/dashboards/lakeview/deploy_dashboard.py \
@@ -164,9 +175,11 @@ python engine/dashboards/lakeview/deploy_dashboard.py \
   --publish
 ```
 
-5-page governance dashboard: Compliance Overview, Owner Accountability, Resource Compliance, Access Governance, Data Quality.
+Two dashboards available:
+- **Watchdog Governance Posture** — standalone Watchdog compliance data (5 pages)
+- **UC Governance Hub + Watchdog** — unified dashboard combining UC system tables with Watchdog compliance. Includes cross-join views: who has access to violated resources, untagged tables with violations.
 
-### Step 6: Deploy the MCP server (optional)
+### Step 7: Deploy the MCP server (optional)
 
 Edit `mcp/databricks.yml` with your workspace target, then:
 
@@ -182,7 +195,7 @@ databricks apps deploy watchdog-mcp-my-workspace \
 
 Connect from Claude Code: `https://<app-url>/mcp/sse`
 
-### Step 7: Deploy the Genie Space (optional)
+### Step 8: Deploy the Genie Space (optional)
 
 ```bash
 python mcp/genie/deploy_genie_space.py \
@@ -194,7 +207,7 @@ python mcp/genie/deploy_genie_space.py \
 
 Business users can ask: "Who has the most critical violations?" or "Which PII tables lack a data steward?"
 
-### Step 8: Deploy AI guardrails (optional)
+### Step 9: Deploy AI guardrails (optional)
 
 Edit `guardrails/databricks.yml` with your workspace target, then:
 

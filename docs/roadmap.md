@@ -204,14 +204,15 @@ The platform governs data access (ABAC at query time). MLflow traces agent execu
 - ✅ `policies/agent_governance.yml` — POL-AGENT-001 through POL-AGENT-005, POL-EXEC-001, POL-EXEC-002
 - ✅ Rule primitives for agent governance in `rule_primitives.yml`
 
-**5D: Runtime Guardrails (agent middleware)**
+**5D: Runtime Guardrails (agent middleware)** ✅
 
-Extend the guardrails MCP with runtime tools that agents call during execution:
+Four runtime tools that agents call during execution:
+- ✅ `check_before_access(agent_id, table, operation, columns)` — deny/warn/allow with reasons, PII detection, masked view suggestions, sensitive column checks, session tracking
+- ✅ `log_agent_action(agent_id, action, target, metadata)` — structured audit events with UUID, session counter
+- ✅ `get_agent_compliance(agent_id)` — session state snapshot (checks passed/denied/warned, tables accessed, risk level)
+- ✅ `report_agent_execution(agent_id)` — compliance status (compliant/needs_review/non_compliant), risk level, recommendations, session cleanup
 
-- `check_before_access(agent_id, table, operation, columns)` — real-time governance check before the agent reads data. Returns allow/deny with reason and suggested alternative (e.g., masked view).
-- `log_agent_action(agent_id, action, target, metadata)` — structured audit logging of agent behavior for post-execution compliance.
-- `get_agent_compliance(agent_id)` — current compliance status of an agent based on its recent execution traces.
-- `report_agent_execution(trace_id)` — post-execution compliance report: which policies were triggered, which data was accessed, risk score.
+Session management with `_calculate_risk_level()`: critical (PII + denied), high (PII + warned, or denied), medium (warned), low (all passed). Deployed to fe-stable as Databricks App.
 
 **5E: Agent Compliance Dashboard** ✅
 

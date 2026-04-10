@@ -201,6 +201,13 @@ derived_classes:
 
   # ── Agent specializations ─────────────────────────────────────────────
 
+  ManagedModelEndpoint:
+    parent: AgentAsset
+    description: "Databricks-managed Foundation Model API endpoint (not a customer agent)"
+    classifier:
+      tag_equals:
+        managed_endpoint: "true"
+
   AgentWithPiiAccess:
     parent: AgentAsset
     description: "Agent that has accessed PII data in recent executions"

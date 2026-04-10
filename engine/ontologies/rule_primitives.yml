@@ -233,6 +233,20 @@ primitives:
 
   # ── Agent Governance ──────────────────────────────────────────────────
 
+  is_managed_endpoint:
+    description: "Endpoint is a Databricks-managed FMAPI model (not a customer agent)"
+    type: tag_equals
+    key: managed_endpoint
+    value: "true"
+
+  is_customer_agent:
+    description: "Agent is customer-deployed (not a Databricks FMAPI endpoint)"
+    type: none_of
+    rules:
+      - type: tag_equals
+        key: managed_endpoint
+        value: "true"
+
   agent_has_audit_logging:
     description: "Agent must have audit logging enabled"
     type: tag_equals

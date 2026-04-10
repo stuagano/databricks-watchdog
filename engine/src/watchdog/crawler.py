@@ -326,28 +326,41 @@ class ResourceCrawler:
             print(f"  Apps crawl partial failure: {e}")
 
         # Source 2: Model serving endpoints (agents deployed as endpoints)
+        # FMAPI endpoints (databricks-*) are Databricks-managed foundation
+        # models, not customer agents. They get tagged as managed_endpoint
+        # so the ontology can classify them separately and exempt them from
+        # customer agent governance policies.
+        _FMAPI_PREFIXES = ("databricks-",)
         try:
             endpoints = self.w.serving_endpoints.list()
             for ep in endpoints:
                 tags = {}
+                ep_name = ep.name or ""
+                is_fmapi = any(ep_name.startswith(p) for p in _FMAPI_PREFIXES)
                 metadata = {
-                    "endpoint_name": ep.name or "",
+                    "endpoint_name": ep_name,
                     "deployed_by": getattr(ep, "creator", "") or "",
                     "endpoint_state": str(getattr(getattr(ep, "state", None), "ready", "")),
                     "created_at": str(getattr(ep, "creation_timestamp", "")),
+                    "is_fmapi": str(is_fmapi).lower(),
                 }
 
                 creator = getattr(ep, "creator", "") or ""
                 if creator:
                     tags["agent_owner"] = creator
                     tags["deployed_by"] = creator
-                tags["model_endpoint"] = ep.name or ""
+                tags["model_endpoint"] = ep_name
+
+                if is_fmapi:
+                    tags["managed_endpoint"] = "true"
+                    tags["agent_owner"] = "databricks"
+                    tags["audit_logging_enabled"] = "true"
 
                 rows.append(self._make_row(
                     resource_type="agent",
-                    resource_id=f"agent:endpoint:{ep.name}",
-                    resource_name=ep.name or "",
-                    owner=creator,
+                    resource_id=f"agent:endpoint:{ep_name}",
+                    resource_name=ep_name,
+                    owner=creator if not is_fmapi else "databricks",
                     domain="",
                     tags=tags,
                     metadata=metadata,

@@ -117,7 +117,7 @@ class TestDerivedAgentClasses:
             name for name, cls in resource_classes["derived_classes"].items()
             if cls.get("parent") == "AgentAsset"
         ]
-        assert len(agent_classes) == 6
+        assert len(agent_classes) == 7
 
 
 # ── Agent rule primitives ───────────────────────────────────────────────────

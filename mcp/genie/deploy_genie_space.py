@@ -80,6 +80,13 @@ def _build_space_config(
         "v_tag_policy_coverage",
         "v_data_classification_summary",
         "v_dq_monitoring_coverage",
+        "v_cross_metastore_compliance",
+        "v_cross_metastore_inventory",
+        "v_compliance_trend",
+        "v_agent_inventory",
+        "v_agent_execution_compliance",
+        "v_agent_risk_heatmap",
+        "v_agent_remediation_priorities",
     ]
     # UC system tables (Governance Hub data sources)
     system_tables = [
@@ -90,6 +97,7 @@ def _build_space_config(
         "system.information_schema.column_tags",
         "system.information_schema.table_tags",
         "system.access.audit",
+        "system.serving.endpoint_usage",
     ]
 
     table_identifiers = sorted(

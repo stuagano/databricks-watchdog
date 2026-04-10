@@ -152,13 +152,16 @@ Focus: make Watchdog the AI interface for governance posture.
 - ✅ `explore_governance` — free-form read-only SQL against Watchdog tables with write-operation safety guard
 - ✅ `suggest_classification` — find unclassified resources, analyze tag patterns, propose new ontology classes
 
-**Genie Space integration**
+**Genie Space integration** ✅
 - ✅ Genie Space deployed with Watchdog Delta tables
-- Expand Genie Space datasets to cover all 9 semantic views
+- ✅ Expanded to all 13 semantic views + system.serving.endpoint_usage (27 tables total)
+- ✅ 5 new agent SQL datasets: inventory, risk heatmap, executions, remediation, compliance trend
+- ✅ Updated instructions with agent governance concepts, risk tiers, common agent questions
 
-**Guardrails enhancements**
-- Guardrails tools call Watchdog MCP for richer policy context (not just Delta reads)
-- `build_safely` tool gains awareness of ontology classes — "this table is a HipaaAsset, here are the policies that apply"
+**Guardrails enhancements** ✅
+- ✅ `validate_ai_query` already has full ontology class awareness — reads `gov.classes`, checks `is_pii`, `is_export_controlled`, `is_restricted`, `is_confidential`, shows ontology classes in findings
+- ✅ Grant violation checks via `gov.grant_violations`
+- ✅ Classification escalation when resource has overprivileged grants
 
 ### Phase 3 — Multi-Metastore + Cross-Account
 

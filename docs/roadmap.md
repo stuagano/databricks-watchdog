@@ -163,17 +163,18 @@ Focus: make Watchdog the AI interface for governance posture.
 - ✅ Grant violation checks via `gov.grant_violations`
 - ✅ Classification escalation when resource has overprivileged grants
 
-### Phase 3 — Multi-Metastore + Cross-Account
+### Phase 3 — Multi-Metastore + Cross-Account ✅ Complete
 
 Focus: enterprise-scale posture across metastores.
 
-- ✅ `metastore_id` column in inventory schema (nullable)
+- ✅ `metastore_id` column on all 9 tables: `resource_inventory`, `scan_summary`, `scan_results`, `violations`, `exceptions`, `resource_classifications`, `policies`, `policies_history`, `notification_queue`
 - ✅ `crawl_all_metastores()` entrypoint — iterates configs, runs `crawl_all()` per metastore
 - ✅ Cross-metastore views: `v_cross_metastore_compliance`, `v_cross_metastore_inventory`
 - ✅ MCP tools accept optional `metastore` parameter
-- `metastore_id` column active on remaining tables: `scan_results`, `violations`, `exceptions`, `resource_classifications`, `policies`, `policies_history`
-- `WATCHDOG_METASTORE_IDS` env var for multi-metastore scanning config
-- Ontos adapter + Guardrails get metastore-aware queries
+- ✅ `WATCHDOG_METASTORE_IDS` env var in `WatchdogConfig` — comma-separated list, `is_multi_metastore` property
+- ✅ Write paths propagate metastore_id: violations MERGE, scan_results INSERT, resource_classifications INSERT
+- ✅ Ontos adapter: `set_active_metastore()`, `list_metastores()`, `_metastore_clause()` on all queries
+- ✅ Guardrails watchdog_client: all query functions accept `metastore_id` parameter
 
 ### Phase 4 — Industry Policy Packs ✅ Complete
 

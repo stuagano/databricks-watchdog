@@ -216,6 +216,7 @@ def _ensure_policies_history_table(spark: SparkSession, catalog: str,
             origin STRING NOT NULL,
             change_type STRING NOT NULL,
             changed_by STRING,
+            metastore_id STRING,
             changed_at TIMESTAMP NOT NULL
         )
         USING DELTA
@@ -385,6 +386,7 @@ def sync_policies_to_delta(spark: SparkSession, catalog: str, schema: str,
             rule_json STRING,
             source_file STRING,
             origin STRING NOT NULL,
+            metastore_id STRING,
             updated_at TIMESTAMP
         )
         USING DELTA

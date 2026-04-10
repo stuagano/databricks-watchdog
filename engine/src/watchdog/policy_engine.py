@@ -66,6 +66,7 @@ def ensure_scan_results_table(spark: SparkSession, catalog: str, schema: str) ->
             domain STRING,
             severity STRING,
             resource_classes STRING,
+            metastore_id STRING,
             evaluated_at TIMESTAMP NOT NULL
         )
         USING DELTA
@@ -191,9 +192,13 @@ class PolicyEngine:
                     self.now,
                 ))
 
+        # Determine metastore_id from inventory for multi-metastore support
+        metastore_id = inventory[0].metastore_id if inventory and hasattr(inventory[0], "metastore_id") else None
+
         write_classifications(
             self.spark, self.catalog, self.schema,
             scan_id, classification_rows,
+            metastore_id=metastore_id,
         )
 
         # Pass 2: Evaluate policies
@@ -223,6 +228,7 @@ class PolicyEngine:
                     policy.domain,
                     policy.severity,
                     ",".join(sorted(resource_classes.get(resource.resource_id, set()))),
+                    metastore_id,
                     self.now,
                 ))
 
@@ -238,6 +244,7 @@ class PolicyEngine:
                 T.StructField("domain", T.StringType()),
                 T.StructField("severity", T.StringType()),
                 T.StructField("resource_classes", T.StringType()),
+                T.StructField("metastore_id", T.StringType()),
                 T.StructField("evaluated_at", T.TimestampType()),
             ])
             df = self.spark.createDataFrame(scan_results, schema=_scan_schema)
@@ -249,8 +256,6 @@ class PolicyEngine:
         )
 
         # Snapshot posture for trend tracking
-        # Determine metastore_id from the first resource (all share the same scan)
-        metastore_id = inventory[0].metastore_id if inventory and hasattr(inventory[0], "metastore_id") else None
         write_scan_summary(
             self.spark, self.catalog, self.schema,
             scan_id=scan_id,

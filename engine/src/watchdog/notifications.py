@@ -37,6 +37,7 @@ def ensure_notification_queue(spark: SparkSession, catalog: str, schema: str) ->
             low_count INT,
             violation_ids STRING,
             dashboard_url STRING,
+            metastore_id STRING,
             created_at TIMESTAMP NOT NULL,
             delivered_at TIMESTAMP,
             delivery_channel STRING,

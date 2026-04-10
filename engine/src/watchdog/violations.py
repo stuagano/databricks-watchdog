@@ -43,6 +43,7 @@ def ensure_violations_table(spark: SparkSession, catalog: str, schema: str) -> N
             remediation STRING,
             owner STRING,
             resource_classes STRING,
+            metastore_id STRING,
             first_detected TIMESTAMP NOT NULL,
             last_detected TIMESTAMP NOT NULL,
             resolved_at TIMESTAMP,
@@ -70,7 +71,8 @@ def ensure_exceptions_table(spark: SparkSession, catalog: str, schema: str) -> N
             justification STRING NOT NULL,
             approved_at TIMESTAMP NOT NULL,
             expires_at TIMESTAMP,
-            active BOOLEAN DEFAULT true
+            active BOOLEAN DEFAULT true,
+            metastore_id STRING
         )
         USING DELTA
         TBLPROPERTIES (
@@ -96,6 +98,7 @@ def ensure_classifications_table(spark: SparkSession, catalog: str, schema: str)
             class_name STRING NOT NULL,
             class_ancestors STRING,
             root_class STRING,
+            metastore_id STRING,
             classified_at TIMESTAMP NOT NULL
         )
         USING DELTA
@@ -107,12 +110,14 @@ def ensure_classifications_table(spark: SparkSession, catalog: str, schema: str)
 
 
 def write_classifications(spark: SparkSession, catalog: str, schema: str,
-                          scan_id: str, classifications: list[tuple]) -> int:
+                          scan_id: str, classifications: list[tuple],
+                          metastore_id: str | None = None) -> int:
     """Write resource classification results to Delta.
 
     Args:
         classifications: List of (resource_id, resource_type, resource_name,
                          owner, class_name, class_ancestors, root_class, timestamp) tuples
+        metastore_id: Optional metastore identifier for multi-metastore support.
 
     Returns:
         Number of classification rows written.
@@ -123,7 +128,7 @@ def write_classifications(spark: SparkSession, catalog: str, schema: str,
     ensure_classifications_table(spark, catalog, schema)
     table = f"{catalog}.{schema}.resource_classifications"
 
-    rows = [(scan_id, *c) for c in classifications]
+    rows = [(scan_id, *c, metastore_id) for c in classifications]
     _class_schema = T.StructType([
         T.StructField("scan_id", T.StringType()),
         T.StructField("resource_id", T.StringType()),
@@ -134,6 +139,7 @@ def write_classifications(spark: SparkSession, catalog: str, schema: str,
         T.StructField("class_ancestors", T.StringType()),
         T.StructField("root_class", T.StringType()),
         T.StructField("classified_at", T.TimestampType()),
+        T.StructField("metastore_id", T.StringType()),
     ])
     df = spark.createDataFrame(rows, schema=_class_schema)
     df.write.mode("append").saveAsTable(table)
@@ -172,7 +178,7 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
     # when the JOIN produces multiple rows per resource.
     current_failures = spark.sql(f"""
         SELECT resource_id, policy_id, details, domain, severity,
-               resource_classes, resource_type, resource_name, owner
+               resource_classes, resource_type, resource_name, owner, metastore_id
         FROM (
             SELECT
                 sr.resource_id,
@@ -184,6 +190,7 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
                 ri.resource_type,
                 ri.resource_name,
                 ri.owner,
+                ri.metastore_id,
                 ROW_NUMBER() OVER (
                     PARTITION BY sr.resource_id, sr.policy_id
                     ORDER BY sr.evaluated_at DESC
@@ -238,7 +245,7 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
         WHEN NOT MATCHED THEN INSERT (
             violation_id, resource_id, resource_type, resource_name,
             policy_id, severity, domain, detail, remediation, owner,
-            resource_classes, first_detected, last_detected, status
+            resource_classes, metastore_id, first_detected, last_detected, status
         ) VALUES (
             uuid(),
             source.resource_id,
@@ -251,6 +258,7 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
             NULL,
             source.owner,
             source.resource_classes,
+            source.metastore_id,
             current_timestamp(),
             current_timestamp(),
             source.computed_status

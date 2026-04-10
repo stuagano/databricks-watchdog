@@ -60,8 +60,8 @@ class TestToolRegistration:
     """Verify all tools are registered with correct names and schemas."""
 
     def test_total_tool_count(self):
-        assert len(TOOLS) == 9, (
-            f"Expected 9 registered tools, got {len(TOOLS)}: "
+        assert len(TOOLS) == 13, (
+            f"Expected 13 registered tools, got {len(TOOLS)}: "
             f"{[t.name for t in TOOLS]}"
         )
 
@@ -77,6 +77,10 @@ class TestToolRegistration:
             "explain_violation",
             "what_if_policy",
             "list_metastores",
+            "suggest_policies",
+            "policy_impact_analysis",
+            "explore_governance",
+            "suggest_classification",
         }
         assert names == expected
 

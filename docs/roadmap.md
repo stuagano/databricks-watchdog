@@ -2,7 +2,7 @@
 
 > What Watchdog is, what it isn't, and where it's going.
 >
-> Last updated: 2026-04-08
+> Last updated: 2026-04-09
 
 ## Identity
 
@@ -17,7 +17,7 @@ The platform enforces governance at query time (ABAC masks a column, a tag polic
 - **Evaluates** declarative policies against classified resources (composable rules: `all_of`, `any_of`, `if_then`)
 - **Tracks violations** with a lifecycle (open → resolved/exception), deduplication, and owner attribution
 - **Notifies** resource owners with per-owner digests and remediation guidance
-- **Exposes** compliance posture to AI assistants via MCP server (6 tools)
+- **Exposes** compliance posture to AI assistants via MCP server (13 tools)
 - **Feeds downstream consumers** — Ontos (business catalog), Guardrails (AI build-time enforcement), Governance Hub (native UI), Lakeview dashboards
 - **Ships** industry policy packs (healthcare, financial, defense) as reusable YAML
 
@@ -104,55 +104,57 @@ What's shipping natively and what it means for Watchdog scope:
 
 ## Roadmap
 
-### Phase 1 — Core Engine Hardening (Now)
+### Phase 1 — Core Engine Hardening ✅ Complete
 
 Focus: make the existing engine robust, reusable, and easy to deploy.
 
-**Engine improvements**
-- Add `metastore_id` column to all table schemas (nullable, prep for multi-metastore)
-- Grants crawler (`_crawl_grants()`) — crawl `information_schema.*_privileges` + SDK `w.grants.get()`
-- Service principal crawler (`_crawl_service_principals()`)
-- New semantic views: `v_tag_policy_coverage`, `v_data_classification_summary`, `v_dq_monitoring_coverage`
-- Enable CDF on `resource_inventory` and `dq_status`
+**Engine improvements** ✅
+- ✅ `metastore_id` column on `resource_inventory` schema (nullable, prep for multi-metastore)
+- ✅ Grants crawler (`_crawl_grants()`) — `information_schema.*_privileges` + SDK `w.grants.get()` (non-inherited only + catalog-level via SDK)
+- ✅ Service principal crawler (`_crawl_service_principals()`) — application ID, active status, entitlements
+- ✅ Semantic views: `v_tag_policy_coverage`, `v_data_classification_summary`, `v_dq_monitoring_coverage` (9 views total)
+- ✅ CDF enabled on `resource_inventory` (with deletion vectors)
+- ✅ Compliance trend tracking: `scan_summary` table + `v_compliance_trend` view with LAG() deltas and rolling averages
 
-**New policies**
-- Access governance policies (`policies/access_governance.yml`):
-  - No ALL PRIVILEGES on production data
-  - No direct user grants on catalogs (must use groups)
-  - Service principals must not have workspace admin entitlements
-  - Groups with MANAGE on catalogs must have at least 2 members
+**Access governance policies** ✅
+- ✅ `policies/access_governance.yml` — no ALL PRIVILEGES on prod, no direct user grants, SP entitlement checks, group membership rules
 
-**New ontology classes**
-- `GrantAsset`, `OverprivilegedGrant`, `DirectUserGrant`
+**Ontology classes** ✅
+- ✅ `GrantAsset`, `OverprivilegedGrant`, `DirectUserGrant` in `resource_classes.yml`
 
-**Watchdog MCP server**
-- Harden existing 6 tools
-- Add `explain_violation` — NL explanation of what a violation means and how to fix it
+**Watchdog MCP server** ✅ (9 tools)
+- ✅ `get_violations` — query by status, severity, resource_type, policy, owner
+- ✅ `get_governance_summary` — executive overview with trends
+- ✅ `get_policies` — list all policies with status
+- ✅ `get_scan_history` — recent scan results
+- ✅ `get_resource_violations` — full compliance history per resource
+- ✅ `get_exceptions` — approved waivers
+- ✅ `explain_violation` — NL explanation with remediation steps
+- ✅ `what_if_policy` — simulate proposed policy impact (originally Phase 2)
+- ✅ `list_metastores` — scanned metastores
 
-**Ontos adapter**
-- Maintain GovernanceProvider protocol as the contract between Watchdog and Ontos
-- Ensure `WatchdogProvider` stays current as engine schema evolves
-- Ontos reads classification + violation data for its governance views
+**Ontos adapter** ✅
+- ✅ GovernanceProvider protocol + WatchdogProvider implementation
+- ✅ Reads classification + violation data for governance views
 
-**Guardrails**
-- Maintain `watchdog_client.py` integration — reads classifications + violations from Watchdog Delta tables
-- Ensure guardrails tools (`validate_table_usage`, `discover_governed_assets`, `check_policy_compliance`) stay current with engine schema
-- Guardrails provides AI build-time governance: "is this table safe to use in my agent?"
+**Guardrails** ✅
+- ✅ `watchdog_client.py` integration — reads classifications + violations from Delta tables
+- ✅ 9 MCP tools: `validate_table_usage`, `discover_governed_assets`, `check_policy_compliance`, etc.
 
-### Phase 2 — AI-Assisted Governance
+### Phase 2 — AI-Assisted Governance (Next)
 
 Focus: make Watchdog the AI interface for governance posture.
 
-**New MCP tools (Watchdog MCP server)**
-- `what_if_policy` — simulate violations a proposed policy would produce against current inventory
-- `suggest_policies` — propose new policy YAML based on violation landscape and metadata gaps
-- `policy_impact_analysis` — predict how many new violations a policy change would create
-- `explore_governance` — free-form NL → SQL against Watchdog tables
-- `suggest_classification` — suggest ontology classes based on tags, name patterns, similar resources
+**New MCP tools (Watchdog MCP server)** ✅
+- ✅ `what_if_policy` — simulate violations a proposed policy would produce (built during Phase 1)
+- ✅ `suggest_policies` — analyze inventory + violation landscape, identify tag gaps, unclassified resources, and access patterns; returns suggested policy YAML
+- ✅ `policy_impact_analysis` — analyze impact of deactivating, changing severity, or changing scope of an existing policy; shows affected owners and violation counts
+- ✅ `explore_governance` — free-form read-only SQL against Watchdog tables with write-operation safety guard
+- ✅ `suggest_classification` — find unclassified resources, analyze tag patterns, propose new ontology classes
 
 **Genie Space integration**
-- Pre-built Genie Space wired to Watchdog Delta tables for NL governance exploration
-- Complements MCP server — Genie for business users, MCP for AI agents
+- ✅ Genie Space deployed with Watchdog Delta tables
+- Expand Genie Space datasets to cover all 9 semantic views
 
 **Guardrails enhancements**
 - Guardrails tools call Watchdog MCP for richer policy context (not just Delta reads)
@@ -162,22 +164,23 @@ Focus: make Watchdog the AI interface for governance posture.
 
 Focus: enterprise-scale posture across metastores.
 
-- `metastore_id` column becomes active filter key
-- New config: `WATCHDOG_METASTORE_IDS` env var for multi-metastore scanning
-- `crawl_all_metastores()` entrypoint — iterates configs, runs `crawl_all()` per metastore
-- Cross-metastore compliance views: `v_cross_metastore_compliance`, `v_cross_metastore_inventory`
-- MCP tools get optional `metastore` parameter
+- ✅ `metastore_id` column in inventory schema (nullable)
+- ✅ `crawl_all_metastores()` entrypoint — iterates configs, runs `crawl_all()` per metastore
+- ✅ Cross-metastore views: `v_cross_metastore_compliance`, `v_cross_metastore_inventory`
+- ✅ MCP tools accept optional `metastore` parameter
+- `metastore_id` column active on remaining tables: `scan_results`, `violations`, `exceptions`, `resource_classifications`, `policies`, `policies_history`
+- `WATCHDOG_METASTORE_IDS` env var for multi-metastore scanning config
 - Ontos adapter + Guardrails get metastore-aware queries
 
-### Phase 4 — Industry Policy Packs
+### Phase 4 — Industry Policy Packs ✅ Complete
 
 Focus: opinionated, regulation-specific policy sets that customers can adopt in minutes.
 
-- `library/healthcare/` — HIPAA policies (PHI stewardship, access logging, encryption requirements)
-- `library/financial/` — SOX, PCI-DSS, GLBA policies
-- `library/defense/` — NIST 800-171, CMMC, ITAR policies
-- `library/general/` — CIS benchmarks, data lifecycle, cost governance
-- Each pack: ontology classes + rule primitives + policies + dashboard SQL
+- ✅ `library/healthcare/` — HIPAA policies (PHI stewardship, access logging, encryption requirements)
+- ✅ `library/financial/` — SOX, PCI-DSS, GLBA policies
+- ✅ `library/defense/` — NIST 800-171, CMMC, ITAR policies
+- ✅ `library/general/` — CIS benchmarks, data lifecycle, cost governance
+- ✅ Each pack: ontology classes + rule primitives + policies + dashboard SQL
 
 ### Phase 5 — AI Agent Runtime Governance
 
@@ -185,122 +188,21 @@ Focus: extend Watchdog from data compliance to **agent compliance** — govern A
 
 The platform governs data access (ABAC at query time). MLflow traces agent execution. But nobody governs **agent behavior against policies** — does this agent's data access pattern comply with our governance rules? Did it access PII without approval? Did it export sensitive data?
 
-**5A: Agent Crawler — crawl agent definitions and traces**
+**5A: Agent Crawler** ✅
 
-New resource type `agent` in the engine:
-- Source: Agent Bricks API (list deployed agents) + MLflow traces (agent execution history)
-- `resource_type = "agent"`, `resource_id = "agent:{agent_name}"`
-- Metadata: `deployed_by`, `model_endpoint`, `tools_available`, `last_execution`, `total_executions`
-- Enrichment crawler: `_crawl_agent_traces()` — reads MLflow traces for each agent, extracts tables accessed, columns read, tools called, external endpoints hit
+- ✅ `_crawl_agents()` — Databricks Apps + model serving endpoints (heuristic keyword match)
+- ✅ `_crawl_agent_traces()` — per-endpoint usage from `system.serving.endpoint_usage` (7-day window, per-requester aggregation, token counts, error rates)
+- ✅ `resource_type = "agent"` and `resource_type = "agent_execution"` in inventory
 
-New resource type `agent_execution` (from traces):
-- `resource_type = "agent_execution"`, `resource_id = "execution:{trace_id}"`
-- Metadata: `agent_name`, `tables_accessed`, `columns_read`, `pii_tables_accessed`, `external_calls`, `duration_ms`, `user_identity`
-- Tags derived from trace analysis: `accessed_pii=true`, `exported_data=true`, `used_external_tool=true`
+**5B: Agent Ontology Classes** ✅
 
-**5B: Agent Ontology Classes**
+- ✅ `AgentAsset` base class + derived: `AgentWithPiiAccess`, `AgentWithExternalAccess`, `AgentWithDataExport`, `UngovernedAgent`, `ProductionAgent`
+- ✅ Execution-level: `HighRiskExecution`
 
-```yaml
-# New base class
-AgentAsset:
-  matches_resource_types: [agent]
+**5C: Agent Governance Policies** ✅
 
-# Derived classes based on behavior
-AgentWithPiiAccess:
-  parent: AgentAsset
-  description: "Agent that has accessed PII data in recent executions"
-  classifier:
-    tag_equals:
-      accessed_pii: "true"
-
-AgentWithExternalAccess:
-  parent: AgentAsset
-  description: "Agent that calls external endpoints or APIs"
-  classifier:
-    tag_equals:
-      used_external_tool: "true"
-
-AgentWithDataExport:
-  parent: AgentAsset
-  description: "Agent that exports data outside the lakehouse"
-  classifier:
-    tag_equals:
-      exported_data: "true"
-
-UngovernedAgent:
-  parent: AgentAsset
-  description: "Agent with no governance metadata (no owner, no audit config)"
-  classifier:
-    none_of:
-      - tag_exists: [agent_owner, audit_logging_enabled]
-
-# Execution-level classes
-HighRiskExecution:
-  parent: DataAsset
-  description: "Agent execution that accessed sensitive data"
-  classifier:
-    all_of:
-      - metadata_equals:
-          resource_type: "agent_execution"
-      - tag_equals:
-          accessed_pii: "true"
-```
-
-**5C: Agent Governance Policies**
-
-```yaml
-policies:
-  # Agent-level policies
-  - id: POL-AGENT-001
-    name: "Agents accessing PII must have audit logging enabled"
-    applies_to: AgentWithPiiAccess
-    severity: critical
-    rule:
-      ref: agent_has_audit_logging
-
-  - id: POL-AGENT-002
-    name: "Agents must have a designated owner"
-    applies_to: AgentAsset
-    severity: high
-    rule:
-      ref: has_agent_owner
-
-  - id: POL-AGENT-003
-    name: "Agents exporting data must have approval"
-    applies_to: AgentWithDataExport
-    severity: critical
-    rule:
-      ref: has_data_export_approval
-
-  - id: POL-AGENT-004
-    name: "Agents calling external endpoints must be registered"
-    applies_to: AgentWithExternalAccess
-    severity: high
-    rule:
-      ref: has_external_access_registration
-
-  - id: POL-AGENT-005
-    name: "Ungoverned agents must not access production data"
-    applies_to: UngovernedAgent
-    severity: critical
-    rule:
-      ref: not_accessing_production
-
-  # Execution-level policies
-  - id: POL-EXEC-001
-    name: "Agent executions accessing PII must be traced"
-    applies_to: HighRiskExecution
-    severity: critical
-    rule:
-      ref: execution_has_trace
-
-  - id: POL-EXEC-002
-    name: "No agent execution should access more than 10 PII tables in one run"
-    applies_to: HighRiskExecution
-    severity: high
-    rule:
-      ref: pii_table_count_under_threshold
-```
+- ✅ `policies/agent_governance.yml` — POL-AGENT-001 through POL-AGENT-005, POL-EXEC-001, POL-EXEC-002
+- ✅ Rule primitives for agent governance in `rule_primitives.yml`
 
 **5D: Runtime Guardrails (agent middleware)**
 
@@ -357,7 +259,7 @@ databricks-watchdog/
 │   └── resources/             #   Job + warehouse definitions
 │
 ├── mcp/                       # Watchdog MCP server — AI governance interface
-│   └── src/watchdog_mcp/      #   6+ tools for AI assistants
+│   └── src/watchdog_mcp/      #   13 tools for AI assistants
 │
 ├── ontos-adapter/             # Pluggable governance module for Ontos
 │   └── src/watchdog_governance/  GovernanceProvider protocol + WatchdogProvider

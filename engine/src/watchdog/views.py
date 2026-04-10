@@ -45,7 +45,12 @@ Twelve views are created in the watchdog schema after each evaluate run:
     One row per agent. Cross-tabulates data sensitivity × access frequency
     for risk scoring.
 
-All twelve are regular views (not materialized) so they always reflect the
+  v_agent_remediation_priorities
+    One row per (policy_id, remediation action). Prioritized by impact —
+    which single action resolves the most violations? Includes specific
+    remediation steps and affected agent lists.
+
+All thirteen are regular views (not materialized) so they always reflect the
 current state of the underlying tables.
 """
 
@@ -70,6 +75,7 @@ def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> Non
     _ensure_agent_inventory_view(spark, catalog, schema)
     _ensure_agent_execution_compliance_view(spark, catalog, schema)
     _ensure_agent_risk_heatmap_view(spark, catalog, schema)
+    _ensure_agent_remediation_priorities_view(spark, catalog, schema)
 
 
 def _ensure_resource_compliance_view(spark: SparkSession, catalog: str,
@@ -675,4 +681,87 @@ def _ensure_agent_risk_heatmap_view(spark: SparkSession, catalog: str,
                  aa.total_requests, aa.total_input_tokens,
                  aa.unique_requesters, aa.any_pii_access,
                  aa.any_external_access, aa.any_data_export, aa.total_errors
+    """)
+
+
+def _ensure_agent_remediation_priorities_view(spark: SparkSession, catalog: str,
+                                               schema: str) -> None:
+    """v_agent_remediation_priorities: prioritized remediation action plan.
+
+    One row per policy with open agent/execution violations. Ranked by
+    impact — which single action resolves the most violations? Includes
+    the policy remediation text, severity, affected agent count, and
+    the list of affected agent names so an admin can act immediately.
+
+    Dashboard use: prioritized remediation table, quick wins chart.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_agent_remediation_priorities AS
+        WITH agent_violations AS (
+            SELECT
+                v.policy_id,
+                v.severity,
+                v.domain,
+                v.resource_id,
+                ri.resource_name,
+                ri.resource_type,
+                ri.owner,
+                ri.tags['managed_endpoint'] AS managed_endpoint,
+                DATEDIFF(current_timestamp(), v.first_detected) AS days_open,
+                v.first_detected
+            FROM {catalog}.{schema}.violations v
+            JOIN {catalog}.{schema}.resource_inventory ri
+                ON v.resource_id = ri.resource_id
+            WHERE v.status = 'open'
+                AND ri.resource_type IN ('agent', 'agent_execution')
+                AND ri.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+        )
+        SELECT
+            av.policy_id,
+            p.policy_name,
+            av.severity,
+            av.domain,
+            p.remediation AS remediation_steps,
+            p.description AS why_it_matters,
+            COUNT(*) AS total_violations,
+            COUNT(DISTINCT av.resource_id) AS affected_resources,
+            COUNT(DISTINCT CASE WHEN av.managed_endpoint = 'true' THEN av.resource_id END)
+                AS managed_endpoint_violations,
+            COUNT(DISTINCT CASE WHEN av.managed_endpoint IS NULL OR av.managed_endpoint != 'true'
+                THEN av.resource_id END)
+                AS customer_agent_violations,
+            COLLECT_SET(
+                CASE WHEN av.managed_endpoint IS NULL OR av.managed_endpoint != 'true'
+                    THEN av.resource_name END
+            ) AS affected_customer_agents,
+            COUNT(DISTINCT av.owner) AS affected_owners,
+            MIN(av.days_open) AS newest_days_open,
+            MAX(av.days_open) AS oldest_days_open,
+            -- Priority score: severity weight × violation count
+            -- critical=4, high=3, medium=2, low=1 × number of customer agent violations
+            (CASE av.severity
+                WHEN 'critical' THEN 4 WHEN 'high' THEN 3
+                WHEN 'medium' THEN 2 ELSE 1
+            END) * COUNT(DISTINCT CASE
+                WHEN av.managed_endpoint IS NULL OR av.managed_endpoint != 'true'
+                THEN av.resource_id END)
+                AS priority_score,
+            -- Effort estimate based on remediation type
+            CASE
+                WHEN p.policy_id LIKE 'POL-AGENT-002' THEN 'low — add agent_owner tag'
+                WHEN p.policy_id LIKE 'POL-AGENT-001' THEN 'low — enable audit logging tag'
+                WHEN p.policy_id LIKE 'POL-AGENT-006' THEN 'low — add model_endpoint tag'
+                WHEN p.policy_id LIKE 'POL-AGENT-007' THEN 'medium — configure error handling'
+                WHEN p.policy_id LIKE 'POL-AGENT-003' THEN 'medium — get export approval documented'
+                WHEN p.policy_id LIKE 'POL-AGENT-004' THEN 'medium — register external endpoints'
+                WHEN p.policy_id LIKE 'POL-AGENT-005' THEN 'high — restrict prod access or add governance'
+                WHEN p.policy_id LIKE 'POL-EXEC%' THEN 'medium — configure MLflow tracing'
+                ELSE 'medium'
+            END AS effort_estimate
+        FROM agent_violations av
+        LEFT JOIN {catalog}.{schema}.policies p
+            ON av.policy_id = p.policy_id
+        GROUP BY av.policy_id, p.policy_name, av.severity, av.domain,
+                 p.remediation, p.description, p.policy_id
+        ORDER BY priority_score DESC, total_violations DESC
     """)

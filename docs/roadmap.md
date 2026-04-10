@@ -227,12 +227,12 @@ Three semantic views + four dashboard SQL query sets:
 - ✅ Dashboard queries: overview KPIs, agent inventory detail, execution compliance, risk heatmap
 - ✅ PII access patterns, top consumers, error rates, violation-by-policy breakdown
 
-**5F: Integration with AI Gateway**
+**5F: Integration with AI Gateway** ✅
 
-Read AI Gateway audit logs and usage data:
-- Model routing decisions correlated with data sensitivity
-- Cost governance per agent (token usage × data classification)
-- Rate limiting enforcement for agents accessing sensitive data
+- ✅ Crawler enriched with AI Gateway metadata: `entity_type` (FOUNDATION_MODEL/CUSTOM_MODEL/EXTERNAL_MODEL), `task` (chat/completions/embeddings), `endpoint_creator`, `rate_limited_count`
+- ✅ `v_ai_gateway_cost_governance` view: per-(endpoint, requester) token consumption with estimated DBU cost, cost tiers, model routing breakdown, governance status cross-reference
+- ✅ Cost risk flags: `ungoverned_high_cost`, `rate_limited`, `high_error_rate`
+- ✅ Dashboard SQL queries: cost by model, cost by requester, entity type breakdown, ungoverned high-cost consumers, rate-limited requesters, model routing analysis
 
 ---
 

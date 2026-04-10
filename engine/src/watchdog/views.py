@@ -50,7 +50,12 @@ Twelve views are created in the watchdog schema after each evaluate run:
     which single action resolves the most violations? Includes specific
     remediation steps and affected agent lists.
 
-All thirteen are regular views (not materialized) so they always reflect the
+  v_ai_gateway_cost_governance
+    One row per (endpoint, requester). Token consumption with estimated
+    cost, entity type, task type, rate limiting flags, and Watchdog
+    governance status cross-reference.
+
+All fourteen are regular views (not materialized) so they always reflect the
 current state of the underlying tables.
 """
 
@@ -76,6 +81,7 @@ def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> Non
     _ensure_agent_execution_compliance_view(spark, catalog, schema)
     _ensure_agent_risk_heatmap_view(spark, catalog, schema)
     _ensure_agent_remediation_priorities_view(spark, catalog, schema)
+    _ensure_ai_gateway_cost_governance_view(spark, catalog, schema)
 
 
 def _ensure_resource_compliance_view(spark: SparkSession, catalog: str,
@@ -764,4 +770,109 @@ def _ensure_agent_remediation_priorities_view(spark: SparkSession, catalog: str,
         GROUP BY av.policy_id, p.policy_name, av.severity, av.domain,
                  p.remediation, p.description, p.policy_id
         ORDER BY priority_score DESC, total_violations DESC
+    """)
+
+
+def _ensure_ai_gateway_cost_governance_view(spark: SparkSession, catalog: str,
+                                             schema: str) -> None:
+    """v_ai_gateway_cost_governance: AI Gateway cost and routing governance.
+
+    One row per (endpoint, requester). Combines token consumption from
+    agent_execution records with entity type and task metadata from the
+    AI Gateway (via served_entities). Cross-references Watchdog governance
+    status to flag ungoverned high-cost consumers.
+
+    Cost estimation uses approximate DBU rates per task type:
+      - llm/v1/chat: ~1.0 DBU per 1M tokens
+      - llm/v1/completions: ~0.8 DBU per 1M tokens
+      - llm/v1/embeddings: ~0.1 DBU per 1M tokens
+
+    Dashboard use: cost by model, cost by requester, ungoverned cost,
+    rate-limited requesters, model routing breakdown.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_ai_gateway_cost_governance AS
+        WITH execution_data AS (
+            SELECT
+                ex.metadata['endpoint_name'] AS endpoint_name,
+                ex.metadata['entity_type'] AS entity_type,
+                ex.metadata['task'] AS task_type,
+                ex.metadata['requester'] AS requester,
+                ex.metadata['endpoint_creator'] AS endpoint_creator,
+                CAST(ex.metadata['request_count'] AS BIGINT) AS request_count,
+                CAST(ex.metadata['total_input_tokens'] AS BIGINT) AS input_tokens,
+                CAST(ex.metadata['total_output_tokens'] AS BIGINT) AS output_tokens,
+                CAST(ex.metadata['error_count'] AS BIGINT) AS error_count,
+                CAST(ex.metadata['rate_limited_count'] AS BIGINT) AS rate_limited_count,
+                ex.tags['high_volume_requester'] AS high_volume,
+                ex.tags['rate_limited'] AS rate_limited,
+                ex.tags['managed_endpoint'] AS managed_endpoint
+            FROM {catalog}.{schema}.resource_inventory ex
+            WHERE ex.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+                AND ex.resource_type = 'agent_execution'
+        ),
+        agent_gov AS (
+            SELECT
+                ag.metadata['endpoint_name'] AS endpoint_name,
+                CASE
+                    WHEN ag.tags['agent_owner'] IS NOT NULL
+                         AND ag.tags['audit_logging_enabled'] = 'true'
+                        THEN 'governed'
+                    WHEN ag.tags['agent_owner'] IS NOT NULL
+                        THEN 'partially_governed'
+                    ELSE 'ungoverned'
+                END AS governance_status,
+                ag.tags['managed_endpoint'] AS is_managed
+            FROM {catalog}.{schema}.resource_inventory ag
+            WHERE ag.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+                AND ag.resource_type = 'agent'
+        )
+        SELECT
+            ed.endpoint_name,
+            ed.entity_type,
+            ed.task_type,
+            ed.requester,
+            ed.endpoint_creator,
+            ed.request_count,
+            ed.input_tokens,
+            ed.output_tokens,
+            (ed.input_tokens + ed.output_tokens) AS total_tokens,
+            ed.error_count,
+            ed.rate_limited_count,
+            COALESCE(ed.high_volume, 'false') AS high_volume,
+            COALESCE(ed.rate_limited, 'false') AS rate_limited,
+            -- Estimated cost in DBUs (approximate)
+            ROUND(
+                (ed.input_tokens + ed.output_tokens) / 1000000.0
+                * CASE ed.task_type
+                    WHEN 'llm/v1/chat' THEN 1.0
+                    WHEN 'llm/v1/completions' THEN 0.8
+                    WHEN 'llm/v1/embeddings' THEN 0.1
+                    ELSE 0.5
+                END,
+                2
+            ) AS estimated_dbus,
+            -- Cost tier
+            CASE
+                WHEN (ed.input_tokens + ed.output_tokens) / 1000000.0 >= 100 THEN 'very_high'
+                WHEN (ed.input_tokens + ed.output_tokens) / 1000000.0 >= 10 THEN 'high'
+                WHEN (ed.input_tokens + ed.output_tokens) / 1000000.0 >= 1 THEN 'medium'
+                ELSE 'low'
+            END AS cost_tier,
+            COALESCE(ag.governance_status, 'unknown') AS governance_status,
+            COALESCE(ag.is_managed, 'false') AS is_managed_endpoint,
+            -- Flag: ungoverned + high cost = risk
+            CASE
+                WHEN COALESCE(ag.governance_status, 'unknown') = 'ungoverned'
+                     AND (ed.input_tokens + ed.output_tokens) / 1000000.0 >= 10
+                    THEN 'ungoverned_high_cost'
+                WHEN ed.rate_limited_count > 0
+                    THEN 'rate_limited'
+                WHEN ed.error_count > ed.request_count * 0.1
+                    THEN 'high_error_rate'
+                ELSE 'normal'
+            END AS cost_risk_flag
+        FROM execution_data ed
+        LEFT JOIN agent_gov ag
+            ON ed.endpoint_name = ag.endpoint_name
     """)

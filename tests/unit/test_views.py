@@ -117,7 +117,7 @@ class TestEnsureSemanticViews:
 
     def test_calls_all_view_functions(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
-        assert mock_spark.sql.call_count == 13
+        assert mock_spark.sql.call_count == 14
 
     def test_creates_all_views(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
@@ -143,6 +143,7 @@ class TestEnsureSemanticViews:
             "v_agent_execution_compliance",
             "v_agent_risk_heatmap",
             "v_agent_remediation_priorities",
+            "v_ai_gateway_cost_governance",
         }
         assert set(view_names) == expected
 

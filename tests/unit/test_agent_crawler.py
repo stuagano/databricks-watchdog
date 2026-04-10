@@ -265,19 +265,26 @@ class TestCrawlAgentsEndpoints:
 
 class TestCrawlAgentTraces:
     def _make_usage_row(self, endpoint_name="my-endpoint", served_entity_name="my-entity",
+                        entity_type="FOUNDATION_MODEL", task="llm/v1/chat",
+                        endpoint_creator="System-User",
                         requester="user@example.com", request_count=100,
                         total_input_tokens=5000, total_output_tokens=2000,
-                        error_count=0, first_request="2025-01-01T00:00:00Z",
+                        error_count=0, rate_limited_count=0,
+                        first_request="2025-01-01T00:00:00Z",
                         last_request="2025-01-07T00:00:00Z"):
         """Create a mock row matching the endpoint_usage aggregation query."""
         return SimpleNamespace(
             endpoint_name=endpoint_name,
             served_entity_name=served_entity_name,
+            entity_type=entity_type,
+            task=task,
+            endpoint_creator=endpoint_creator,
             requester=requester,
             request_count=request_count,
             total_input_tokens=total_input_tokens,
             total_output_tokens=total_output_tokens,
             error_count=error_count,
+            rate_limited_count=rate_limited_count,
             first_request=first_request,
             last_request=last_request,
         )
@@ -305,14 +312,19 @@ class TestCrawlAgentTraces:
         assert tags["trace_id"] == "agent-ep:alice@co.com"
         assert tags["execution_completed"] == "true"
         assert tags["model_endpoint"] == "agent-ep"
+        assert tags["entity_type"] == "FOUNDATION_MODEL"
+        assert tags["task_type"] == "llm/v1/chat"
         # metadata
         metadata = row[8]
         assert metadata["endpoint_name"] == "agent-ep"
         assert metadata["served_entity_name"] == "my-entity"
+        assert metadata["entity_type"] == "FOUNDATION_MODEL"
+        assert metadata["task"] == "llm/v1/chat"
         assert metadata["requester"] == "alice@co.com"
         assert metadata["request_count"] == "100"
         assert metadata["total_input_tokens"] == "5000"
         assert metadata["total_output_tokens"] == "2000"
+        assert metadata["rate_limited_count"] == "0"
         assert metadata["error_count"] == "0"
         assert metadata["resource_type"] == "agent_execution"
         assert len(row) == 10

@@ -390,18 +390,23 @@ class ResourceCrawler:
                 SELECT
                     se.endpoint_name,
                     se.served_entity_name,
+                    se.entity_type,
+                    se.task,
+                    se.created_by AS endpoint_creator,
                     eu.requester,
                     COUNT(*) as request_count,
                     SUM(COALESCE(eu.input_token_count, 0)) as total_input_tokens,
                     SUM(COALESCE(eu.output_token_count, 0)) as total_output_tokens,
                     SUM(CASE WHEN eu.status_code != 200 THEN 1 ELSE 0 END) as error_count,
+                    SUM(CASE WHEN eu.status_code >= 429 THEN 1 ELSE 0 END) as rate_limited_count,
                     MIN(eu.request_time) as first_request,
                     MAX(eu.request_time) as last_request
                 FROM system.serving.endpoint_usage eu
                 JOIN system.serving.served_entities se
                     ON eu.served_entity_id = se.served_entity_id
                 WHERE eu.request_time >= date_sub(current_date(), 7)
-                GROUP BY se.endpoint_name, se.served_entity_name, eu.requester
+                GROUP BY se.endpoint_name, se.served_entity_name, se.entity_type,
+                         se.task, se.created_by, eu.requester
                 ORDER BY request_count DESC
                 LIMIT 500
             """
@@ -412,24 +417,36 @@ class ResourceCrawler:
                 requester = row.requester or ""
                 request_id = f"{endpoint}:{requester}"
 
+                entity_type = row.entity_type or ""
+                task = row.task or ""
+
                 tags = {
                     "trace_id": request_id,
                     "execution_completed": "true" if row.error_count == 0 else "false",
                     "model_endpoint": endpoint,
+                    "entity_type": entity_type,
+                    "task_type": task,
                 }
 
                 # Flag high-volume users for governance review
                 if row.request_count and row.request_count > 10000:
                     tags["high_volume_requester"] = "true"
+                # Flag rate-limited requesters
+                if row.rate_limited_count and row.rate_limited_count > 0:
+                    tags["rate_limited"] = "true"
 
                 metadata = {
                     "endpoint_name": endpoint,
                     "served_entity_name": row.served_entity_name or "",
+                    "entity_type": entity_type,
+                    "task": task,
+                    "endpoint_creator": row.endpoint_creator or "",
                     "requester": requester,
                     "request_count": str(row.request_count or 0),
                     "total_input_tokens": str(row.total_input_tokens or 0),
                     "total_output_tokens": str(row.total_output_tokens or 0),
                     "error_count": str(row.error_count or 0),
+                    "rate_limited_count": str(row.rate_limited_count or 0),
                     "first_request": str(row.first_request or ""),
                     "last_request": str(row.last_request or ""),
                     "resource_type": "agent_execution",

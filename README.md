@@ -1,8 +1,10 @@
 # Databricks Watchdog
 
-**Compliance posture evaluator for Unity Catalog.**
+**The platform enforces governance. Nobody measures it.**
 
-The platform enforces governance at query time (ABAC, tag policies, column masks). Watchdog answers the question nobody else answers: *"across all my policies, how compliant is my estate right now, who owns the gaps, and is it getting better or worse?"*
+ABAC masks columns. Tag policies reject bad values. DQ monitors flag anomalies. But ask your CDO: *"across all our policies — security, data quality, cost, AI agents — how compliant are we right now?"* Nobody can answer that.
+
+Watchdog is the compliance posture layer for Unity Catalog. It crawls your estate, classifies resources through an ontology, evaluates declarative policies across every governance domain, tracks violations with owner accountability, and gives you a single compliance percentage that goes up or down over time.
 
 ## What You Get in 30 Minutes
 
@@ -276,8 +278,8 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | Component | What | Deploy Command |
 |---|---|---|
 | **Engine** | Daily scan — 16 resource types (data + compute + identity + agents), 28 ontology classes, 46 policies | `cd engine && databricks bundle deploy` |
-| **Lakeview Dashboard** | 5-page governance posture + unified Hub dashboard | `python engine/dashboards/lakeview/deploy_dashboard.py` |
-| **Watchdog MCP** | 9 AI tools for compliance queries | `cd mcp && databricks bundle deploy` + app deploy |
+| **Lakeview Dashboard** | 10-page unified governance hub (data + agents + remediation) | `python engine/dashboards/lakeview/deploy_dashboard.py` |
+| **Watchdog MCP** | 13 AI tools for compliance queries | `cd mcp && databricks bundle deploy` + app deploy |
 | **Genie Space** | NL governance exploration (19 tables: Watchdog + UC system tables) | `python mcp/genie/deploy_genie_space.py` |
 | **Guardrails MCP** | 13 tools: 9 build-time + 4 runtime agent governance | `cd guardrails && databricks bundle deploy` + app deploy |
 | **Ontos Adapter** | Pluggable governance module for Ontos business catalog | Drop-in to Ontos fork |
@@ -311,6 +313,11 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `v_dq_monitoring_coverage` | DQM/LHM monitoring status per table |
 | `v_cross_metastore_compliance` | Compliance % per metastore (multi-metastore) |
 | `v_cross_metastore_inventory` | Resource counts per metastore |
+| `v_compliance_trend` | Scan-over-scan deltas, direction, rolling averages |
+| `v_agent_inventory` | Per-agent governance status, source, violations |
+| `v_agent_execution_compliance` | Per-execution metrics, PII flags, compliance status |
+| `v_agent_risk_heatmap` | Sensitivity × volume risk scoring with tiers |
+| `v_agent_remediation_priorities` | Prioritized actions ranked by impact and effort |
 
 ---
 
@@ -328,6 +335,10 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `get_exceptions` | List approved exceptions |
 | `explain_violation` | Plain-language explanation with remediation steps |
 | `what_if_policy` | Simulate a proposed policy against current inventory |
+| `suggest_policies` | Analyze inventory gaps and propose new policies |
+| `policy_impact_analysis` | Project impact of changing/deactivating a policy |
+| `explore_governance` | Free-form read-only SQL against Watchdog tables |
+| `suggest_classification` | Find unclassified resources, propose ontology classes |
 | `list_metastores` | List scanned metastores with resource counts |
 
 ### Guardrails MCP (AI build-time + runtime governance)
@@ -397,23 +408,54 @@ Set `WATCHDOG_METASTORE_IDS=ms-123,ms-456` and use the `crawl_all_metastores` en
 
 ## Why Watchdog Exists
 
-| What the Platform Does | What Watchdog Does |
-|---|---|
-| ABAC masks a column at query time | Measures "what % of PII tables have ABAC coverage" |
-| Tag Policies reject invalid values | Evaluates cross-tag rules ("if PII then must have steward AND retention") |
-| DQ Monitoring detects anomalies | Evaluates "do all gold tables have DQ monitors enabled" |
-| Governance Hub shows dashboards | Tracks violations as stateful objects with owner accountability |
-| MLflow traces agent execution | Evaluates "did this agent's behavior comply with our policies?" |
-| AI Gateway routes model requests | Evaluates "which agents are ungoverned? who's a high-volume requester?" |
-| Nothing | Cross-domain compliance posture over time |
-| Nothing | Ontology-based classification with policy inheritance |
-| Nothing | Per-owner violation digests with remediation steps |
-| Nothing | Runtime agent governance (check_before_access, compliance reports) |
-| Nothing | AI interface (MCP) for governance posture queries |
+### The question nobody can answer today
 
-The platform is the immune system — it blocks bad things at runtime.
-Watchdog is the annual physical — it measures overall health, tracks trends, and tells you what to fix.
-For AI agents, Watchdog is also the safety briefing — it checks governance before agents access data and produces compliance reports after they finish.
+Your CDO asks: *"Across all our data — every table, every grant, every agent — how compliant are we right now? Who owns the gaps? Is it getting better or worse?"*
+
+Today, the answer requires manually stitching together:
+- **Tag Policies** — "are the right tags applied?" (Governance Hub)
+- **ABAC rules** — "are columns masked?" (information_schema)
+- **DQ Monitors** — "are quality checks running?" (Lakehouse Monitoring)
+- **Grants** — "are permissions group-based?" (information_schema)
+- **AI agents** — "are they governed? who's accessing PII?" (system.serving)
+
+Each of these lives in a different UI, different system table, different team's responsibility. There is no single view across all of them. There is no concept of "this resource violates 3 policies across 2 governance domains." There is no owner accountability. There is no trend line.
+
+### What the platform does vs. what's missing
+
+The platform **enforces** governance at runtime — ABAC masks a column, a tag policy rejects an invalid value, a row filter hides rows. This is the immune system. It works.
+
+But enforcement is not posture. Nobody measures:
+
+| Question | Platform answer |
+|---|---|
+| What % of PII tables have a data steward? | **Can't answer** — requires cross-tag evaluation |
+| Which owners have the most open violations? | **Can't answer** — no violation tracking per owner |
+| Are we more compliant this month than last? | **Can't answer** — no trend data |
+| If I add a "PII must have retention" policy, how many tables fail? | **Can't answer** — no simulation |
+| Which AI agents are accessing sensitive data without governance metadata? | **Can't answer** — no agent compliance layer |
+| One policy change should cascade to PII, HIPAA, and SOX assets — does it? | **Can't answer** — flat tags have no inheritance |
+
+### What Watchdog adds
+
+Watchdog is the **compliance posture layer** that sits on top of the platform's enforcement:
+
+- **Cross-domain evaluation**: one scan measures security, data quality, cost, operations, and agent governance together
+- **Composable rules**: `IF pii THEN must have steward AND retention` — logic the platform can't express
+- **Ontology with inheritance**: one policy on `ConfidentialAsset` covers PII, HIPAA, SOX, and every child class
+- **Violation lifecycle**: open → resolved → exception, with deduplication, first-detected dates, and trend tracking
+- **Owner accountability**: every violation attributed to a person with remediation steps
+- **AI agent governance**: crawls agents and execution traces, classifies managed vs customer endpoints, evaluates agent-specific policies, produces prioritized remediation
+- **AI interface**: 13 MCP tools so Claude, Genie, and AI agents can query and act on governance posture
+- **Compliance trends**: scan-over-scan deltas, direction indicators, rolling averages
+
+### The analogy
+
+The platform is the **immune system** — it blocks bad things at runtime.
+
+Watchdog is the **annual physical** — it measures overall health, tracks trends, and tells you what to fix before symptoms appear.
+
+For AI agents, Watchdog is also the **safety briefing** — it checks governance before agents access data and produces compliance reports after they finish.
 
 ---
 
@@ -430,7 +472,7 @@ databricks-watchdog/
 │   └── resources/                   #   Workflow job definitions
 │
 ├── mcp/                             # Watchdog MCP server (Databricks App)
-│   ├── src/watchdog_mcp/            #   9 governance tools over SSE
+│   ├── src/watchdog_mcp/            #   13 governance tools over SSE
 │   └── genie/                       #   Genie Space template + deploy script
 │
 ├── guardrails/                      # AI DevKit guardrails MCP (Databricks App)
@@ -449,7 +491,7 @@ databricks-watchdog/
 ├── template/                        # Blank starting point for new customers
 ├── customer/                        # Worked example
 ├── docs/                            # Roadmap, positioning, integration plan
-└── tests/                           # 405 unit tests
+└── tests/                           # 510 unit tests
 ```
 
 ## Testing
@@ -457,7 +499,7 @@ databricks-watchdog/
 ```bash
 pip install pytest pyyaml
 python -m pytest tests/unit/ -q
-# 405 passed
+# 510 passed
 ```
 
 ## Acknowledgments

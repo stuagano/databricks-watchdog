@@ -113,13 +113,13 @@ def _get_view_sql(mock_spark, view_fn):
 # ── ensure_semantic_views registration ───────────────────────────────────────
 
 class TestEnsureSemanticViews:
-    """Verify all nine views are registered in the top-level orchestrator."""
+    """Verify all twelve views are registered in the top-level orchestrator."""
 
-    def test_calls_all_nine_view_functions(self, mock_spark):
+    def test_calls_all_view_functions(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
-        assert mock_spark.sql.call_count == 9
+        assert mock_spark.sql.call_count == 12
 
-    def test_creates_all_nine_views(self, mock_spark):
+    def test_creates_all_views(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
         view_names = []
         for call_args in mock_spark.sql_calls:
@@ -139,6 +139,9 @@ class TestEnsureSemanticViews:
             "v_cross_metastore_compliance",
             "v_cross_metastore_inventory",
             "v_compliance_trend",
+            "v_agent_inventory",
+            "v_agent_execution_compliance",
+            "v_agent_risk_heatmap",
         }
         assert set(view_names) == expected
 

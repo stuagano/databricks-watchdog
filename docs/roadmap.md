@@ -213,14 +213,14 @@ Extend the guardrails MCP with runtime tools that agents call during execution:
 - `get_agent_compliance(agent_id)` — current compliance status of an agent based on its recent execution traces.
 - `report_agent_execution(trace_id)` — post-execution compliance report: which policies were triggered, which data was accessed, risk score.
 
-**5E: Agent Compliance Dashboard**
+**5E: Agent Compliance Dashboard** ✅
 
-New Lakeview dashboard page and Genie Space datasets:
-- Agent inventory with governance status (governed/ungoverned, PII access, external access)
-- Execution compliance: % of executions that triggered policy violations
-- PII access patterns: which agents access PII most frequently
-- Risk heatmap: agents × data sensitivity × access frequency
-- Trend: agent compliance posture over 30/60/90 days
+Three semantic views + four dashboard SQL query sets:
+- ✅ `v_agent_inventory` — per-agent governance status, source, violations, ontology classes
+- ✅ `v_agent_execution_compliance` — per-execution usage metrics, compliance status, risk flags
+- ✅ `v_agent_risk_heatmap` — sensitivity × volume risk scoring with tier classification
+- ✅ Dashboard queries: overview KPIs, agent inventory detail, execution compliance, risk heatmap
+- ✅ PII access patterns, top consumers, error rates, violation-by-policy breakdown
 
 **5F: Integration with AI Gateway**
 

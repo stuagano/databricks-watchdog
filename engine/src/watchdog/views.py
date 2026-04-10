@@ -1,6 +1,6 @@
 """Semantic Views — ontology-shaped compliance views for Ontos and Genie.
 
-Nine views are created in the watchdog schema after each evaluate run:
+Twelve views are created in the watchdog schema after each evaluate run:
 
   v_resource_compliance
     One row per (resource_id, class_name). Starting point for navigating
@@ -35,7 +35,17 @@ Nine views are created in the watchdog schema after each evaluate run:
     One row per scan. Reads from scan_summary with LAG() deltas so
     dashboards can show posture direction over 30/60/90 day windows.
 
-All nine are regular views (not materialized) so they always reflect the
+  v_agent_inventory
+    One row per agent. Governance status, source, owner, violation counts.
+
+  v_agent_execution_compliance
+    One row per agent_execution. Usage metrics, violation status, risk flags.
+
+  v_agent_risk_heatmap
+    One row per agent. Cross-tabulates data sensitivity × access frequency
+    for risk scoring.
+
+All twelve are regular views (not materialized) so they always reflect the
 current state of the underlying tables.
 """
 
@@ -57,6 +67,9 @@ def ensure_semantic_views(spark: SparkSession, catalog: str, schema: str) -> Non
     _ensure_cross_metastore_compliance_view(spark, catalog, schema)
     _ensure_cross_metastore_inventory_view(spark, catalog, schema)
     _ensure_compliance_trend_view(spark, catalog, schema)
+    _ensure_agent_inventory_view(spark, catalog, schema)
+    _ensure_agent_execution_compliance_view(spark, catalog, schema)
+    _ensure_agent_risk_heatmap_view(spark, catalog, schema)
 
 
 def _ensure_resource_compliance_view(spark: SparkSession, catalog: str,
@@ -455,4 +468,211 @@ def _ensure_compliance_trend_view(spark: SparkSession, catalog: str,
                 AS open_violations_30scan_avg
         FROM {catalog}.{schema}.scan_summary
         ORDER BY scanned_at DESC
+    """)
+
+
+def _ensure_agent_inventory_view(spark: SparkSession, catalog: str,
+                                  schema: str) -> None:
+    """v_agent_inventory: agent governance posture.
+
+    One row per agent. Shows source (Apps vs serving endpoint), owner,
+    governance metadata, violation counts, and compliance status. Agents
+    without owner or audit logging are flagged as ungoverned.
+
+    Dashboard use: agent inventory table and governed/ungoverned KPIs.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_agent_inventory AS
+        SELECT
+            ri.resource_id,
+            ri.resource_name,
+            ri.owner,
+            ri.metadata['app_name'] AS app_name,
+            ri.metadata['endpoint_name'] AS endpoint_name,
+            CASE
+                WHEN ri.metadata['app_name'] IS NOT NULL THEN 'databricks_app'
+                WHEN ri.metadata['endpoint_name'] IS NOT NULL THEN 'serving_endpoint'
+                ELSE 'unknown'
+            END AS agent_source,
+            ri.tags['agent_owner'] AS agent_owner,
+            ri.tags['audit_logging_enabled'] AS audit_logging,
+            ri.tags['environment'] AS environment,
+            ri.tags['accessed_pii'] AS accessed_pii,
+            ri.tags['used_external_tool'] AS used_external_tool,
+            ri.tags['exported_data'] AS exported_data,
+            CASE
+                WHEN ri.tags['agent_owner'] IS NOT NULL
+                     AND ri.tags['audit_logging_enabled'] = 'true'
+                    THEN 'governed'
+                WHEN ri.tags['agent_owner'] IS NOT NULL
+                    THEN 'partially_governed'
+                ELSE 'ungoverned'
+            END AS governance_status,
+            COUNT(CASE WHEN v.status = 'open' THEN 1 END)
+                AS open_violations,
+            COUNT(CASE WHEN v.status = 'open' AND v.severity = 'critical' THEN 1 END)
+                AS critical_violations,
+            COUNT(CASE WHEN v.status = 'open' AND v.severity = 'high' THEN 1 END)
+                AS high_violations,
+            COUNT(CASE WHEN v.status = 'exception' THEN 1 END)
+                AS excepted_violations,
+            COLLECT_SET(CASE WHEN v.status = 'open' THEN v.policy_id END)
+                AS violated_policies,
+            COLLECT_SET(rc.class_name)
+                AS ontology_classes
+        FROM {catalog}.{schema}.resource_inventory ri
+        LEFT JOIN {catalog}.{schema}.violations v
+            ON ri.resource_id = v.resource_id
+        LEFT JOIN {catalog}.{schema}.resource_classifications rc
+            ON ri.resource_id = rc.resource_id
+            AND rc.scan_id = ri.scan_id
+        WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+            AND ri.resource_type = 'agent'
+        GROUP BY ri.resource_id, ri.resource_name, ri.owner,
+                 ri.metadata['app_name'], ri.metadata['endpoint_name'],
+                 ri.tags['agent_owner'], ri.tags['audit_logging_enabled'],
+                 ri.tags['environment'], ri.tags['accessed_pii'],
+                 ri.tags['used_external_tool'], ri.tags['exported_data']
+    """)
+
+
+def _ensure_agent_execution_compliance_view(spark: SparkSession, catalog: str,
+                                             schema: str) -> None:
+    """v_agent_execution_compliance: per-execution compliance posture.
+
+    One row per agent_execution. Shows usage metrics (request count, tokens),
+    violation status, and risk flags. Joins to the parent agent for context.
+
+    Dashboard use: execution detail table, PII access patterns, top consumers.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_agent_execution_compliance AS
+        SELECT
+            ex.resource_id AS execution_id,
+            ex.resource_name AS execution_name,
+            ex.metadata['endpoint_name'] AS endpoint_name,
+            ex.metadata['requester'] AS requester,
+            CAST(ex.metadata['request_count'] AS BIGINT) AS request_count,
+            CAST(ex.metadata['total_input_tokens'] AS BIGINT) AS total_input_tokens,
+            CAST(ex.metadata['total_output_tokens'] AS BIGINT) AS total_output_tokens,
+            CAST(ex.metadata['error_count'] AS BIGINT) AS error_count,
+            ex.tags['accessed_pii'] AS accessed_pii,
+            ex.tags['used_external_tool'] AS used_external_tool,
+            ex.tags['exported_data'] AS exported_data,
+            ex.tags['high_volume'] AS high_volume,
+            ex.tags['has_errors'] AS has_errors,
+            ex.owner,
+            COUNT(CASE WHEN v.status = 'open' THEN 1 END)
+                AS open_violations,
+            COUNT(CASE WHEN v.status = 'open' AND v.severity = 'critical' THEN 1 END)
+                AS critical_violations,
+            COLLECT_SET(CASE WHEN v.status = 'open' THEN v.policy_id END)
+                AS violated_policies,
+            CASE
+                WHEN COUNT(CASE WHEN v.status = 'open' AND v.severity = 'critical' THEN 1 END) > 0
+                    THEN 'critical'
+                WHEN COUNT(CASE WHEN v.status = 'open' AND v.severity = 'high' THEN 1 END) > 0
+                    THEN 'high'
+                WHEN COUNT(CASE WHEN v.status = 'open' THEN 1 END) > 0
+                    THEN 'violation'
+                ELSE 'compliant'
+            END AS compliance_status
+        FROM {catalog}.{schema}.resource_inventory ex
+        LEFT JOIN {catalog}.{schema}.violations v
+            ON ex.resource_id = v.resource_id
+        WHERE ex.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+            AND ex.resource_type = 'agent_execution'
+        GROUP BY ex.resource_id, ex.resource_name, ex.owner,
+                 ex.metadata['endpoint_name'], ex.metadata['requester'],
+                 ex.metadata['request_count'], ex.metadata['total_input_tokens'],
+                 ex.metadata['total_output_tokens'], ex.metadata['error_count'],
+                 ex.tags['accessed_pii'], ex.tags['used_external_tool'],
+                 ex.tags['exported_data'], ex.tags['high_volume'],
+                 ex.tags['has_errors']
+    """)
+
+
+def _ensure_agent_risk_heatmap_view(spark: SparkSession, catalog: str,
+                                     schema: str) -> None:
+    """v_agent_risk_heatmap: agent risk scoring by data sensitivity × activity.
+
+    One row per agent. Combines execution volume (from agent_execution records)
+    with data sensitivity flags to produce a risk tier (critical/high/medium/low).
+
+    Dashboard use: risk heatmap, top-risk agents, risk distribution chart.
+    """
+    spark.sql(f"""
+        CREATE OR REPLACE VIEW {catalog}.{schema}.v_agent_risk_heatmap AS
+        WITH agent_activity AS (
+            SELECT
+                ex.metadata['endpoint_name'] AS endpoint_name,
+                SUM(CAST(ex.metadata['request_count'] AS BIGINT)) AS total_requests,
+                SUM(CAST(ex.metadata['total_input_tokens'] AS BIGINT)) AS total_input_tokens,
+                SUM(CAST(ex.metadata['total_output_tokens'] AS BIGINT)) AS total_output_tokens,
+                COUNT(DISTINCT ex.metadata['requester']) AS unique_requesters,
+                MAX(CASE WHEN ex.tags['accessed_pii'] = 'true' THEN 1 ELSE 0 END) AS any_pii_access,
+                MAX(CASE WHEN ex.tags['used_external_tool'] = 'true' THEN 1 ELSE 0 END) AS any_external_access,
+                MAX(CASE WHEN ex.tags['exported_data'] = 'true' THEN 1 ELSE 0 END) AS any_data_export,
+                SUM(CAST(ex.metadata['error_count'] AS BIGINT)) AS total_errors
+            FROM {catalog}.{schema}.resource_inventory ex
+            WHERE ex.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+                AND ex.resource_type = 'agent_execution'
+            GROUP BY ex.metadata['endpoint_name']
+        )
+        SELECT
+            ag.resource_id,
+            ag.resource_name,
+            ag.owner,
+            CASE
+                WHEN ag.metadata['app_name'] IS NOT NULL THEN 'databricks_app'
+                ELSE 'serving_endpoint'
+            END AS agent_source,
+            ag.tags['agent_owner'] AS agent_owner,
+            COALESCE(aa.total_requests, 0) AS total_requests,
+            COALESCE(aa.total_input_tokens, 0) AS total_input_tokens,
+            COALESCE(aa.unique_requesters, 0) AS unique_requesters,
+            COALESCE(aa.any_pii_access, 0) AS pii_access,
+            COALESCE(aa.any_external_access, 0) AS external_access,
+            COALESCE(aa.any_data_export, 0) AS data_export,
+            COALESCE(aa.total_errors, 0) AS total_errors,
+            -- Sensitivity score: 0-3 based on flags
+            COALESCE(aa.any_pii_access, 0)
+                + COALESCE(aa.any_external_access, 0)
+                + COALESCE(aa.any_data_export, 0)
+                AS sensitivity_score,
+            -- Volume tier based on request count
+            CASE
+                WHEN COALESCE(aa.total_requests, 0) >= 1000000 THEN 'very_high'
+                WHEN COALESCE(aa.total_requests, 0) >= 100000 THEN 'high'
+                WHEN COALESCE(aa.total_requests, 0) >= 10000 THEN 'medium'
+                ELSE 'low'
+            END AS volume_tier,
+            -- Risk tier: sensitivity × volume
+            CASE
+                WHEN (COALESCE(aa.any_pii_access, 0) + COALESCE(aa.any_data_export, 0)) > 0
+                     AND COALESCE(aa.total_requests, 0) >= 100000
+                    THEN 'critical'
+                WHEN (COALESCE(aa.any_pii_access, 0) + COALESCE(aa.any_external_access, 0)
+                      + COALESCE(aa.any_data_export, 0)) > 0
+                    THEN 'high'
+                WHEN COALESCE(aa.total_requests, 0) >= 100000
+                    THEN 'medium'
+                ELSE 'low'
+            END AS risk_tier,
+            COUNT(CASE WHEN v.status = 'open' THEN 1 END) AS open_violations,
+            COUNT(CASE WHEN v.status = 'open' AND v.severity = 'critical' THEN 1 END)
+                AS critical_violations
+        FROM {catalog}.{schema}.resource_inventory ag
+        LEFT JOIN agent_activity aa
+            ON COALESCE(ag.metadata['endpoint_name'], ag.metadata['app_name']) = aa.endpoint_name
+        LEFT JOIN {catalog}.{schema}.violations v
+            ON ag.resource_id = v.resource_id
+        WHERE ag.scan_id = (SELECT MAX(scan_id) FROM {catalog}.{schema}.resource_inventory)
+            AND ag.resource_type = 'agent'
+        GROUP BY ag.resource_id, ag.resource_name, ag.owner,
+                 ag.metadata['app_name'], ag.metadata['endpoint_name'],
+                 ag.tags['agent_owner'],
+                 aa.total_requests, aa.total_input_tokens,
+                 aa.unique_requesters, aa.any_pii_access,
+                 aa.any_external_access, aa.any_data_export, aa.total_errors
     """)

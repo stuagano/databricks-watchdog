@@ -1,6 +1,6 @@
 """Semantic Views — ontology-shaped compliance views for Ontos and Genie.
 
-Twelve views are created in the watchdog schema after each evaluate run:
+14 views are created in the watchdog schema after each evaluate run:
 
   v_resource_compliance
     One row per (resource_id, class_name). Starting point for navigating

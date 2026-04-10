@@ -21,6 +21,7 @@ from mcp.types import TextContent, Tool
 from ai_devkit.audit import log_tool_call as audit_log
 from ai_devkit.config import AiDevkitConfig
 from ai_devkit.watchdog_client import (
+    _esc,
     get_grants_for_resource,
     get_resource_governance,
     get_service_principal_governance,
@@ -549,16 +550,22 @@ async def _search_tables_by_tag(
     catalog = args.get("catalog")
 
     # Use information_schema to find tagged tables
-    where_parts = [f"tag_name = '{tag_name}'"]
+    where_parts = [f"tag_name = '{_esc(tag_name)}'"]
     if tag_value:
-        where_parts.append(f"tag_value = '{tag_value}'")
+        where_parts.append(f"tag_value = '{_esc(tag_value)}'")
 
     where = " AND ".join(where_parts)
 
     if catalog:
+        # Validate catalog name is a safe identifier (alphanumeric + underscores)
+        import re as _re
+        if not _re.match(r'^[\w-]+$', catalog):
+            return [TextContent(type="text", text=json.dumps(
+                {"error": f"Invalid catalog name: {catalog}"}, indent=2
+            ))]
         query = f"""
             SELECT catalog_name, schema_name, table_name, tag_name, tag_value
-            FROM {catalog}.information_schema.table_tags
+            FROM `{catalog}`.information_schema.table_tags
             WHERE {where}
             ORDER BY schema_name, table_name
         """
@@ -994,10 +1001,30 @@ async def _preview_data(
     limit = min(args.get("limit", 10), 50)
     where = args.get("where")
 
-    col_clause = ", ".join(f"`{c}`" for c in columns) if columns else "*"
+    # Validate table_name is a proper 3-part identifier
+    _parse_table_name(table_name)  # raises ValueError if malformed
+
+    col_clause = ", ".join(f"`{_esc(c)}`" for c in columns) if columns else "*"
+
+    # Safety: reject write operations in WHERE clause
+    if where:
+        import re as _re
+        where_upper = where.strip().upper()
+        dangerous = {"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE",
+                     "MERGE", "TRUNCATE", "GRANT", "REVOKE"}
+        where_tokens = set(_re.findall(r'\b[A-Z_]+\b', where_upper))
+        if where_tokens & dangerous:
+            return [TextContent(type="text", text=json.dumps(
+                {"error": "WHERE clause contains forbidden keywords."}, indent=2
+            ))]
+        if ';' in where:
+            return [TextContent(type="text", text=json.dumps(
+                {"error": "WHERE clause must not contain semicolons."}, indent=2
+            ))]
+
     where_clause = f"WHERE {where}" if where else ""
 
-    query = f"SELECT {col_clause} FROM {table_name} {where_clause} LIMIT {limit}"
+    query = f"SELECT {col_clause} FROM `{_esc(table_name)}` {where_clause} LIMIT {limit}"
 
     try:
         response = w.statement_execution.execute_statement(

@@ -83,10 +83,15 @@ class ResourceGovernanceState:
             if str(v.get("policy_id", "")).startswith("POL-A")
         ]
 
-    @property
     def has_exception(self, policy_id: str | None = None) -> bool:
+        """Check if the resource has an active exception, optionally for a specific policy."""
         if policy_id:
             return any(e.get("policy_id") == policy_id for e in self.active_exceptions)
+        return len(self.active_exceptions) > 0
+
+    @property
+    def has_any_exception(self) -> bool:
+        """True if the resource has any active exception."""
         return len(self.active_exceptions) > 0
 
     @property

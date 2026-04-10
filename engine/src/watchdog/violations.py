@@ -265,7 +265,15 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
         )
     """)
 
-    # Resolve: mark open violations not in current failures as resolved
+    # Resolve: mark open violations not in current failures as resolved.
+    # Scoped to the current scan's metastore to prevent cross-metastore
+    # resolution — scanning metastore A must not resolve metastore B's violations.
+    metastore_id_from_scan = spark.sql(
+        f"SELECT MAX(metastore_id) AS ms FROM _watchdog_current_failures"
+    ).first()
+    _ms_id = metastore_id_from_scan.ms if metastore_id_from_scan else None
+    _ms_filter = f"AND v.metastore_id = '{_ms_id}'" if _ms_id else ""
+
     spark.sql(f"""
         MERGE INTO {violations_table} AS target
         USING (
@@ -275,6 +283,7 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
                 ON v.resource_id = cf.resource_id
                 AND v.policy_id = cf.policy_id
             WHERE v.status = 'open' AND cf.resource_id IS NULL
+            {_ms_filter}
         ) AS resolved
         ON target.resource_id = resolved.resource_id
             AND target.policy_id = resolved.policy_id

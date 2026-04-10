@@ -17,6 +17,19 @@ from watchdog_mcp.config import WatchdogMcpConfig
 
 logger = logging.getLogger(__name__)
 
+
+def _esc(value: str | None) -> str:
+    """Escape single quotes for SQL string interpolation.
+
+    This is a defense-in-depth measure. All user-supplied values passed
+    into SQL WHERE clauses must go through this function to prevent
+    SQL injection via MCP tool arguments.
+    """
+    if value is None:
+        return ""
+    return str(value).replace("'", "''")
+
+
 # Shared property for optional metastore filtering
 _METASTORE_PROP = {
     "metastore": {
@@ -342,7 +355,7 @@ TOOLS = [
 
 def _resolve_metastore(args: dict, config: WatchdogMcpConfig) -> str:
     """Get metastore filter: explicit arg > config default > empty (no filter)."""
-    return args.get("metastore") or config.default_metastore_id or ""
+    return _esc(args.get("metastore") or config.default_metastore_id or "")
 
 
 async def handle(
@@ -408,17 +421,17 @@ async def _get_violations(
     qs = config.qualified_schema
     metastore = _resolve_metastore(args, config)
 
-    where_clauses = [f"status = '{status}'"]
+    where_clauses = [f"status = '{_esc(status)}'"]
     if metastore:
-        where_clauses.append(f"metastore_id = '{metastore}'")
+        where_clauses.append(f"metastore_id = '{_esc(metastore)}'")
     if args.get("severity"):
-        where_clauses.append(f"severity = '{args['severity']}'")
+        where_clauses.append(f"severity = '{_esc(args['severity'])}'")
     if args.get("resource_type"):
-        where_clauses.append(f"resource_type = '{args['resource_type']}'")
+        where_clauses.append(f"resource_type = '{_esc(args['resource_type'])}'")
     if args.get("policy_id"):
-        where_clauses.append(f"policy_id = '{args['policy_id']}'")
+        where_clauses.append(f"policy_id = '{_esc(args['policy_id'])}'")
     if args.get("owner"):
-        where_clauses.append(f"owner = '{args['owner']}'")
+        where_clauses.append(f"owner = '{_esc(args['owner'])}'")
 
     where = " AND ".join(where_clauses)
     query = f"""
@@ -544,7 +557,7 @@ async def _get_resource_violations(
         SELECT policy_id, severity, status, first_detected, last_detected,
                resolved_at, message
         FROM {qs}.violations
-        WHERE resource_id = '{resource_id}'
+        WHERE resource_id = '{_esc(resource_id)}'
         {ms_and}
         ORDER BY first_detected DESC
     """
@@ -647,16 +660,16 @@ def _build_remediation_steps(
 def _build_failure_condition(rule_type: str, rule_key: str, rule_value: str | None) -> str:
     """Build a SQL WHERE clause fragment for resources that FAIL the proposed rule."""
     if rule_type == "tag_exists":
-        return f"tags['{rule_key}'] IS NULL"
+        return f"tags['{_esc(rule_key)}'] IS NULL"
     elif rule_type == "tag_equals":
-        return f"COALESCE(tags['{rule_key}'], '') != '{rule_value}'"
+        return f"COALESCE(tags['{_esc(rule_key)}'], '') != '{_esc(rule_value)}'"
     elif rule_type == "tag_in":
-        values = ", ".join(f"'{v.strip()}'" for v in (rule_value or "").split(","))
-        return f"COALESCE(tags['{rule_key}'], '') NOT IN ({values})"
+        values = ", ".join(f"'{_esc(v.strip())}'" for v in (rule_value or "").split(","))
+        return f"COALESCE(tags['{_esc(rule_key)}'], '') NOT IN ({values})"
     elif rule_type == "metadata_equals":
-        return f"COALESCE(metadata['{rule_key}'], '') != '{rule_value}'"
+        return f"COALESCE(metadata['{_esc(rule_key)}'], '') != '{_esc(rule_value)}'"
     elif rule_type == "metadata_not_empty":
-        return f"COALESCE(metadata['{rule_key}'], '') = ''"
+        return f"COALESCE(metadata['{_esc(rule_key)}'], '') = ''"
     raise ValueError(f"Unsupported rule_type: {rule_type}")
 
 
@@ -683,7 +696,7 @@ async def _explain_violation(
                    v.policy_id, v.severity, v.domain, v.detail, v.remediation,
                    v.owner, v.resource_classes, v.first_detected, v.last_detected, v.status
             FROM {qs}.violations v
-            WHERE v.violation_id = '{violation_id}'
+            WHERE v.violation_id = '{_esc(violation_id)}'
             {ms_and}
         """
     else:
@@ -692,7 +705,7 @@ async def _explain_violation(
                    v.policy_id, v.severity, v.domain, v.detail, v.remediation,
                    v.owner, v.resource_classes, v.first_detected, v.last_detected, v.status
             FROM {qs}.violations v
-            WHERE v.resource_id = '{resource_id}' AND v.policy_id = '{policy_id}'
+            WHERE v.resource_id = '{_esc(resource_id)}' AND v.policy_id = '{_esc(policy_id)}'
               AND v.status = 'open'
             {ms_and}
         """
@@ -712,7 +725,7 @@ async def _explain_violation(
         SELECT policy_id, policy_name, applies_to, domain, severity,
                description, remediation, rule_json
         FROM {qs}.policies
-        WHERE policy_id = '{policy_id}'
+        WHERE policy_id = '{_esc(policy_id)}'
     """
     policy_result = _execute_sql(w, config, policy_query)
     policy = policy_result["rows"][0] if policy_result["rows"] else {}
@@ -721,7 +734,7 @@ async def _explain_violation(
     classes_query = f"""
         SELECT class_name, class_ancestors, root_class
         FROM {qs}.resource_classifications
-        WHERE resource_id = '{resource_id}'
+        WHERE resource_id = '{_esc(resource_id)}'
           AND scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_classifications)
     """
     classes_result = _execute_sql(w, config, classes_query)
@@ -731,7 +744,7 @@ async def _explain_violation(
     inventory_query = f"""
         SELECT tags, metadata
         FROM {qs}.resource_inventory
-        WHERE resource_id = '{resource_id}'
+        WHERE resource_id = '{_esc(resource_id)}'
           AND scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
     """
     inventory_result = _execute_sql(w, config, inventory_query)
@@ -820,7 +833,7 @@ async def _what_if_policy(
     if applies_to == "*":
         failing_query = f"""
             SELECT ri.resource_id, ri.resource_type, ri.resource_name, ri.owner,
-                   ri.tags['{rule_key}'] as current_value
+                   ri.tags['{_esc(rule_key)}'] as current_value
             FROM {qs}.resource_inventory ri
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
               AND {failure_condition}
@@ -835,12 +848,12 @@ async def _what_if_policy(
     else:
         failing_query = f"""
             SELECT ri.resource_id, ri.resource_type, ri.resource_name, ri.owner,
-                   ri.tags['{rule_key}'] as current_value
+                   ri.tags['{_esc(rule_key)}'] as current_value
             FROM {qs}.resource_inventory ri
             JOIN {qs}.resource_classifications rc
               ON ri.resource_id = rc.resource_id AND ri.scan_id = rc.scan_id
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
-              AND rc.class_name = '{applies_to}'
+              AND rc.class_name = '{_esc(applies_to)}'
               AND {failure_condition}
               {ms_and}
         """
@@ -850,7 +863,7 @@ async def _what_if_policy(
             JOIN {qs}.resource_classifications rc
               ON ri.resource_id = rc.resource_id AND ri.scan_id = rc.scan_id
             WHERE ri.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_inventory)
-              AND rc.class_name = '{applies_to}'
+              AND rc.class_name = '{_esc(applies_to)}'
               {ms_and}
         """
 
@@ -911,7 +924,7 @@ async def _suggest_policies(
     focus = args.get("focus", "all")
     resource_type_filter = args.get("resource_type")
     limit = args.get("limit", 10)
-    rt_and = f"AND ri.resource_type = '{resource_type_filter}'" if resource_type_filter else ""
+    rt_and = f"AND ri.resource_type = '{_esc(resource_type_filter)}'" if resource_type_filter else ""
 
     suggestions: list[dict[str, Any]] = []
 
@@ -1085,7 +1098,7 @@ async def _policy_impact_analysis(
         SELECT policy_id, policy_name, name, applies_to, domain, severity,
                description, rule_json, active
         FROM {qs}.policies
-        WHERE policy_id = '{policy_id}'
+        WHERE policy_id = '{_esc(policy_id)}'
     """
     policy_result = _execute_sql(w, config, policy_query)
     if not policy_result["rows"]:
@@ -1106,7 +1119,7 @@ async def _policy_impact_analysis(
             COUNT(*) FILTER (WHERE status = 'open' AND severity = 'high') AS high_open,
             COUNT(DISTINCT owner) AS affected_owners
         FROM {qs}.violations
-        WHERE policy_id = '{policy_id}'
+        WHERE policy_id = '{_esc(policy_id)}'
         {ms_and}
     """
     violations_result = _execute_sql(w, config, violations_query)
@@ -1116,7 +1129,7 @@ async def _policy_impact_analysis(
     owners_query = f"""
         SELECT owner, COUNT(*) AS violation_count
         FROM {qs}.violations
-        WHERE policy_id = '{policy_id}' AND status = 'open'
+        WHERE policy_id = '{_esc(policy_id)}' AND status = 'open'
         {ms_and}
         GROUP BY owner
         ORDER BY violation_count DESC
@@ -1178,7 +1191,7 @@ async def _policy_impact_analysis(
                 SELECT COUNT(DISTINCT rc.resource_id) AS in_scope
                 FROM {qs}.resource_classifications rc
                 WHERE rc.scan_id = (SELECT MAX(scan_id) FROM {qs}.resource_classifications)
-                  AND rc.class_name = '{new_applies_to}'
+                  AND rc.class_name = '{_esc(new_applies_to)}'
             """
         scope_result = _execute_sql(w, config, scope_query)
         new_scope_count = int(scope_result["rows"][0]["in_scope"]) if scope_result["rows"] else 0
@@ -1205,14 +1218,31 @@ async def _explore_governance(
     query = args["query"]
     limit = min(args.get("limit", 100), 1000)
 
-    # Safety: reject write operations
-    query_upper = query.strip().upper()
-    forbidden = ("INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "MERGE", "TRUNCATE")
-    first_word = query_upper.split()[0] if query_upper.split() else ""
-    if first_word in forbidden:
+    # Safety: reject write operations.
+    # Strip SQL comments before checking, then scan ALL tokens (not just
+    # the first) to catch CTEs wrapping writes, comment-prefixed attacks, etc.
+    import re
+    cleaned = re.sub(r'--[^\n]*', '', query)  # strip line comments
+    cleaned = re.sub(r'/\*.*?\*/', '', cleaned, flags=re.DOTALL)  # strip block comments
+    cleaned_upper = cleaned.strip().upper()
+
+    forbidden = {
+        "INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "MERGE",
+        "TRUNCATE", "GRANT", "REVOKE", "COPY", "SET", "EXECUTE", "CALL",
+    }
+    tokens = set(re.findall(r'\b[A-Z_]+\b', cleaned_upper))
+    blocked = tokens & forbidden
+    if blocked:
         return [TextContent(
             type="text",
-            text=json.dumps({"error": f"Write operations are not allowed. Got: {first_word}"}),
+            text=json.dumps({"error": f"Write operations are not allowed. Found: {', '.join(sorted(blocked))}"}),
+        )]
+
+    # Reject multi-statement queries
+    if ';' in re.sub(r"'[^']*'", '', cleaned):
+        return [TextContent(
+            type="text",
+            text=json.dumps({"error": "Multi-statement queries are not allowed."}),
         )]
 
     # Append LIMIT if not already present
@@ -1248,7 +1278,7 @@ async def _suggest_classification(
     resource_type_filter = args.get("resource_type")
     unclassified_only = args.get("unclassified_only", True)
     limit = args.get("limit", 50)
-    rt_and = f"AND ri.resource_type = '{resource_type_filter}'" if resource_type_filter else ""
+    rt_and = f"AND ri.resource_type = '{_esc(resource_type_filter)}'" if resource_type_filter else ""
 
     if unclassified_only:
         resources_query = f"""

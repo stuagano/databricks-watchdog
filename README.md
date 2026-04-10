@@ -6,6 +6,61 @@ ABAC masks columns. Tag policies reject bad values. DQ monitors flag anomalies. 
 
 Watchdog is the compliance posture layer for Unity Catalog. It crawls your estate, classifies resources through an ontology, evaluates declarative policies across every governance domain, tracks violations with owner accountability, and gives you a single compliance percentage that goes up or down over time.
 
+---
+
+## Why Watchdog Exists
+
+### The question nobody can answer today
+
+Your CDO asks: *"Across all our data — every table, every grant, every agent — how compliant are we right now? Who owns the gaps? Is it getting better or worse?"*
+
+Today, the answer requires manually stitching together:
+- **Tag Policies** — "are the right tags applied?" (Governance Hub)
+- **ABAC rules** — "are columns masked?" (information_schema)
+- **DQ Monitors** — "are quality checks running?" (Lakehouse Monitoring)
+- **Grants** — "are permissions group-based?" (information_schema)
+- **AI agents** — "are they governed? who's accessing PII?" (system.serving)
+
+Each of these lives in a different UI, different system table, different team's responsibility. There is no single view across all of them. There is no concept of "this resource violates 3 policies across 2 governance domains." There is no owner accountability. There is no trend line.
+
+### What the platform does vs. what's missing
+
+The platform **enforces** governance at runtime — ABAC masks a column, a tag policy rejects an invalid value, a row filter hides rows. This is the immune system. It works.
+
+But enforcement is not posture. Nobody measures:
+
+| Question | Platform answer |
+|---|---|
+| What % of PII tables have a data steward? | **Can't answer** — requires cross-tag evaluation |
+| Which owners have the most open violations? | **Can't answer** — no violation tracking per owner |
+| Are we more compliant this month than last? | **Can't answer** — no trend data |
+| If I add a "PII must have retention" policy, how many tables fail? | **Can't answer** — no simulation |
+| Which AI agents are accessing sensitive data without governance metadata? | **Can't answer** — no agent compliance layer |
+| One policy change should cascade to PII, HIPAA, and SOX assets — does it? | **Can't answer** — flat tags have no inheritance |
+
+### What Watchdog adds
+
+Watchdog is the **compliance posture layer** that sits on top of the platform's enforcement:
+
+- **Cross-domain evaluation**: one scan measures security, data quality, cost, operations, and agent governance together
+- **Composable rules**: `IF pii THEN must have steward AND retention` — logic the platform can't express
+- **Ontology with inheritance**: one policy on `ConfidentialAsset` covers PII, HIPAA, SOX, and every child class
+- **Violation lifecycle**: open → resolved → exception, with deduplication, first-detected dates, and trend tracking
+- **Owner accountability**: every violation attributed to a person with remediation steps
+- **AI agent governance**: crawls agents and execution traces, classifies managed vs customer endpoints, evaluates agent-specific policies, produces prioritized remediation
+- **AI interface**: 13 MCP tools so Claude, Genie, and AI agents can query and act on governance posture
+- **Compliance trends**: scan-over-scan deltas, direction indicators, rolling averages
+
+### The analogy
+
+The platform is the **immune system** — it blocks bad things at runtime.
+
+Watchdog is the **annual physical** — it measures overall health, tracks trends, and tells you what to fix before symptoms appear.
+
+For AI agents, Watchdog is also the **safety briefing** — it checks governance before agents access data and produces compliance reports after they finish.
+
+---
+
 ## What You Get in 30 Minutes
 
 Deploy Watchdog to a workspace and run one scan. Here's what comes back:
@@ -403,59 +458,6 @@ Rules support: `tag_exists`, `tag_equals`, `tag_in`, `metadata_equals`, `all_of`
 ### Multi-metastore scanning
 
 Set `WATCHDOG_METASTORE_IDS=ms-123,ms-456` and use the `crawl_all_metastores` entrypoint. All results go to the same tables with a `metastore_id` discriminator.
-
----
-
-## Why Watchdog Exists
-
-### The question nobody can answer today
-
-Your CDO asks: *"Across all our data — every table, every grant, every agent — how compliant are we right now? Who owns the gaps? Is it getting better or worse?"*
-
-Today, the answer requires manually stitching together:
-- **Tag Policies** — "are the right tags applied?" (Governance Hub)
-- **ABAC rules** — "are columns masked?" (information_schema)
-- **DQ Monitors** — "are quality checks running?" (Lakehouse Monitoring)
-- **Grants** — "are permissions group-based?" (information_schema)
-- **AI agents** — "are they governed? who's accessing PII?" (system.serving)
-
-Each of these lives in a different UI, different system table, different team's responsibility. There is no single view across all of them. There is no concept of "this resource violates 3 policies across 2 governance domains." There is no owner accountability. There is no trend line.
-
-### What the platform does vs. what's missing
-
-The platform **enforces** governance at runtime — ABAC masks a column, a tag policy rejects an invalid value, a row filter hides rows. This is the immune system. It works.
-
-But enforcement is not posture. Nobody measures:
-
-| Question | Platform answer |
-|---|---|
-| What % of PII tables have a data steward? | **Can't answer** — requires cross-tag evaluation |
-| Which owners have the most open violations? | **Can't answer** — no violation tracking per owner |
-| Are we more compliant this month than last? | **Can't answer** — no trend data |
-| If I add a "PII must have retention" policy, how many tables fail? | **Can't answer** — no simulation |
-| Which AI agents are accessing sensitive data without governance metadata? | **Can't answer** — no agent compliance layer |
-| One policy change should cascade to PII, HIPAA, and SOX assets — does it? | **Can't answer** — flat tags have no inheritance |
-
-### What Watchdog adds
-
-Watchdog is the **compliance posture layer** that sits on top of the platform's enforcement:
-
-- **Cross-domain evaluation**: one scan measures security, data quality, cost, operations, and agent governance together
-- **Composable rules**: `IF pii THEN must have steward AND retention` — logic the platform can't express
-- **Ontology with inheritance**: one policy on `ConfidentialAsset` covers PII, HIPAA, SOX, and every child class
-- **Violation lifecycle**: open → resolved → exception, with deduplication, first-detected dates, and trend tracking
-- **Owner accountability**: every violation attributed to a person with remediation steps
-- **AI agent governance**: crawls agents and execution traces, classifies managed vs customer endpoints, evaluates agent-specific policies, produces prioritized remediation
-- **AI interface**: 13 MCP tools so Claude, Genie, and AI agents can query and act on governance posture
-- **Compliance trends**: scan-over-scan deltas, direction indicators, rolling averages
-
-### The analogy
-
-The platform is the **immune system** — it blocks bad things at runtime.
-
-Watchdog is the **annual physical** — it measures overall health, tracks trends, and tells you what to fix before symptoms appear.
-
-For AI agents, Watchdog is also the **safety briefing** — it checks governance before agents access data and produces compliance reports after they finish.
 
 ---
 

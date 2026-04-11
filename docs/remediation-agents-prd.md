@@ -3,7 +3,6 @@
 **Working title:** Watchdog Remediation Agents (a.k.a. "Watchdog Autopilot")
 **Status:** Draft
 **Owner:** TBD
-**Design partner:** Mirion Technologies
 **Reference:** [7-Eleven's AI documentation migration on Databricks](https://www.databricks.com/blog/automating-data-documentation-ai-how-7-eleven-bridged-metadata-gap)
 
 ---
@@ -272,12 +271,12 @@ New column on `violations`: `remediation_status` (values: `none`, `proposed`, `a
 
 ## 12. Phased Rollout
 
-### Phase 1 — Foundation (pilot with Mirion)
+### Phase 1 — Foundation
 
 - Agent SDK + Dispatcher + Applier + Verifier + Review UI
 - **DocAgent only** (the exact 7-Eleven use case, ported to the framework)
 - Manual approval required for every proposal
-- **Target:** reproduce the 7-Eleven result on Mirion's metadata, with an audit trail good enough for NRC / NIST / CMMC review
+- **Target:** reproduce the 7-Eleven result on a design-partner workspace, with an audit trail good enough for regulated-industry review (HIPAA, SOX, NIST 800-171, CMMC, ITAR)
 
 ### Phase 2 — Coverage
 
@@ -301,13 +300,15 @@ New column on `violations`: `remediation_status` (values: `none`, `proposed`, `a
 
 ---
 
-## 13. Why Mirion is the Right Design Partner
+## 13. Design Partner Profile
 
-- **Regulated industry** (NRC, NIST 800-171, CMMC Level 2, ITAR) — audit trail requirements are real, not theoretical. Forcing function for Section 7.6.
-- **Same Databricks team** that ran the 7-Eleven engagement — direct pattern transfer, shared vocabulary, no re-education required
-- **Smaller estate** than 7-Eleven — faster iteration on the framework
-- **Defense policy pack already exists** in Watchdog (`library/defense/`) — Phase 1 has real policies to remediate against on day one
-- **Co-development motion** — Mirion gets a first-of-its-kind capability; we get a design partner with enough regulatory pressure to keep us honest about the evidence trail
+The ideal Phase 1 design partner has:
+
+- **A regulated footprint** — HIPAA, SOX, NIST 800-171, CMMC, ITAR, or similar. Audit trail requirements keep Section 7.6 honest.
+- **An existing Watchdog deployment** with a non-trivial open violation count (hundreds to thousands) — enough to exercise the dispatcher and review queue under realistic load
+- **A moderately sized estate** — large enough that manual remediation is infeasible, small enough that one or two stewards can review a pilot batch end-to-end
+- **An industry policy pack already loaded** (`library/healthcare/`, `library/financial/`, `library/defense/`, `library/general/`) so Phase 1 has real policies to remediate against on day one
+- **Willingness to co-develop** — the partner gets a first-of-its-kind capability; we get enough regulatory pressure to keep the evidence trail honest
 
 ---
 
@@ -331,7 +332,7 @@ Walk this document through with the Databricks team that ran the 7-Eleven engage
 
 > "If we gave you a `Proposal` object and a verification oracle, could you wrap your existing Llama 4 Maverick + Mosaic AI + Confluence-RAG pipeline as a `DocAgent` against this SDK in two weeks?"
 
-- **If yes:** Phase 1 is real. Scope the Mirion pilot, cut a branch, build the SDK and DocAgent in parallel.
+- **If yes:** Phase 1 is real. Scope the design-partner pilot, cut a branch, build the SDK and DocAgent in parallel.
 - **If no:** the abstraction is wrong. Learn where before writing code.
 
 ---

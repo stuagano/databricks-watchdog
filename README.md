@@ -92,13 +92,33 @@ Every violation is attributed to a resource owner with remediation steps:
 
 ### Ontology Classification with Inheritance
 
-Resources are classified into a hierarchy. One policy on `ConfidentialAsset` automatically covers every `PiiAsset`, `HipaaAsset`, and `SoxAsset`:
+Resources are classified into a hierarchy. One policy on `ConfidentialAsset` automatically covers every child class:
 
 ```
-PiiTable → PiiAsset → ConfidentialAsset → DataAsset
+                        DataAsset
+                       /    |    \
+              PiiAsset  InternalAsset  PublicAsset
+             /       \
+      PiiTable    HipaaAsset
+                       |
+                   PhiAsset
+
+                      ComputeAsset
+                     /      |      \
+          ProductionJob  InteractiveCluster  DevelopmentCompute
+                |
+           CriticalJob
+
+                      AgentAsset
+                     /    |     \
+    ManagedModelEndpoint  |  UngovernedAgent
+                          |
+              AgentWithPiiAccess
 ```
 
-*UC has flat tags. Change a policy at the ConfidentialAsset level? With tags, you'd edit every child policy individually.*
+Change a policy at `ConfidentialAsset`? Every `PiiAsset`, `HipaaAsset`, and `PhiAsset` inherits it automatically. UC has flat tags — you'd edit every child policy individually.
+
+*28 ontology classes across 5 base types. Add your own by dropping YAML in `engine/ontologies/`.*
 
 ### Actionable Remediation Lists
 
@@ -135,6 +155,48 @@ Watchdog crawls deployed AI agents (Apps + serving endpoints) and their executio
 *The platform has no concept of AI agent governance. MLflow traces what agents did. Watchdog evaluates whether what they did complied with your policies.*
 
 #### Three layers of agent enforcement
+
+```
+              Agent Lifecycle
+              ═══════════════
+
+  ┌─────────────────────────────────────────────────┐
+  │  LAYER 1: Posture Scanning (daily)              │
+  │                                                  │
+  │  Engine crawls agents + execution traces         │
+  │  → Classifies: managed / customer / ungoverned   │
+  │  → Evaluates 7 agent policies                    │
+  │  → Produces violations + remediation priorities  │
+  │                                                  │
+  │  WHO USES IT: Platform admins, compliance team   │
+  └──────────────────────┬──────────────────────────┘
+                         │
+  ┌──────────────────────▼──────────────────────────┐
+  │  LAYER 2: Build-Time Governance (pre-deploy)    │
+  │                                                  │
+  │  Developer → validate_ai_query(tables, op)       │
+  │           ← blocked / warning / proceed          │
+  │                                                  │
+  │  PII + train → BLOCKED                           │
+  │  Export-controlled + extract → BLOCKED            │
+  │  Confidential + sensitive cols → WARNING          │
+  │                                                  │
+  │  WHO USES IT: AI developers before shipping      │
+  └──────────────────────┬──────────────────────────┘
+                         │
+  ┌──────────────────────▼──────────────────────────┐
+  │  LAYER 3: Runtime Enforcement (during execution)│
+  │                                                  │
+  │  Agent → check_before_access(table)              │
+  │       ← DENY / WARN / ALLOW + reasons            │
+  │  Agent → log_agent_action(what I did)            │
+  │  Agent → get_agent_compliance(how am I doing?)   │
+  │  Agent → report_agent_execution(done)            │
+  │       ← compliance report + recommendations      │
+  │                                                  │
+  │  WHO USES IT: Running agents, real-time          │
+  └─────────────────────────────────────────────────┘
+```
 
 **Layer 1: Posture scanning (offline)** — The engine crawls all agents daily, classifies them (managed FMAPI endpoint vs customer agent, governed vs ungoverned), evaluates agent governance policies, and produces violations with remediation steps. Admins see which agents are ungoverned, which are accessing PII, and what to fix first.
 
@@ -205,6 +267,81 @@ FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` w
 ---
 
 ## Architecture
+
+### Scan Pipeline
+
+```
+┌──────────┐    ┌───────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
+│  CRAWL   │───▶│ CLASSIFY  │───▶│ EVALUATE │───▶│  MERGE   │───▶│ NOTIFY   │
+│          │    │           │    │          │    │          │    │          │
+│ 16 types │    │ Ontology  │    │ 46       │    │ Dedup    │    │ Per-owner│
+│ SDK +    │    │ 28 classes│    │ policies │    │ Lifecycle│    │ digests  │
+│ system   │    │ Tag-based │    │ YAML +   │    │ open →   │    │ Email /  │
+│ tables   │    │ hierarchy │    │ user     │    │ resolved │    │ webhook  │
+└──────────┘    └───────────┘    └──────────┘    └──────────┘    └──────────┘
+     │                │                │               │               │
+     ▼                ▼                ▼               ▼               ▼
+ resource_       resource_        scan_results    violations     notification_
+ inventory    classifications    (append-only)    (MERGE +       queue
+                                                  exceptions)
+```
+
+### Violation Lifecycle
+
+```
+  New failure               Still failing            No longer failing
+  detected                  on next scan             on next scan
+     │                          │                         │
+     ▼                          ▼                         ▼
+ ┌────────┐  last_detected  ┌────────┐  resolved_at  ┌──────────┐
+ │  OPEN  │────────────────▶│  OPEN  │──────────────▶│ RESOLVED │
+ └────────┘   updated       └────────┘               └──────────┘
+     │                          │
+     │  exception approved      │  exception approved
+     ▼                          ▼
+ ┌───────────┐             ┌───────────┐
+ │ EXCEPTION │             │ EXCEPTION │
+ │ (waiver)  │             │ (waiver)  │
+ └───────────┘             └───────────┘
+      │
+      │ exception expires
+      ▼
+   ┌────────┐
+   │  OPEN  │  (re-opened)
+   └────────┘
+```
+
+### Defense in Depth
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Agent Execution                         │
+│                                                               │
+│  ┌─ Layer 3: Runtime Guardrails (Watchdog) ──────────────┐   │
+│  │  check_before_access() → DENY/WARN/ALLOW              │   │
+│  │  log_agent_action() → structured audit trail           │   │
+│  │  report_agent_execution() → compliance report          │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                          │                                    │
+│  ┌─ Layer 2: Build-Time Governance (Watchdog) ───────────┐   │
+│  │  validate_ai_query() → blocked/warning/proceed         │   │
+│  │  Classification × operation risk matrix                │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                          │                                    │
+│  ┌─ Layer 1: Platform Enforcement (Native) ──────────────┐   │
+│  │  ABAC: column masks, row filters at query time         │   │
+│  │  Tag Policies: reject invalid tag values               │   │
+│  │  UC Grants: permission denied if no access             │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                                                               │
+│  ┌─ Layer 0: Posture Scanning (Watchdog) ────────────────┐   │
+│  │  Daily scan → ontology classification → policy eval    │   │
+│  │  Violation tracking → owner accountability → trends    │   │
+│  └────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Component Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐

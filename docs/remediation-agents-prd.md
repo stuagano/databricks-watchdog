@@ -6,6 +6,8 @@
 **Last updated:** 2026-04-13
 **Reference:** [7-Eleven's AI documentation migration on Databricks](https://www.databricks.com/blog/automating-data-documentation-ai-how-7-eleven-bridged-metadata-gap)
 
+> **Platform update (April 2026):** The DocAgent proposed in this PRD for auto-generating table/column documentation is now **superseded** by Databricks' native [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) feature (Public Preview). The platform auto-generates table and column descriptions via LLM in Catalog Explorer. The remaining agents (StewardAgent, CostCenterAgent, GrantMigrationAgent, ClassificationAgent) are still unique to Watchdog and not covered by the platform. Additionally, [AI Gateway](https://docs.databricks.com/aws/en/ai-gateway/overview-serving-endpoints) now provides native PII detection, rate limiting, and payload logging — the remediation framework should leverage these rather than rebuilding them.
+
 ---
 
 ## 0. TL;DR
@@ -230,36 +232,101 @@ Every proposal persists: source violation, retrieved context (with citations), L
 ## 6. Architecture
 
 ```
-Watchdog Scan
-  |
-  v
-violations table (status = open)
-  |
-  v
-Dispatcher  -->  routes by policy_id
-  |
-  v
-Remediation Agents (one per violation class)
-  +-- DocAgent           (POL-Q001)              Llama 4 Maverick + Confluence/git RAG
-  +-- StewardAgent       (POL-S001)              LLM + SCIM/AAD directory
-  +-- CostCenterAgent    (POL-C002)              LLM + FinOps mapping table
-  +-- GrantMigrationAgent(POL-A002)              Deterministic + LLM group suggestion
-  +-- ClassificationAgent(UntaggedAsset)         LLM + sample data + column names
-  |
-  v
-remediation_proposals (Delta)
-  |
-  v
-Human Review  (Databricks App / Lakeview)
-  |
-  v
-Applier  -->  ALTER / UPDATE statements against UC
-  |
-  v
-Next Watchdog Scan  -->  verifies  -->  updates violation status
-  |
-  v
-Compliance trend line moves
+                        End-to-End Closed Loop
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  DETECT                                                             │
+  │                                                                     │
+  │  ┌──────────────┐    ┌──────────────────────────────────────────┐   │
+  │  │  Watchdog     │───▶│  violations (Delta)                     │   │
+  │  │  Daily Scan   │    │  status=open, remediable=true           │   │
+  │  │              │    │  46 policies × 5 domains                │   │
+  │  └──────────────┘    └──────────────────┬───────────────────────┘   │
+  └─────────────────────────────────────────│───────────────────────────┘
+                                            │
+  ┌─────────────────────────────────────────│───────────────────────────┐
+  │  REMEDIATE                              ▼                           │
+  │                                                                     │
+  │  ┌──────────────────────────────────────────────────────────────┐   │
+  │  │  Dispatcher (Workflow Task)                                  │   │
+  │  │  • routes by policy_id → agent.handles[]                    │   │
+  │  │  • enforces concurrency, cost, rate limits                  │   │
+  │  │  • idempotent: skip if (violation, agent, version) exists   │   │
+  │  └───┬──────────┬──────────┬───────────┬──────────┬────────────┘   │
+  │      │          │          │           │          │                 │
+  │      ▼          ▼          ▼           ▼          ▼                 │
+  │  ┌────────┐ ┌────────┐ ┌─────────┐ ┌────────┐ ┌──────────────┐    │
+  │  │DocAgent│ │Steward │ │CostCtr  │ │Grant   │ │Classification│    │
+  │  │        │ │Agent   │ │Agent    │ │Migr.   │ │Agent         │    │
+  │  │POL-Q001│ │POL-S001│ │POL-C002 │ │POL-A002│ │UntaggedAsset │    │
+  │  └───┬────┘ └───┬────┘ └────┬────┘ └───┬────┘ └──────┬───────┘    │
+  │      │          │           │          │             │              │
+  │      └──────────┴───────────┴──────────┴─────────────┘              │
+  │                             │                                       │
+  │                             ▼                                       │
+  │  ┌──────────────────────────────────────────────────────────────┐   │
+  │  │  remediation_proposals (Delta)                               │   │
+  │  │  sql, confidence, citations, llm_prompt_hash, context        │   │
+  │  └──────────────────────────────┬───────────────────────────────┘   │
+  └─────────────────────────────────│───────────────────────────────────┘
+                                    │
+  ┌─────────────────────────────────│───────────────────────────────────┐
+  │  REVIEW                         ▼                                   │
+  │                                                                     │
+  │  ┌──────────────────────────────────────────────────────────────┐   │
+  │  │  Databricks App / Lakeview Review UI                        │   │
+  │  │                                                              │   │
+  │  │  • diff preview: before/after state + source citations       │   │
+  │  │  • per-steward queue (routed by resource owner)              │   │
+  │  │  • bulk approve / reject / reassign                          │   │
+  │  │  • confidence score + LLM rationale visible                  │   │
+  │  └──────────────────────────────┬───────────────────────────────┘   │
+  │                approved         │          rejected                  │
+  │                  ┌──────────────┴──────────────┐                    │
+  │                  ▼                             ▼                    │
+  │          ┌──────────────┐              ┌─────────────┐             │
+  │          │  Applier     │              │  logged,    │             │
+  │          │  (Workflow)  │              │  closed     │             │
+  │          │              │              └─────────────┘             │
+  │          │ • least-priv │                                          │
+  │          │   SP per     │                                          │
+  │          │   agent      │                                          │
+  │          │ • pre/post   │                                          │
+  │          │   snapshot   │                                          │
+  │          │ • dry-run    │                                          │
+  │          │   supported  │                                          │
+  │          └──────┬───────┘                                          │
+  └─────────────────│──────────────────────────────────────────────────┘
+                    │
+  ┌─────────────────│──────────────────────────────────────────────────┐
+  │  VERIFY         ▼                                                   │
+  │                                                                     │
+  │  ┌──────────────────────────────────────────────────────────────┐   │
+  │  │  Next Watchdog Scan (verification oracle)                    │   │
+  │  │                                                              │   │
+  │  │  JOIN remediation_applied × violations                       │   │
+  │  │  ON resource + policy                                        │   │
+  │  │                                                              │   │
+  │  │  ┌─────────────────────┐    ┌─────────────────────────────┐  │   │
+  │  │  │ violation resolved  │    │ violation still open        │  │   │
+  │  │  │ → status: verified  │    │ → status: verification_     │  │   │
+  │  │  │ → trend line moves  │    │   failed                    │  │   │
+  │  │  │   ✓                 │    │ → re-queue for investigation│  │   │
+  │  │  └─────────────────────┘    └─────────────────────────────┘  │   │
+  │  │                                                              │   │
+  │  │  MLflow eval: precision, recall, time-to-resolve, cost/fix   │   │
+  │  └──────────────────────────────────────────────────────────────┘   │
+  └─────────────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────────────┐
+  │  MEASURE                                                            │
+  │                                                                     │
+  │  v_remediation_funnel    violations → proposed → approved →         │
+  │                          applied → verified                         │
+  │  v_remediation_trend     compliance delta: remediation vs organic   │
+  │  v_agent_effectiveness   per-agent precision, throughput, cost      │
+  │  v_reviewer_load         open queue depth per steward               │
+  └─────────────────────────────────────────────────────────────────────┘
 ```
 
 **Architectural reuse:** the dispatcher, applier, and verifier are all Databricks Workflow tasks. The review UI is a Databricks App. Agents run under a service principal with least-privilege grants. No new infrastructure — everything rides on the Watchdog engine bundle.

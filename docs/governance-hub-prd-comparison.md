@@ -33,20 +33,24 @@ Ontos consumes Watchdog data via the `ontos-adapter/` GovernanceProvider to show
 
 ---
 
-## Native Platform Capabilities (Q1 FY27)
+## Native Platform Capabilities (Updated Q3 FY27)
 
-These are GA or near-GA. They define what the platform owns — none of the three tools (Watchdog, Ontos, Guardrails) should rebuild these:
+These are GA or near-GA. They define what the platform owns — Watchdog, Ontos, and Guardrails complement but do not rebuild these:
 
-| Capability | Status | What It Does |
-|---|---|---|
-| **Governed Tags + Tag Policies** | GA | Account-level tag constraints — enforce allowed values, delegate permissions, restrict who can apply tags |
-| **ABAC** (row filters, column masks) | GA | Dynamic access control using governed tags + UDFs — masks/filters data at query time |
-| **Mosaic AI Data Classification** | GA | Auto-detects PII across UC, tags columns, creates ABAC policies to auto-mask |
-| **Detect → Tag → Mask pipeline** | GA | Classification auto-tags, tags trigger ABAC — fully automated enforcement chain |
-| **Tag Propagation** | In progress (EDC-913) | Governed tags flow through lineage to derived tables — admin-configurable |
-| **Lakehouse Monitoring (DQM)** | PuPr | Anomaly detection, quality metrics, root cause analysis for data quality |
-| **Governance Hub** | Beta Q1 FY27 | Unified metastore-level UI: dashboards (usage, access, metadata health), tag policy management, metastore admin |
-| **Governance Hub — cost/perf/AI** | Planned FY27 | Expanding to "unified observability and governance hub" across data, cost, performance, AI domains |
+| Capability | Status | What It Does | Watchdog relationship |
+|---|---|---|---|
+| **Governed Tags + Tag Policies** | GA | Account-level tag constraints, allowed values, permissions | Watchdog evaluates tag *compliance*. Complementary. |
+| **ABAC** (row filters, column masks) | GA | Dynamic access control using governed tags + UDFs | Watchdog evaluates ABAC *coverage*. Complementary. |
+| **[Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification)** | GA | AI agent auto-classifies sensitive columns, auto-tags | Watchdog evaluates classification *coverage*, not the classification itself. Complementary. |
+| **Detect → Tag → Mask pipeline** | GA | Classification auto-tags, tags trigger ABAC | Watchdog evaluates whether the pipeline ran and covers what it should. Complementary. |
+| **[AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog)** | PuPr | LLM auto-generates table/column descriptions | **Replaces** Watchdog's proposed DocAgent (remediation PRD). Don't rebuild. |
+| **Tag Propagation** | In progress (EDC-913) | Governed tags flow through lineage | Watchdog will evaluate propagation completeness once available. |
+| **Lakehouse Monitoring (DQM)** | PuPr | Anomaly detection, quality metrics, root cause analysis | Watchdog evaluates DQM *coverage*, not the monitoring itself. |
+| **Governance Hub** | GA | Unified UI: dashboards, tag policy management, metastore admin | Watchdog feeds Hub via Delta tables. Hub manages, Watchdog evaluates. |
+| **[AI Gateway](https://docs.databricks.com/aws/en/ai-gateway/overview-serving-endpoints)** | GA | Rate limits, fallbacks, PII detection, payload logging per endpoint | Watchdog adds *policy-based* governance (ontology, violations, risk scoring). Gateway is runtime enforcement, Watchdog is posture + compliance. |
+| **[AI Gateway inference tables](https://docs.databricks.com/aws/en/ai-gateway/inference-tables)** | GA | Request/response/trace capture as UC Delta tables | Watchdog currently reads `system.serving.endpoint_usage`. Could also read inference tables for richer agent monitoring. |
+| **[OpenTelemetry endpoint telemetry](https://docs.databricks.com/aws/en/release-notes/product/2026/march)** | GA (Mar 2026) | Persists logs, traces, metrics from serving endpoints into UC Delta | Future Watchdog enhancement: read OTel traces for deeper agent compliance. |
+| **[AI Governance Framework (DAGF)](https://www.databricks.com/blog/introducing-databricks-ai-governance-framework)** | Published | 5-pillar framework, 43 considerations for responsible AI | Framework is guidance. Watchdog is programmatic execution of the monitoring/compliance pillar. |
 
 ---
 
@@ -110,28 +114,35 @@ These are GA or near-GA. They define what the platform owns — none of the thre
 
 | Hub Feature | Watchdog | Ontos | Guardrails |
 |---|---|---|---|
-| **AI-assisted governance** | MCP server delivers this today. | Could wire Genie to Ontos data. | Guardrails IS AI-assisted governance at build time. |
-| **Cost Governance** | Cost policy evaluation (keep). Cost dashboards (defer to Hub). | Cost per data product (future). | Out of scope. |
-| **AI/ML Governance** | Out of scope for now. | Model governance in data product catalog (future). | AI agent governance is in scope today. |
+| **AI-assisted governance** | **Live today.** 13 MCP tools (suggest_policies, policy_impact_analysis, explore_governance, suggest_classification). | Could wire Genie to Ontos data. | **Live today.** 13 tools: 9 build-time + 4 runtime agent governance. |
+| **Cost Governance** | Cost policy evaluation (keep). AI Gateway cost governance view live. Cost dashboards (defer to Hub). | Cost per data product (future). | Out of scope. |
+| **AI/ML Governance** | **Live today.** Agent crawling, execution traces, risk scoring, compliance dashboard (10 pages). | Model governance in data product catalog (future). | **Live today.** `check_before_access`, `report_agent_execution`, session tracking. |
+| **Auto-documentation** | **Defer to platform.** AI-Generated Documentation is now PuPr. Remediation agents PRD DocAgent is superseded. | Could consume platform-generated docs. | Out of scope. |
 
 ---
 
-## Summary: Build / Keep / Defer / Drop
+## Summary: Built / Keep / Defer / Drop
 
-| Category | Verdict | Owner |
+All phases complete as of 2026-04-10.
+
+| Category | Status | Owner |
 |---|---|---|
-| Ontology engine + classification hierarchy | **Build** — unique, no native equivalent | Watchdog engine |
-| Declarative rule engine + composition | **Build** — unique | Watchdog engine |
-| Violation lifecycle + owner digests | **Build** — ahead of Hub Phase 2A | Watchdog engine |
-| Grants crawler (for policy evaluation) | **Build** — enables access governance policies | Watchdog engine |
-| Watchdog MCP server + AI governance tools | **Build** — ahead of Hub future phases | Watchdog MCP |
-| Industry policy packs | **Build** — reusable IP the platform won't provide | Watchdog library |
-| Ontos adapter (GovernanceProvider) | **Keep** — Ontos reads Watchdog data for governance views | ontos-adapter |
-| Guardrails (AI build-time enforcement) | **Keep** — inherits Watchdog classifications + violations | guardrails |
-| Multi-metastore scanning | **Build** (Phase 3) | Watchdog engine |
+| Ontology engine + classification hierarchy | **Built** ✅ — unique, no native equivalent | Watchdog engine |
+| Declarative rule engine + composition | **Built** ✅ — unique | Watchdog engine |
+| Violation lifecycle + owner digests | **Built** ✅ — ahead of Hub Phase 2A | Watchdog engine |
+| Grants crawler + access governance | **Built** ✅ | Watchdog engine |
+| Watchdog MCP (13 AI governance tools) | **Built** ✅ — ahead of Hub future phases | Watchdog MCP |
+| Guardrails MCP (13 tools: 9 build + 4 runtime) | **Built** ✅ | Guardrails |
+| AI agent runtime enforcement | **Built** ✅ — check_before_access, report_agent_execution | Guardrails |
+| AI Gateway cost governance | **Built** ✅ — token cost views, risk flags | Watchdog engine |
+| Industry policy packs (4 packs) | **Built** ✅ — reusable IP the platform won't provide | Watchdog library |
+| Multi-metastore scanning | **Built** ✅ — metastore_id on all 9 tables | Watchdog engine |
+| Ontos adapter (GovernanceProvider) | **Keep** — Ontos reads Watchdog data | ontos-adapter |
 | Cost policy evaluation | **Keep** — defer cost dashboards to Hub | Watchdog engine |
 | DQ policy evaluation | **Keep** — don't build monitors, evaluate coverage | Watchdog engine |
+| Auto-documentation (DocAgent) | **Drop** — [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) is now PuPr on the platform | Platform |
 | Bulk operations (tag/grant writes) | **Drop** — Hub Phase 2 | Governance Hub |
 | Access request workflows (RFA) | **Drop** — Hub Phase 2 | Governance Hub |
-| PII auto-classification | **Drop** — Mosaic AI Data Classification GA | Platform |
+| PII auto-classification | **Drop** — [Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification) GA | Platform |
 | ABAC policy creation | **Drop** — native ABAC GA | Platform |
+| AI Gateway PII detection/filtering | **Complementary** — Gateway does runtime filtering, Watchdog does posture + policy evaluation | Platform + Watchdog |

@@ -25,13 +25,15 @@ The platform enforces governance at query time (ABAC masks a column, a tag polic
 ### What Watchdog does NOT do
 
 - **Enforce access control** — that's ABAC, governed tags, row filters, column masks (native platform)
-- **Manage tags or grants** — that's the Governance Hub UI and AI DevKit MCP
-- **Auto-classify PII** — that's Mosaic AI Data Classification (GA Q1 FY27)
+- **Manage tags or grants** — that's the Governance Hub UI
+- **Auto-classify PII** — that's [Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification) (GA)
+- **Auto-generate documentation** — that's [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) (PuPr)
+- **Rate-limit or filter PII at the gateway** — that's [AI Gateway](https://docs.databricks.com/aws/en/ai-gateway/overview-serving-endpoints) (GA)
 - **Create or manage DQ monitors** — that's Lakehouse Monitoring (PuPr)
-- **Provide a native workspace UI** — that's the Governance Hub
+- **Provide a native workspace UI** — that's the Governance Hub (GA)
 - **Model business semantics** — that's Ontos (domains, data contracts, ODCS)
-- **Handle bulk tag/grant operations** — that's the Governance Hub Phase 2
-- **Manage access requests (RFA)** — that's the Governance Hub Phase 2
+- **Handle bulk tag/grant operations** — that's the Governance Hub
+- **Manage access requests (RFA)** — that's the Governance Hub
 
 ### The analogy
 
@@ -86,7 +88,7 @@ The Hub is an **admin management plane**. Ontos is a **business catalog**. Watch
 
 ---
 
-## Platform Landscape (as of Q1 FY27)
+## Platform Landscape (Updated Q3 FY27)
 
 What's shipping natively and what it means for Watchdog scope:
 
@@ -94,12 +96,16 @@ What's shipping natively and what it means for Watchdog scope:
 |---|---|---|
 | Governed Tags + Tag Policies | **GA** | Don't build tag management. Evaluate tag compliance. |
 | ABAC (row filters, column masks) | **GA** | Don't build ABAC creation. Evaluate ABAC coverage. |
-| Mosaic AI Data Classification | **GA** | Don't build PII detection. Evaluate classification coverage. |
-| Auto-classify → auto-tag → auto-mask pipeline | **GA** | Don't replicate. Evaluate whether the pipeline ran and covers what it should. |
+| [Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification) | **GA** | Don't build PII detection. Evaluate classification coverage. |
+| Detect → Tag → Mask pipeline | **GA** | Don't replicate. Evaluate whether the pipeline ran and covers what it should. |
+| [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) | **PuPr** | Don't build DocAgent. Platform auto-generates table/column descriptions. |
 | Data Quality Monitoring | **PuPr** | Don't build monitors. Evaluate DQM coverage + quality score thresholds. |
 | Tag Propagation through lineage | **In progress** (EDC-913) | Don't build. Evaluate propagation completeness once available. |
-| Governance Hub (unified UI) | **Beta Q1 FY27** | Don't build UI. Feed Delta tables that the Hub (or Lakeview dashboards) can consume. |
-| Governance Hub — cost/perf/AI observability | **Planned FY27** | Defer cost dashboard investment. Keep cost *policy evaluation*. |
+| Governance Hub (unified UI) | **GA** | Don't build UI. Feed Delta tables that the Hub (or Lakeview dashboards) can consume. |
+| [AI Gateway](https://docs.databricks.com/aws/en/ai-gateway/overview-serving-endpoints) | **GA** | Don't build rate limiting or PII filtering. Add policy-based governance on top (ontology, violations, risk scoring). |
+| [AI Gateway inference tables](https://docs.databricks.com/aws/en/ai-gateway/inference-tables) | **GA** | Future: read inference tables for richer agent execution data alongside `endpoint_usage`. |
+| [OpenTelemetry telemetry](https://docs.databricks.com/aws/en/release-notes/product/2026/march) | **GA** (Mar 2026) | Future: read OTel traces for deeper agent compliance monitoring. |
+| [AI Governance Framework (DAGF)](https://www.databricks.com/blog/introducing-databricks-ai-governance-framework) | **Published** | Framework is guidance. Watchdog is programmatic execution of the monitoring/compliance pillar. |
 
 ---
 

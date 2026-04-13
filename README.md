@@ -51,6 +51,32 @@ Watchdog is the **compliance posture layer** that sits on top of the platform's 
 - **AI interface**: 13 MCP tools so Claude, Genie, and AI agents can query and act on governance posture
 - **Compliance trends**: scan-over-scan deltas, direction indicators, rolling averages
 
+```
+  Violation Lifecycle
+  ═══════════════════
+
+  New failure               Still failing            No longer failing
+  detected                  on next scan             on next scan
+     │                          │                         │
+     ▼                          ▼                         ▼
+ ┌────────┐  last_detected  ┌────────┐  resolved_at  ┌──────────┐
+ │  OPEN  │────────────────▶│  OPEN  │──────────────▶│ RESOLVED │
+ └────────┘   updated       └────────┘               └──────────┘
+     │                          │
+     │  exception approved      │  exception approved
+     ▼                          ▼
+ ┌───────────┐             ┌───────────┐
+ │ EXCEPTION │             │ EXCEPTION │
+ │ (waiver)  │             │ (waiver)  │
+ └───────────┘             └───────────┘
+      │
+      │ exception expires
+      ▼
+   ┌────────┐
+   │  OPEN  │  (re-opened)
+   └────────┘
+```
+
 ### The analogy
 
 The platform is the **immune system** — it blocks bad things at runtime.
@@ -153,6 +179,37 @@ Watchdog crawls deployed AI agents (Apps + serving endpoints) and their executio
 | Top requester | 8.9M requests, 31B input tokens (flagged as high-volume) |
 
 *The platform has no concept of AI agent governance. MLflow traces what agents did. Watchdog evaluates whether what they did complied with your policies.*
+
+```
+  Defense in Depth
+  ════════════════
+
+┌─────────────────────────────────────────────────────────────┐
+│                    AI Agent Execution                         │
+│                                                               │
+│  ┌─ Layer 3: Runtime Guardrails (Watchdog) ──────────────┐   │
+│  │  check_before_access() → DENY/WARN/ALLOW              │   │
+│  │  log_agent_action() → structured audit trail           │   │
+│  │  report_agent_execution() → compliance report          │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                          │                                    │
+│  ┌─ Layer 2: Build-Time Governance (Watchdog) ───────────┐   │
+│  │  validate_ai_query() → blocked/warning/proceed         │   │
+│  │  Classification × operation risk matrix                │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                          │                                    │
+│  ┌─ Layer 1: Platform Enforcement (Native) ──────────────┐   │
+│  │  ABAC: column masks, row filters at query time         │   │
+│  │  Tag Policies: reject invalid tag values               │   │
+│  │  UC Grants: permission denied if no access             │   │
+│  └────────────────────────────────────────────────────────┘   │
+│                                                               │
+│  ┌─ Layer 0: Posture Scanning (Watchdog) ────────────────┐   │
+│  │  Daily scan → ontology classification → policy eval    │   │
+│  │  Violation tracking → owner accountability → trends    │   │
+│  └────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+```
 
 #### Three layers of agent enforcement
 
@@ -284,61 +341,6 @@ FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` w
  resource_       resource_        scan_results    violations     notification_
  inventory    classifications    (append-only)    (MERGE +       queue
                                                   exceptions)
-```
-
-### Violation Lifecycle
-
-```
-  New failure               Still failing            No longer failing
-  detected                  on next scan             on next scan
-     │                          │                         │
-     ▼                          ▼                         ▼
- ┌────────┐  last_detected  ┌────────┐  resolved_at  ┌──────────┐
- │  OPEN  │────────────────▶│  OPEN  │──────────────▶│ RESOLVED │
- └────────┘   updated       └────────┘               └──────────┘
-     │                          │
-     │  exception approved      │  exception approved
-     ▼                          ▼
- ┌───────────┐             ┌───────────┐
- │ EXCEPTION │             │ EXCEPTION │
- │ (waiver)  │             │ (waiver)  │
- └───────────┘             └───────────┘
-      │
-      │ exception expires
-      ▼
-   ┌────────┐
-   │  OPEN  │  (re-opened)
-   └────────┘
-```
-
-### Defense in Depth
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    AI Agent Execution                         │
-│                                                               │
-│  ┌─ Layer 3: Runtime Guardrails (Watchdog) ──────────────┐   │
-│  │  check_before_access() → DENY/WARN/ALLOW              │   │
-│  │  log_agent_action() → structured audit trail           │   │
-│  │  report_agent_execution() → compliance report          │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                          │                                    │
-│  ┌─ Layer 2: Build-Time Governance (Watchdog) ───────────┐   │
-│  │  validate_ai_query() → blocked/warning/proceed         │   │
-│  │  Classification × operation risk matrix                │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                          │                                    │
-│  ┌─ Layer 1: Platform Enforcement (Native) ──────────────┐   │
-│  │  ABAC: column masks, row filters at query time         │   │
-│  │  Tag Policies: reject invalid tag values               │   │
-│  │  UC Grants: permission denied if no access             │   │
-│  └────────────────────────────────────────────────────────┘   │
-│                                                               │
-│  ┌─ Layer 0: Posture Scanning (Watchdog) ────────────────┐   │
-│  │  Daily scan → ontology classification → policy eval    │   │
-│  │  Violation tracking → owner accountability → trends    │   │
-│  └────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
 ```
 
 ### Component Architecture

@@ -1,8 +1,9 @@
 # Watchdog Roadmap
 
 > What Watchdog is, what it isn't, and where it's going.
+> **All phases complete as of 2026-04-10.**
 >
-> Last updated: 2026-04-09
+> Last updated: 2026-04-13
 
 ## Identity
 
@@ -141,7 +142,7 @@ Focus: make the existing engine robust, reusable, and easy to deploy.
 - ✅ `watchdog_client.py` integration — reads classifications + violations from Delta tables
 - ✅ 9 MCP tools: `validate_table_usage`, `discover_governed_assets`, `check_policy_compliance`, etc.
 
-### Phase 2 — AI-Assisted Governance (Next)
+### Phase 2 — AI-Assisted Governance ✅ Complete
 
 Focus: make Watchdog the AI interface for governance posture.
 
@@ -186,7 +187,7 @@ Focus: opinionated, regulation-specific policy sets that customers can adopt in 
 - ✅ `library/general/` — CIS benchmarks, data lifecycle, cost governance
 - ✅ Each pack: ontology classes + rule primitives + policies + dashboard SQL
 
-### Phase 5 — AI Agent Runtime Governance
+### Phase 5 — AI Agent Runtime Governance ✅ Complete
 
 Focus: extend Watchdog from data compliance to **agent compliance** — govern AI agent behavior at runtime, not just data assets at rest.
 

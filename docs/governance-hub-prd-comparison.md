@@ -4,7 +4,7 @@
 >
 > Sources: [Governance Hub PRD](https://docs.google.com/document/d/1CovxUt4GKJIEVcdCDInKnVUrptmFpYCGMwbSs9N5lSo), [Hub Private Preview doc](https://docs.google.com/document/d/1CrARgC5r8K1KYwO61LVB295MZyRkYJ6kHLVG0lCKf9c), [Q2 FY27 Roadmap Baseline](https://docs.google.com/document/d/1ibZOjJAv-rbteHeCTMdLcqBh_wxPDCxyWENewYJ6CCY), [Labs Proposal: Ontos](https://docs.google.com/document/d/1WXcjpwKXnUifODy65Mvp0J2n1GQRP4bhSIaSGejAF2k)
 >
-> Last updated: 2026-04-08
+> Last updated: 2026-04-13. Note: All Watchdog roadmap phases are now complete. AI-assisted governance (13 MCP tools), agent runtime enforcement, and AI Gateway integration are live.
 
 ## The One-Liner
 

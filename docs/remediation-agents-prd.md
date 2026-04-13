@@ -1,8 +1,9 @@
 # PRD: Agentic Remediation Framework for Unity Catalog Governance
 
 **Working title:** Watchdog Remediation Agents (a.k.a. "Watchdog Autopilot")
-**Status:** Draft
+**Status:** Future direction — not yet implemented. All Watchdog roadmap phases (1-5F) are complete; this represents a potential Phase 6.
 **Owner:** TBD
+**Last updated:** 2026-04-13
 **Reference:** [7-Eleven's AI documentation migration on Databricks](https://www.databricks.com/blog/automating-data-documentation-ai-how-7-eleven-bridged-metadata-gap)
 
 ---
@@ -87,13 +88,134 @@ class RemediationAgent:
 
 The four-step contract mirrors 7-Eleven's pipeline: discover context, rank and match, generate SQL, execute and verify.
 
+```
+                          Agent Lifecycle (per violation)
+  ┌──────────────────────────────────────────────────────────────────────┐
+  │                                                                      │
+  │   ┌─────────────────┐    ┌──────────────┐    ┌──────────────────┐   │
+  │   │ gather_context() │    │ propose_fix()│    │     apply()      │   │
+  │   │                  │    │              │    │                  │   │
+  │   │ • violation      │───▶│ • LLM call   │───▶│ • ALTER TABLE    │   │
+  │   │ • schema + tags  │    │ • RAG lookup │    │ • UPDATE tags    │   │
+  │   │ • sample rows    │    │ • confidence │    │ • GRANT/REVOKE   │   │
+  │   │ • lineage        │    │ • SQL gen    │    │ • pre/post snap  │   │
+  │   │ • external docs  │    │ • citations  │    │ • audit log      │   │
+  │   └─────────────────┘    └──────────────┘    └────────┬─────────┘   │
+  │                                                        │             │
+  │                                    ┌───────────────────▼──────────┐  │
+  │                                    │         verify()             │  │
+  │                                    │                              │  │
+  │                                    │ • next Watchdog scan runs    │  │
+  │                                    │ • JOIN applied × violations  │  │
+  │                                    │ • resolved? → verified ✓     │  │
+  │                                    │ • still open? → failed ✗     │  │
+  │                                    │ • MLflow eval metrics        │  │
+  │                                    └──────────────────────────────┘  │
+  └──────────────────────────────────────────────────────────────────────┘
+```
+
 ### 5.2 Dispatcher
 
 Reads Watchdog's `violations` table, routes each open violation to the agent that declares `handles` for it, and respects per-agent concurrency, cost, and rate limits.
 
+```
+                         Dispatcher Routing
+  ┌──────────────────────────────────────────────────────────────┐
+  │  violations table  (status = open, remediable = true)        │
+  │                                                              │
+  │  ┌─────────────┬──────────────┬──────────────┬────────────┐  │
+  │  │ POL-Q001    │ POL-S001     │ POL-A002     │ POL-C002   │  │
+  │  │ POL-GEN-003 │              │              │            │  │
+  │  │ Undocumented│ PII no       │ Direct user  │ No cost    │  │
+  │  │ Asset       │ steward      │ grants       │ center     │  │
+  │  └──────┬──────┴──────┬───────┴──────┬───────┴─────┬──────┘  │
+  └─────────│─────────────│──────────────│─────────────│─────────┘
+            │             │              │             │
+            ▼             ▼              ▼             ▼
+  ┌─────────────┐ ┌────────────┐ ┌────────────────┐ ┌──────────────┐
+  │  DocAgent   │ │ Steward    │ │ GrantMigration │ │ CostCenter   │
+  │             │ │ Agent      │ │ Agent          │ │ Agent        │
+  │ Llama 4    │ │ LLM +      │ │ Deterministic  │ │ LLM +        │
+  │ Maverick + │ │ AAD/SCIM   │ │ + LLM group    │ │ FinOps       │
+  │ Confluence │ │ directory  │ │ suggestion     │ │ mapping      │
+  │ /git RAG   │ │            │ │                │ │              │
+  └──────┬──────┘ └─────┬──────┘ └───────┬────────┘ └──────┬───────┘
+         │              │                │                 │
+         ▼              ▼                ▼                 ▼
+  ┌──────────────────────────────────────────────────────────────┐
+  │              remediation_proposals (Delta)                   │
+  │  proposal_id │ violation_id │ agent │ sql │ confidence │ ... │
+  └──────────────────────────────────────────────────────────────┘
+
+  Dispatch rules:
+  • One agent per violation (first match on handles[])
+  • Per-agent concurrency limit (default: 10 concurrent)
+  • Per-agent token budget ceiling per scan
+  • Idempotent: (violation_id, agent_id, agent_version) → skip if exists
+  • Resource lock: only one agent may propose for a resource at a time
+```
+
 ### 5.3 Review Queue
 
-Delta table of `Proposals` with status transitions: `pending_review -> approved -> applied -> verified` (or `rejected` / `verification_failed`). Stewards review in a Databricks App or Lakeview page with diff preview and source citations.
+Delta table of `Proposals` with status transitions. Stewards review in a Databricks App or Lakeview page with diff preview and source citations.
+
+```
+                    Review Queue State Machine
+
+                         ┌───────────┐
+                         │  pending   │
+                         │  _review   │
+                         └─────┬─────┘
+                               │
+                    ┌──────────┼──────────┐
+                    │          │          │
+                    ▼          │          ▼
+             ┌───────────┐    │    ┌───────────┐
+             │ rejected  │    │    │ reassigned│──┐
+             │           │    │    │           │  │
+             │ reason    │    │    │ new owner │  │
+             │ logged    │    │    └───────────┘  │
+             └───────────┘    │          ▲        │
+                              │          └────────┘
+                              ▼           (back to pending_review
+                       ┌───────────┐      under new steward)
+                       │ approved  │
+                       └─────┬─────┘
+                             │
+                             ▼
+                       ┌───────────┐
+                       │ applied   │
+                       │           │
+                       │ SQL ran   │
+                       │ pre/post  │
+                       │ captured  │
+                       └─────┬─────┘
+                             │
+                    ┌────────┴────────┐
+                    │  next Watchdog  │
+                    │  scan runs      │
+                    └────────┬────────┘
+                             │
+                   ┌─────────┼─────────┐
+                   │                   │
+                   ▼                   ▼
+           ┌─────────────┐    ┌────────────────┐
+           │  verified   │    │ verification   │
+           │      ✓      │    │ _failed   ✗    │
+           │             │    │                │
+           │ violation   │    │ re-queued for  │
+           │ resolved in │    │ investigation  │
+           │ next scan   │    │                │
+           └─────────────┘    └───────┬────────┘
+                                      │
+                                      ▼
+                               ┌─────────────┐
+                               │  rolled_back│
+                               │             │
+                               │ pre-state   │
+                               │ restored    │
+                               └─────────────┘
+```
 
 ### 5.4 Verification Loop
 
@@ -207,6 +329,73 @@ Compliance trend line moves
 | `remediation_metrics` | Per-agent precision, recall, cost, time-to-resolve |
 
 New column on `violations`: `remediation_status` (values: `none`, `proposed`, `approved`, `applied`, `verified`, `failed`)
+
+```
+                    Data Model — Remediation Tables
+                    (new tables shaded, existing unshaded)
+
+  EXISTING WATCHDOG                          NEW REMEDIATION LAYER
+  ═══════════════                            ═════════════════════
+
+  ┌──────────────────┐                       ┌──────────────────────┐
+  │   violations     │──────────────────────▶│ remediation_proposals│
+  │                  │  violation_id          │                      │
+  │ • violation_id   │                       │ • proposal_id    PK  │
+  │ • policy_id      │                       │ • violation_id   FK  │
+  │ • resource_name  │     ┌────────────────▶│ • agent_id       FK  │
+  │ • status         │     │                 │ • agent_version      │
+  │ • severity       │     │                 │ • status             │
+  │ • owner          │     │                 │ • proposed_sql       │
+  │ + remediation_   │     │                 │ • confidence         │
+  │   status (NEW)   │     │                 │ • context_json       │
+  └──────────────────┘     │                 │ • llm_prompt_hash    │
+                           │                 │ • citations          │
+  ┌──────────────────┐     │                 │ • created_at         │
+  │ policies         │     │                 └──────────┬───────────┘
+  │                  │     │                            │
+  │ • policy_id      │     │               ┌────────────┤
+  │ • name           │     │               │            │
+  │ • severity       │     │               ▼            ▼
+  │ • domain         │     │  ┌──────────────────┐  ┌──────────────────┐
+  └──────────────────┘     │  │ remediation_     │  │ remediation_     │
+                           │  │ reviews          │  │ applied          │
+  ┌──────────────────┐     │  │                  │  │                  │
+  │ resource_        │     │  │ • review_id  PK  │  │ • apply_id   PK  │
+  │ inventory        │     │  │ • proposal_id FK │  │ • proposal_id FK │
+  │                  │     │  │ • reviewer       │  │ • executed_sql   │
+  │ • resource_name  │     │  │ • decision       │  │ • pre_state      │
+  │ • resource_type  │     │  │ • reasoning      │  │ • post_state     │
+  │ • tags           │     │  │ • reviewed_at    │  │ • applied_at     │
+  │ • owner          │     │  └──────────────────┘  │ • verify_scan_id │
+  │ • schema_name    │     │                        │ • verify_status  │
+  └──────────────────┘     │                        └──────────────────┘
+                           │
+  ┌──────────────────┐     │  ┌──────────────────┐
+  │ scan_summary     │     │  │ remediation_     │
+  │                  │     │  │ agents           │
+  │ • scan_id        │     │  │                  │
+  │ • scan_time      │─────│─▶│ • agent_id   PK  │
+  │ • total_resources│     │  │ • handles[]      │
+  │ • violations_new │     │  │ • version        │
+  └──────────────────┘     │  │ • model          │
+                           │  │ • config_json    │
+                           │  │ • active         │
+                           └──│ • permissions[]  │
+                              └──────────────────┘
+
+                              ┌──────────────────┐
+                              │ remediation_     │
+                              │ metrics          │
+                              │                  │
+                              │ • agent_id   FK  │
+                              │ • scan_id        │
+                              │ • precision      │
+                              │ • recall         │
+                              │ • avg_cost       │
+                              │ • avg_time_to_   │
+                              │   resolve        │
+                              └──────────────────┘
+```
 
 ### Semantic views
 

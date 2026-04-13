@@ -2,7 +2,7 @@
 
 > How Watchdog feeds its three consumers: Governance Hub, Ontos, and Guardrails.
 >
-> Last updated: 2026-04-08
+> Last updated: 2026-04-13
 > Companion docs: [roadmap.md](./roadmap.md), [governance-hub-prd-comparison.md](./governance-hub-prd-comparison.md)
 
 ## Design Principles
@@ -216,40 +216,17 @@ Pre-built Genie Space wired to Watchdog Delta tables. Business users query gover
 
 ---
 
-## Implementation Sequence
+## Delivery Status
 
-### Sprint 1-2: Grants Crawler + Access Policies
+All integration work described above has been delivered as of 2026-04-10:
 
-- Add `_crawl_grants()` and `_crawl_service_principals()` to `crawler.py`
-- Add `metastore_id` column to all table schemas
-- New `policies/access_governance.yml` with 4 access governance policies
-- New ontology classes: `GrantAsset`, `OverprivilegedGrant`, `DirectUserGrant`
-- Update `watchdog_client.py` in guardrails for new resource types
-- Update `WatchdogProvider` in ontos-adapter for new schema
+- ✅ Grants crawler + service principal crawler + access governance policies
+- ✅ `metastore_id` on all 9 tables + multi-metastore entrypoint
+- ✅ 14 semantic views including agent compliance + AI Gateway cost governance
+- ✅ 13 MCP tools (Watchdog) + 13 tools (Guardrails) including 4 runtime agent tools
+- ✅ Genie Space with 27 tables (all views + UC system tables + system.serving)
+- ✅ 4 industry policy packs (healthcare, financial, defense, general)
+- ✅ Ontos adapter with full GovernanceProvider protocol
+- ✅ Guardrails with ontology-aware build-time + runtime governance
 
-### Sprint 3: Semantic Views + CDF
-
-- Add `v_tag_policy_coverage`, `v_data_classification_summary`, `v_dq_monitoring_coverage` views
-- Enable CDF on `resource_inventory` and `dq_status`
-- Update Ontos GovernanceProvider protocol with new view access methods
-
-### Sprint 4: MCP AI Tools
-
-- Implement `explain_violation` MCP tool
-- Implement `what_if_policy` MCP tool
-- Build Genie Space template wired to Watchdog tables
-- Wire Guardrails `build_safely` to call MCP for richer policy context
-
-### Sprint 5-6: Multi-Metastore
-
-- `metastore_id` becomes active filter key
-- `WATCHDOG_METASTORE_IDS` env var + `crawl_all_metastores()` entrypoint
-- Cross-metastore views
-- MCP tools, GovernanceProvider, and `watchdog_client.py` get metastore parameter
-
-### Sprint 7+: Industry Policy Packs
-
-- Healthcare (HIPAA): PHI stewardship, access logging, encryption
-- Financial (SOX, PCI-DSS, GLBA): audit trails, separation of duties
-- Defense (NIST 800-171, CMMC): access control, media protection
-- General: CIS benchmarks, data lifecycle, cost governance
+See [roadmap.md](./roadmap.md) for the phase-by-phase breakdown.

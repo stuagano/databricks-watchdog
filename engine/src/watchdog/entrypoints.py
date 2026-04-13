@@ -77,6 +77,7 @@ def crawl():
     args = parser.parse_args()
 
     spark = SparkSession.builder.getOrCreate()
+    # Schema evolution handled via .option("mergeSchema", "true") on writes
     w = WorkspaceClient()
 
     from watchdog.crawler import ResourceCrawler
@@ -98,6 +99,7 @@ def evaluate():
     args = parser.parse_args()
 
     spark = SparkSession.builder.getOrCreate()
+    # Schema evolution handled via .option("mergeSchema", "true") on writes
     w = WorkspaceClient()
 
     # Sync YAML policies to Delta table (idempotent)
@@ -238,6 +240,8 @@ def adhoc():
     args = parser.parse_args()
 
     spark = SparkSession.builder.getOrCreate()
+    # Enable schema auto-merge for evolving table schemas (e.g., new metastore_id column)
+    # Schema evolution handled via .option("mergeSchema", "true") on writes
     w = WorkspaceClient()
 
     from watchdog.crawler import ResourceCrawler
@@ -252,11 +256,21 @@ def adhoc():
     for r in results:
         print(f"  {r.resource_type}: {r.count} resources")
 
+    # Sync YAML policies to Delta so views can JOIN for names/remediation
+    from watchdog.policy_loader import sync_policies_to_delta
+    count = sync_policies_to_delta(spark, args.catalog, args.schema)
+    print(f"Synced {count} policies from YAML to Delta")
+
     # Run ontology-aware evaluation
     engine = _build_engine(spark, w, args.catalog, args.schema)
     eval_results = engine.evaluate_all()
     print(f"Ontology: {eval_results.classes_assigned} classifications")
     print(f"Violations: {eval_results.new_violations} new, {eval_results.resolved} resolved")
+
+    # Refresh semantic views
+    from watchdog.views import ensure_semantic_views
+    ensure_semantic_views(spark, args.catalog, args.schema)
+    print("Refreshed semantic views")
 
     from watchdog.views import ensure_semantic_views
     ensure_semantic_views(spark, args.catalog, args.schema)

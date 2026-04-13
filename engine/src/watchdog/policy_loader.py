@@ -316,7 +316,7 @@ def _record_policy_changes(spark: SparkSession, catalog: str, schema: str,
         history_rows, schema=_history_schema
     ).withColumn("changed_at", F.current_timestamp())
 
-    df.write.mode("append").saveAsTable(history_table)
+    df.write.mode("append").option("mergeSchema", "true").saveAsTable(history_table)
     return len(history_rows)
 
 

@@ -248,7 +248,7 @@ class PolicyEngine:
                 T.StructField("evaluated_at", T.TimestampType()),
             ])
             df = self.spark.createDataFrame(scan_results, schema=_scan_schema)
-            df.write.mode("append").saveAsTable(self._scan_results_table)
+            df.write.mode("append").option("mergeSchema", "true").saveAsTable(self._scan_results_table)
 
         # Merge violations
         violation_summary = merge_violations(

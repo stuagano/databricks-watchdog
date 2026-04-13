@@ -142,7 +142,7 @@ def write_classifications(spark: SparkSession, catalog: str, schema: str,
         T.StructField("metastore_id", T.StringType()),
     ])
     df = spark.createDataFrame(rows, schema=_class_schema)
-    df.write.mode("append").saveAsTable(table)
+    df.write.mode("append").option("mergeSchema", "true").saveAsTable(table)
     return len(rows)
 
 
@@ -434,4 +434,4 @@ def write_scan_summary(spark: SparkSession, catalog: str, schema: str,
 
     table = f"{catalog}.{schema}.scan_summary"
     df = spark.createDataFrame(row, schema=summary_schema)
-    df.write.mode("append").saveAsTable(table)
+    df.write.mode("append").option("mergeSchema", "true").saveAsTable(table)

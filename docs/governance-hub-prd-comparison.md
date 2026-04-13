@@ -4,7 +4,7 @@
 >
 > Sources: [Governance Hub PRD](https://docs.google.com/document/d/1CovxUt4GKJIEVcdCDInKnVUrptmFpYCGMwbSs9N5lSo), [Hub Private Preview doc](https://docs.google.com/document/d/1CrARgC5r8K1KYwO61LVB295MZyRkYJ6kHLVG0lCKf9c), [Q2 FY27 Roadmap Baseline](https://docs.google.com/document/d/1ibZOjJAv-rbteHeCTMdLcqBh_wxPDCxyWENewYJ6CCY), [Labs Proposal: Ontos](https://docs.google.com/document/d/1WXcjpwKXnUifODy65Mvp0J2n1GQRP4bhSIaSGejAF2k)
 >
-> Last updated: 2026-04-13. Note: All Watchdog roadmap phases are now complete. AI-assisted governance (13 MCP tools), agent runtime enforcement, and AI Gateway integration are live.
+> Last updated: 2026-04-13
 
 ## The One-Liner
 
@@ -83,66 +83,47 @@ These are GA or near-GA. They define what the platform owns — Watchdog, Ontos,
 
 ## Feature-by-Feature Comparison with Governance Hub
 
-### Hub Phase 1 — Foundational Data Governance UI
-
 | Hub Feature | Watchdog | Ontos | Guardrails |
 |---|---|---|---|
 | **Governance Hub entry point** (consolidated UI) | N/A — headless engine. Feeds Hub via Delta. | N/A — separate app with its own UI for business users. | N/A — MCP tools, no UI. |
 | **Tag Policies page** | Evaluates tag compliance (are tags present? valid?). | Surfaces tag compliance in data product views. | Checks tag policies before agent uses a table. |
 | **Metastore administration** | Out of scope — read-only. | Out of scope. | Out of scope. |
 | **Embedded Governance Dashboards** | Compliance/violations/quality posture dashboards. Complementary to Hub's usage/access dashboards. | Business-context dashboards (domain health, product lifecycle). | N/A. |
-| **Data Classification page** | Evaluates "does classification exist? does PII have a steward?" | Surfaces classification in data product catalog. | Checks classification before agent accesses sensitive data. |
+| **Data Classification page** | Evaluates classification coverage ("does PII have a steward?"). | Surfaces classification in data product catalog. | Checks classification before agent accesses sensitive data. |
 | **Data Quality monitoring page** | Evaluates DQM/LHM coverage ("do gold tables have monitors?"). | Shows DQ status per data product. | Checks DQ status before agent trusts a table. |
-| **ABAC policy builder** | Evaluates "does sensitive data have ABAC coverage?" | Out of scope. | Validates ABAC is in place before agent accesses data. |
-
-### Hub Phase 2A — Bulk Management & Recommendations
-
-| Hub Feature | Watchdog | Ontos | Guardrails |
-|---|---|---|---|
+| **ABAC policy builder** | Evaluates ABAC coverage ("does sensitive data have masks?"). | Out of scope. | Validates ABAC is in place before agent accesses data. |
 | **Permissions list** | Crawls grants for policy evaluation. | Out of scope. | Checks grant status for agent identity. |
 | **Bulk operations** | Out of scope — read-only. | Out of scope. | Out of scope. |
 | **Access Requests (RFA)** | Out of scope. | Could surface RFA status per data product (future). | Out of scope. |
-| **Curated actions / recommendations** | **Core value.** Violation lifecycle + owner digests = curated actions. | Surfaces Watchdog violations as actions per data product. | N/A. |
-
-### Hub Phase 2B — Account Level
-
-| Hub Feature | Watchdog | Ontos | Guardrails |
-|---|---|---|---|
-| **Cross-metastore aggregation** | Phase 3: `metastore_id` on all tables + multi-metastore scanning. | Consumes Watchdog's cross-metastore data. | Metastore-aware policy checks. |
-
-### Future Phases
-
-| Hub Feature | Watchdog | Ontos | Guardrails |
-|---|---|---|---|
-| **AI-assisted governance** | **Live today.** 13 MCP tools (suggest_policies, policy_impact_analysis, explore_governance, suggest_classification). | Could wire Genie to Ontos data. | **Live today.** 13 tools: 9 build-time + 4 runtime agent governance. |
-| **Cost Governance** | Cost policy evaluation (keep). AI Gateway cost governance view live. Cost dashboards (defer to Hub). | Cost per data product (future). | Out of scope. |
-| **AI/ML Governance** | **Live today.** Agent crawling, execution traces, risk scoring, compliance dashboard (10 pages). | Model governance in data product catalog (future). | **Live today.** `check_before_access`, `report_agent_execution`, session tracking. |
-| **Auto-documentation** | **Defer to platform.** AI-Generated Documentation is now PuPr. Remediation agents PRD DocAgent is superseded. | Could consume platform-generated docs. | Out of scope. |
+| **Curated actions / recommendations** | Core value — violation lifecycle + owner digests = curated actions. | Surfaces Watchdog violations as actions per data product. | N/A. |
+| **Cross-metastore aggregation** | `metastore_id` on all tables + multi-metastore scanning. | Consumes Watchdog's cross-metastore data. | Metastore-aware policy checks. |
+| **AI-assisted governance** | 13 MCP tools (suggest_policies, policy_impact_analysis, explore_governance, suggest_classification). | Could wire Genie to Ontos data. | 13 tools: 9 build-time + 4 runtime agent governance. |
+| **Cost Governance** | Cost policy evaluation + AI Gateway cost governance view. Cost dashboards deferred to Hub. | Cost per data product (future). | Out of scope. |
+| **AI/ML Governance** | Agent crawling, execution traces, risk scoring, compliance dashboard. | Model governance in data product catalog (future). | `check_before_access`, `report_agent_execution`, session tracking. |
+| **Auto-documentation** | Deferred to platform (AI-Generated Documentation is PuPr). | Could consume platform-generated docs. | Out of scope. |
 
 ---
 
-## Summary: Built / Keep / Defer / Drop
+## Summary: Scope Ownership
 
-All phases complete as of 2026-04-10.
-
-| Category | Status | Owner |
+| Category | Owner | Notes |
 |---|---|---|
-| Ontology engine + classification hierarchy | **Built** ✅ — unique, no native equivalent | Watchdog engine |
-| Declarative rule engine + composition | **Built** ✅ — unique | Watchdog engine |
-| Violation lifecycle + owner digests | **Built** ✅ — ahead of Hub Phase 2A | Watchdog engine |
-| Grants crawler + access governance | **Built** ✅ | Watchdog engine |
-| Watchdog MCP (13 AI governance tools) | **Built** ✅ — ahead of Hub future phases | Watchdog MCP |
-| Guardrails MCP (13 tools: 9 build + 4 runtime) | **Built** ✅ | Guardrails |
-| AI agent runtime enforcement | **Built** ✅ — check_before_access, report_agent_execution | Guardrails |
-| AI Gateway cost governance | **Built** ✅ — token cost views, risk flags | Watchdog engine |
-| Industry policy packs (4 packs) | **Built** ✅ — reusable IP the platform won't provide | Watchdog library |
-| Multi-metastore scanning | **Built** ✅ — metastore_id on all 9 tables | Watchdog engine |
-| Ontos adapter (GovernanceProvider) | **Keep** — Ontos reads Watchdog data | ontos-adapter |
-| Cost policy evaluation | **Keep** — defer cost dashboards to Hub | Watchdog engine |
-| DQ policy evaluation | **Keep** — don't build monitors, evaluate coverage | Watchdog engine |
-| Auto-documentation (DocAgent) | **Drop** — [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) is now PuPr on the platform | Platform |
-| Bulk operations (tag/grant writes) | **Drop** — Hub Phase 2 | Governance Hub |
-| Access request workflows (RFA) | **Drop** — Hub Phase 2 | Governance Hub |
-| PII auto-classification | **Drop** — [Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification) GA | Platform |
-| ABAC policy creation | **Drop** — native ABAC GA | Platform |
-| AI Gateway PII detection/filtering | **Complementary** — Gateway does runtime filtering, Watchdog does posture + policy evaluation | Platform + Watchdog |
+| Ontology engine + classification hierarchy | Watchdog engine | Unique — no native equivalent |
+| Declarative rule engine + composition | Watchdog engine | Unique |
+| Violation lifecycle + owner digests | Watchdog engine | |
+| Grants crawler + access governance | Watchdog engine | |
+| Watchdog MCP (13 AI governance tools) | Watchdog MCP | |
+| Guardrails MCP (13 tools: 9 build + 4 runtime) | Guardrails | |
+| AI agent runtime enforcement | Guardrails | `check_before_access`, `report_agent_execution` |
+| AI Gateway cost governance | Watchdog engine | Token cost views, risk flags |
+| Industry policy packs (4 packs) | Watchdog library | HIPAA, SOX, NIST, CIS |
+| Multi-metastore scanning | Watchdog engine | `metastore_id` on all 9 tables |
+| Ontos adapter (GovernanceProvider) | ontos-adapter | Ontos reads Watchdog data |
+| Cost policy evaluation | Watchdog engine | Cost dashboards deferred to Hub |
+| DQ policy evaluation | Watchdog engine | Evaluate coverage, don't build monitors |
+| Auto-documentation (DocAgent) | Platform | [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) is PuPr — not in Watchdog scope |
+| Bulk operations (tag/grant writes) | Governance Hub | |
+| Access request workflows (RFA) | Governance Hub | |
+| PII auto-classification | Platform | [Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification) GA |
+| ABAC policy creation | Platform | Native ABAC GA |
+| AI Gateway PII detection/filtering | Platform + Watchdog | Gateway does runtime filtering; Watchdog does posture + policy evaluation |

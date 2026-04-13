@@ -214,19 +214,3 @@ Pre-built Genie Space wired to Watchdog Delta tables. Business users query gover
 | Access audit log crawler | Hub surfaces access patterns natively via system tables | Governance Hub |
 | User crawler | Hub owns user/identity management | Governance Hub |
 
----
-
-## Delivery Status
-
-All integration work described above has been delivered as of 2026-04-10:
-
-- ✅ Grants crawler + service principal crawler + access governance policies
-- ✅ `metastore_id` on all 9 tables + multi-metastore entrypoint
-- ✅ 14 semantic views including agent compliance + AI Gateway cost governance
-- ✅ 13 MCP tools (Watchdog) + 13 tools (Guardrails) including 4 runtime agent tools
-- ✅ Genie Space with 27 tables (all views + UC system tables + system.serving)
-- ✅ 4 industry policy packs (healthcare, financial, defense, general)
-- ✅ Ontos adapter with full GovernanceProvider protocol
-- ✅ Guardrails with ontology-aware build-time + runtime governance
-
-See [roadmap.md](./roadmap.md) for the phase-by-phase breakdown.

@@ -132,21 +132,75 @@ Watchdog crawls deployed AI agents (Apps + serving endpoints) and their executio
 | Ungoverned agents | 533 (no owner metadata → POL-AGENT-002 violation) |
 | Top requester | 8.9M requests, 31B input tokens (flagged as high-volume) |
 
+*The platform has no concept of AI agent governance. MLflow traces what agents did. Watchdog evaluates whether what they did complied with your policies.*
+
+#### Three layers of agent enforcement
+
+**Layer 1: Posture scanning (offline)** — The engine crawls all agents daily, classifies them (managed FMAPI endpoint vs customer agent, governed vs ungoverned), evaluates agent governance policies, and produces violations with remediation steps. Admins see which agents are ungoverned, which are accessing PII, and what to fix first.
+
+**Layer 2: Build-time governance (pre-deployment)** — Before an AI developer ships an agent, `validate_ai_query` checks whether the tables the agent will use are safe for the intended operation. PII tables block training. Export-controlled tables block high-risk operations. Confidential tables with sensitive columns get warnings. Each check returns a verdict (proceed/warning/blocked) with alternatives.
+
+**Layer 3: Runtime enforcement (during execution)** — While an agent runs, it calls the Guardrails MCP for real-time governance:
+
 ```
 Agent starts task
-  → check_before_access("my-agent", "catalog.schema.pii_table")
-  ← DENY: "Table is PII (PhiAsset), agent has no audit logging.
-           Suggest: catalog.schema.pii_table_masked"
-  → check_before_access("my-agent", "catalog.schema.public_table")
-  ← ALLOW: "No violations, DataAsset classification"
-  → log_agent_action("my-agent", "data_access", "catalog.schema.public_table")
-  ... agent does work ...
+  → check_before_access("my-agent", "catalog.schema.pii_table", "SELECT")
+  ← DENY: "Table is classified as PII."
+           "Suggest: catalog.schema.pii_table_masked"
+
+  → check_before_access("my-agent", "catalog.schema.sales_data", "SELECT")
+  ← ALLOW: classifications: ["DataAsset"], 0 violations
+
+  → log_agent_action("my-agent", "data_access", "catalog.schema.sales_data")
+  ← {status: "logged", event_id: "uuid-..."}
+
+  → get_agent_compliance("my-agent")
+  ← {checks_passed: 1, checks_denied: 1, risk_level: "high",
+     pii_tables_accessed: ["catalog.schema.pii_table"]}
+
   → report_agent_execution("my-agent", "Generated sales report")
-  ← {compliance_status: "needs_review", risk_level: "medium",
-     checks: {passed: 1, denied: 1, warned: 0}}
+  ← {compliance_status: "non_compliant", risk_level: "high",
+     recommendations: ["1 access denied — resolve before re-running",
+                        "PII tables accessed — ensure data handling complies"]}
 ```
 
-*The platform has no concept of AI agent governance. MLflow traces what agents did. Watchdog evaluates whether what they did complied with your policies.*
+#### How `check_before_access` decides
+
+| Condition | Decision | Action |
+|---|---|---|
+| Table has critical violations | **DENY** | Suggests contacting owner |
+| Table classified as PII | **DENY** | Suggests `_masked` view alternative |
+| Table classified as restricted/export-controlled | **DENY** | Suggests governance exception |
+| Table has high-severity violations | **WARN** | Allows but logs warning |
+| Confidential table + sensitive columns requested | **WARN** | Flags specific columns |
+| No issues | **ALLOW** | Proceeds, logs access |
+
+Every check updates the agent's session state. At the end, `report_agent_execution` produces a compliance report with a status (compliant/needs_review/non_compliant), risk level, and actionable recommendations.
+
+#### Risk scoring
+
+Agents get a composite risk tier based on two dimensions:
+
+| | Low volume (<100K requests) | High volume (≥100K requests) |
+|---|---|---|
+| **No sensitivity flags** | low | medium |
+| **Any sensitivity flag** (PII, external, export) | high | critical |
+
+The Agent Risk page in the dashboard cross-references this with live `system.serving.endpoint_usage` data so you see real-time token consumption alongside Watchdog's compliance assessment.
+
+#### Agent policies
+
+| Policy | Severity | What it checks |
+|---|---|---|
+| POL-AGENT-001 | critical | PII-accessing agents must have audit logging |
+| POL-AGENT-002 | high | All agents must have a designated owner |
+| POL-AGENT-003 | critical | Data-exporting agents need documented approval |
+| POL-AGENT-004 | high | External API agents must be registered |
+| POL-AGENT-005 | critical | Ungoverned agents can't access production data |
+| POL-AGENT-006 | high | Production agents must specify model endpoint |
+| POL-AGENT-007 | medium | Production agents need error handling |
+
+FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` with `agent_owner=databricks` and `audit_logging_enabled=true` — they pass all policies by default since they're platform-managed infrastructure.
 
 ---
 
@@ -164,8 +218,8 @@ Agent starts task
             │                   │                  │
     ┌───────▼───────┐  ┌───────▼────────┐  ┌──────▼──────────────┐
     │ Lakeview       │  │ Watchdog MCP   │  │ Guardrails MCP      │
-    │ Dashboard      │  │ 9 AI tools     │  │ 13 tools:           │
-    │ 5 pages        │  │ for assistants │  │  9 build-time +     │
+    │ Dashboard      │  │ 13 AI tools    │  │ 13 tools:           │
+    │ 10 pages       │  │ for assistants │  │  9 build-time +     │
     ├────────────────┤  ├────────────────┤  │  4 runtime agent    │
     │ Genie Space    │  │ Ontos Adapter  │  │  governance         │
     │ 19 tables      │  │ Business       │  │  check_before_access│

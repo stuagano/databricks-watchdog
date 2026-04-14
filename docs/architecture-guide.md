@@ -231,3 +231,133 @@ All 14 views are regular views. On tables with millions of rows, dashboard queri
 2. Add dashboard SQL in `library/myindustry/dashboards/`
 3. Add tests in `tests/unit/test_policy_pack_myindustry.py`
 4. Document in README industry packs table
+
+### New Rule Type
+
+The rule engine's dispatch table (`rule_engine.py` line ~75) maps rule type strings to evaluator methods. To add a new rule type:
+
+1. Add evaluator method: `_eval_mytype(self, rule: dict, tags: dict, metadata: dict) -> RuleResult`
+2. Register in the dispatch table: `"mytype": self._eval_mytype`
+3. Add tests in `tests/unit/test_rule_engine.py`
+4. Document the rule schema in this guide
+
+All evaluators receive the same three arguments (rule config, resource tags, resource metadata) and return a `RuleResult(passed, detail, rule_type)`.
+
+---
+
+## Drift Detection Pattern — External Expected State
+
+Watchdog's core model is **posture evaluation**: crawl actual state, evaluate against policies, report violations. But some governance scenarios require comparing actual state against a **declared expected state** maintained outside Watchdog — for example, a permissions-as-code system that defines what grants *should* exist.
+
+This is the **drift detection pattern**: an external system produces an `expected_state.json` describing what should be true, uploads it to a UC volume, and Watchdog policies compare actual state against it.
+
+### How It Works
+
+```
+External System (e.g., permissions compiler, IaC pipeline)
+       │
+  Generates expected_state.json
+       │
+  Uploads to UC volume: {catalog}.{schema}.{volume_name}/expected_state.json
+       │
+Watchdog Scanner (daily scan)
+       │
+  ┌────┴──────────────────────────────────────┐
+  │ drift_check rule type                      │
+  │  1. Reads expected_state.json from volume  │
+  │  2. Queries actual state (INFORMATION_     │
+  │     SCHEMA, SDK, resource_inventory)       │
+  │  3. Diffs expected vs actual               │
+  │  4. Returns FAIL with detail if mismatch   │
+  └────────────────────────────────────────────┘
+       │
+  Violations table (same lifecycle as any other violation)
+  Notifications (same pipeline)
+  Dashboards (same views)
+```
+
+### The `drift_check` Rule Type
+
+A planned extension to the rule engine dispatch table. Unlike other rule types that evaluate resource properties (tags, metadata), `drift_check` compares a resource against an external declaration of what should exist.
+
+**Policy schema:**
+```yaml
+- id: POL-DRIFT-001
+  name: "Grant drift detection"
+  applies_to: GrantAsset
+  domain: AccessControl
+  severity: critical
+  active: true
+  rule:
+    type: drift_check
+    source: expected_permissions/expected_state.json   # path within UC volume
+    check: grants                                       # section of expected_state.json
+```
+
+**Expected state JSON structure:**
+```json
+{
+  "generated_at": "2026-04-14T10:00:00Z",
+  "environment": "production",
+  "grants": [
+    {
+      "catalog": "gold",
+      "schema": "finance",
+      "table": null,
+      "principal": "finance-analysts",
+      "privileges": ["SELECT", "USE_CATALOG", "USE_SCHEMA"]
+    }
+  ],
+  "row_filters": [
+    {
+      "table": "gold.finance.gl_balances",
+      "function": "permissions_filter_finance_gl_balances",
+      "enforcement": "uc_native",
+      "checksum": "sha256:a1b2c3..."
+    }
+  ],
+  "column_masks": [
+    {
+      "table": "gold.finance.gl_balances",
+      "column": "cost_center_owner",
+      "function": "permissions_mask_cost_center_owner",
+      "enforcement": "uc_native",
+      "checksum": "sha256:d4e5f6..."
+    }
+  ]
+}
+```
+
+**Evaluator behavior:**
+- Loads expected state from the UC volume path specified in `rule.source`
+- Reads the section specified by `rule.check` (grants, row_filters, column_masks, group_membership)
+- Queries the corresponding actual state (grants crawler output, `INFORMATION_SCHEMA`, SDK)
+- Returns `RuleResult(passed=False, detail="...")` listing extra, missing, or modified entries
+- UDF integrity uses checksums — if a row filter function was manually edited, the checksum won't match even though the function name is correct
+
+### Design Principles
+
+1. **Watchdog remains read-only.** Drift detection reports mismatches. It never creates, modifies, or revokes grants. Remediation is always a human action in the external system.
+
+2. **External systems own expected state.** Watchdog doesn't know or care how the expected state was produced — it could be a permissions compiler, Terraform output, a spreadsheet export, or a manual JSON file. The contract is the JSON schema.
+
+3. **Policy namespace convention.** External systems should use a distinct policy ID prefix to avoid collisions with Watchdog's built-in policies:
+
+| Prefix | Owner |
+|--------|-------|
+| `POL-A*` | Watchdog (access governance) |
+| `POL-AGENT-*` | Watchdog (agent governance) |
+| `POL-PERM-*` | Permissions enforcement (external) |
+| `POL-DRIFT-*` | Generic drift detection (external) |
+
+4. **Same violation lifecycle.** Drift violations land in the same `violations` table, use the same notification pipeline, and appear in the same dashboards. No special handling needed.
+
+### Use Cases
+
+- **Permissions-as-code:** A YAML-based permissions compiler defines team grants, row filters, and column masks. Expected state is generated at deploy time. Watchdog detects unauthorized manual grants or modified UDFs.
+- **Infrastructure-as-code:** Terraform defines workspace configuration (cluster policies, init scripts, network settings). Expected state captures what Terraform applied. Watchdog detects manual overrides.
+- **Compliance baselines:** A compliance team defines required minimum grants for auditors. Expected state is a static JSON file. Watchdog detects if grants are revoked.
+
+### Implementation Status
+
+The `drift_check` rule type is **designed but not yet implemented** in the rule engine. The integration contract (expected state JSON schema, policy format, volume path convention) is stable and can be used by external systems today — they produce the expected state file, and the drift_check evaluator will consume it once added to the dispatch table.

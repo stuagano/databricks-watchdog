@@ -23,7 +23,7 @@ The platform enforces governance at query time (ABAC masks a column, a tag polic
 
 ### What Watchdog does NOT do
 
-- **Enforce access control** — that's ABAC, governed tags, row filters, column masks (native platform)
+- **Enforce access control** — that's ABAC, governed tags, row filters, column masks (native platform). Watchdog can *detect drift* from a declared expected state (see Drift Detection below), but never creates or revokes grants.
 - **Manage tags or grants** — that's the Governance Hub UI
 - **Auto-classify PII** — that's [Data Classification](https://docs.databricks.com/aws/en/data-governance/unity-catalog/data-classification) (GA)
 - **Auto-generate documentation** — that's [AI-Generated Documentation](https://www.databricks.com/blog/announcing-public-preview-ai-generated-documentation-databricks-unity-catalog) (PuPr)
@@ -155,6 +155,14 @@ Deployed with 27 tables (all 13 semantic views + UC system tables + `system.serv
 - `library/general/` — CIS benchmarks, data lifecycle, cost governance
 - Each pack: ontology classes + rule primitives + policies + dashboard SQL
 
+### Drift Detection (Extension Point)
+- **Design:** complete (see architecture guide, "Drift Detection Pattern" section)
+- **Implementation:** planned — `drift_check` rule type for the rule engine dispatch table
+- **Contract:** External systems produce `expected_state.json` → upload to UC volume → Watchdog evaluates against actual state
+- **Use cases:** permissions-as-code (RBAC/ABAC grant drift), IaC drift (Terraform state vs reality), compliance baselines
+- **Key principle:** Watchdog detects drift but never remediates. External systems own expected state and remediation.
+- **Policy namespace:** External systems use `POL-PERM-*` or `POL-DRIFT-*` prefixes to avoid collisions with Watchdog's built-in `POL-A*`, `POL-AGENT-*` policies.
+
 ---
 
 ## Dropped from Scope
@@ -165,7 +173,7 @@ Items that are native platform territory — Watchdog does not build these:
 |---|---|
 | `bulk_operations.py` (bulk tag/grant writes) | Hub Phase 2 owns bulk management |
 | `access_requests.py` (RFA approval workflows) | Hub Phase 2 owns access requests |
-| ABAC policy creation | Native ABAC is GA with UDF-based policies |
+| ABAC policy creation | Native ABAC is GA with UDF-based policies. Drift detection (comparing actual ABAC state against declared expected state) is in scope — see Drift Detection above. |
 | PII auto-classification | Mosaic AI Data Classification is GA |
 | DQ monitor creation/management | Lakehouse Monitoring is PuPr |
 | Cost observability dashboards | Hub absorbing cost governance dashboards |

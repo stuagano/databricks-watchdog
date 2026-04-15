@@ -39,7 +39,7 @@ A service principal is recommended for production deployments. The service princ
 | `USE CATALOG` | Target catalog | Read/write Watchdog tables |
 | `USE SCHEMA` | Target schema | Read/write Watchdog tables |
 | `CREATE TABLE` | Target schema | Create Delta tables on first run |
-| `CREATE VIEW` | Target schema | Create semantic views |
+| `CREATE VIEW` | Target schema | Create compliance views |
 | `SELECT` on system tables | system catalog | Read information_schema and serving tables |
 | Workspace-level access | Workspace | SDK access for jobs, clusters, warehouses, service principals, groups |
 

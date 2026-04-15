@@ -87,7 +87,7 @@ Common issues with Watchdog and their solutions.
 
 ---
 
-## 5. Semantic Views Not Refreshing
+## 5. Compliance Views Not Refreshing
 
 **Problem:** Dashboard queries return stale data even after a successful evaluate run.
 
@@ -178,7 +178,7 @@ Common issues with Watchdog and their solutions.
    ```
    These should match (or be close in time).
 2. If only the crawl ran, execute the evaluate step.
-3. Check that semantic views exist and are current:
+3. Check that compliance views exist and are current:
    ```sql
    SHOW VIEWS IN platform.watchdog LIKE 'v_*'
    ```

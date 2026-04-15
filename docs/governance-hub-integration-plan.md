@@ -137,7 +137,7 @@ An agent developer using Guardrails gets: "This table is classified as PII, has 
 
 ## Engine Work for All Consumers
 
-### New semantic views
+### New compliance views
 
 Add to `engine/src/watchdog/views.py`:
 

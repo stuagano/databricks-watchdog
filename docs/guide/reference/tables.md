@@ -1,6 +1,6 @@
 # Tables and Views Reference
 
-Watchdog stores all governance data in Delta tables within a Unity Catalog schema (typically `platform.watchdog`). Semantic views provide pre-joined perspectives for dashboards and Genie Spaces.
+Watchdog stores all governance data in Delta tables within a Unity Catalog schema (typically `platform.watchdog`). Compliance views provide pre-joined perspectives for dashboards and Genie Spaces.
 
 ## Core Tables
 
@@ -178,7 +178,7 @@ Handoff table for the notification pipeline. One row per owner per notification 
 
 ---
 
-## Semantic Views
+## Compliance Views
 
 All views are regular (not materialized) and refresh on every query. They are created or replaced after each evaluate run by `ensure_semantic_views()`.
 

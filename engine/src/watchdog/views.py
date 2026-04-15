@@ -1,4 +1,4 @@
-"""Semantic Views — ontology-shaped compliance views for Ontos and Genie.
+"""Compliance Views — ontology-shaped governance views for Ontos and Genie.
 
 14 views are created in the watchdog schema after each evaluate run:
 

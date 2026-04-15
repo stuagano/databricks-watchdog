@@ -40,7 +40,7 @@ Coverage:
   violations and clean resources produce zero violations
 - MERGE lifecycle: open → resolved on passing scan; first_detected stable on repeat failure
 - Exception handling: active exception → status=exception; expired → still open
-- Semantic views: v_class_compliance and v_resource_compliance reflect evaluation output
+- Compliance views: v_class_compliance and v_resource_compliance reflect evaluation output
 
 ## Fixture resources
 

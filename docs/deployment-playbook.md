@@ -79,7 +79,7 @@ databricks jobs run-now <JOB_ID> --profile my-workspace --no-wait
 4. Evaluates 46 policies
 5. Merges violations (dedup + lifecycle)
 6. Writes scan summary
-7. Refreshes 14 semantic views
+7. Refreshes 14 compliance views
 
 **Validate:**
 ```sql

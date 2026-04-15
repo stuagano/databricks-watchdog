@@ -603,7 +603,7 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `exceptions` | Approved policy exceptions with expiration dates |
 | `notification_queue` | Per-owner notification digests (CDF-enabled) |
 
-### Semantic Views
+### Compliance Views
 
 | View | Purpose |
 |---|---|
@@ -654,7 +654,7 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 │  resource_inventory │ violations │ policies │ scan_summary    │
 │  resource_classifications │ exceptions │ scan_results         │
 │                                                               │
-│  + 14 semantic views    + UC system tables cross-joins         │
+│  + 14 compliance views  + UC system tables cross-joins         │
 └──────────────────────────────────────────────────────────────┘
 ```
 

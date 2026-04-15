@@ -1,5 +1,47 @@
 # Architecture
 
+## The Four-Layer Stack
+
+Watchdog does not exist in isolation. It occupies one layer of a four-layer architecture that most Databricks deployments build bottom-up:
+
+```
+                    +---------------------------+
+  Consumption  -->  |  AGENTS / GENIE / APPS    |  <-- "Who asks the question?"
+                    +---------------------------+
+  Semantics    -->  |  SEMANTIC LAYER           |  <-- "What does the question mean?"
+                    +---------------------------+
+  Governance   -->  |  ONTOS + WATCHDOG         |  <-- "Is the data trustworthy?"
+                    +---------------------------+
+  Foundation   -->  |  UC / Delta / DBSQL       |  <-- "Where does the data live?"
+                    +---------------------------+
+```
+
+These are not four alternatives -- they are four layers solving different problems at different levels of the stack.
+
+**Foundation** (UC, Delta, DBSQL). Where the data lives. Unity Catalog provides the metastore, Delta provides the storage format, and DBSQL provides the compute. Everything above depends on this layer being healthy.
+
+**Governance** (Watchdog + Ontos). Whether the data is trustworthy. Watchdog monitors platform health, data quality SLOs, and compliance posture -- it answers "did the ingestion run? Are there null values in the Gold table? Is the SQL Warehouse latency acceptable?" Ontos provides the knowledge graph that maps business concepts to technical assets -- it answers "what does 'revenue' mean in technical terms? Who owns the customer table?" Watchdog validates that the data underlying the semantic layer is trustworthy. Ontos informs what the semantic layer should contain.
+
+**Semantics** (Genie Spaces, Metric Views, Dimensions and Measures). What the data means in business terms. This layer defines "revenue", "active customer", "churn rate" -- the shared vocabulary that prevents every agent and app from writing its own SQL and producing inconsistent numbers. Without it, one dashboard says $10M and another says $12M.
+
+**Consumption** (Agents, Genie, Apps). Who asks the question. Agents receive a question, route through the semantic layer to understand what data to query, trust the data because Watchdog validates quality and Ontos governs access, and return an answer.
+
+### Why This Matters for Deployment
+
+Most customers build bottom-up:
+
+1. Get data into Databricks (Foundation)
+2. Make it queryable (DBSQL + dashboards)
+3. Govern it (Watchdog / Ontos / UC)
+4. Define business meaning (Semantic layer)
+5. Let agents consume it (Genie / Agent Bricks / MCP)
+
+Most accounts are somewhere in steps 1-3. The ones with production agents that skipped step 4 and went straight from 2 to 5 produce inconsistent results -- agents work, but different surfaces return different numbers for the same question. That is the validation point: not "do you have a semantic layer?" but "what breaks when you don't?"
+
+Watchdog enters the picture at step 3. It provides the governance and observability foundation that makes steps 4 and 5 trustworthy. Without it, you can define semantics and deploy agents, but you have no way to know whether the data they query is compliant, complete, or current.
+
+---
+
 ## The Observability Layer Model
 
 Databricks Unity Catalog is the **control plane** -- it enforces governance at query time through ABAC, tag policies, row filters, and column masks. Watchdog is the **observability layer** -- it measures governance posture by crawling, classifying, and evaluating the same resources the control plane governs.
@@ -93,7 +135,7 @@ Five principles shape every architectural decision in Watchdog:
 Four types of consumer read the data layer:
 
 - **Lakeview Dashboards.** SQL-based dashboards with 10 pages covering domain compliance, agent inventory, cost governance, and trends.
-- **Genie Space.** Natural-language governance queries backed by 27 tables (all 14 semantic views plus UC system tables and `system.serving.endpoint_usage`).
+- **Genie Space.** Natural-language governance queries backed by 27 tables (all 14 compliance views plus UC system tables and `system.serving.endpoint_usage`).
 - **AI Assistants.** Claude, ChatGPT, or other assistants query governance posture through the Watchdog MCP server (13 tools).
 - **Autonomous AI Agents.** Agents building on the lakehouse call the Guardrails MCP for real-time access checks, action logging, and compliance reporting.
 
@@ -107,7 +149,7 @@ Three servers expose the data layer to different personas:
 
 ### Data Layer
 
-Eight core Delta tables and 14 semantic views. The engine writes to the core tables; consumers read from views that join and aggregate across tables. UC system tables provide source data that the engine crawls.
+Eight core Delta tables and 14 compliance views. The engine writes to the core tables; consumers read from views that join and aggregate across tables. UC system tables provide source data that the engine crawls.
 
 ### Engine
 

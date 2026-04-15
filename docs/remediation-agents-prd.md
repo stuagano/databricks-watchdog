@@ -464,7 +464,7 @@ New column on `violations`: `remediation_status` (values: `none`, `proposed`, `a
                               └──────────────────┘
 ```
 
-### Semantic views
+### Compliance views
 
 | View | Purpose |
 |---|---|

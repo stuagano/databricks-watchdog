@@ -169,7 +169,7 @@ print(f"Classified: {results.classes_assigned} assignments")
 print(f"Evaluated: {results.policies_run} policy checks")
 print(f"Violations: {results.new_violations} new, {results.resolved} resolved")
 
-# Create semantic views
+# Create compliance views
 ensure_semantic_views(spark, "my_catalog", "watchdog")
 ```
 

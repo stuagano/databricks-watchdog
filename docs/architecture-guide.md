@@ -218,7 +218,7 @@ All 14 views are regular views. On tables with millions of rows, dashboard queri
 4. Sanitize all inputs with `_esc()`
 5. Update test tool count assertion
 
-### New Semantic View
+### New Compliance View
 
 1. Add `_ensure_myview_view()` function in `engine/src/watchdog/views.py`
 2. Register in `ensure_semantic_views()`

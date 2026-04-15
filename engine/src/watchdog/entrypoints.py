@@ -117,7 +117,7 @@ def evaluate():
 
     from watchdog.views import ensure_semantic_views
     ensure_semantic_views(spark, args.catalog, args.schema)
-    print("Refreshed semantic views: v_resource_compliance, v_class_compliance, v_domain_compliance, "
+    print("Refreshed compliance views: v_resource_compliance, v_class_compliance, v_domain_compliance, "
           "v_tag_policy_coverage, v_data_classification_summary, v_dq_monitoring_coverage, "
           "v_compliance_trend")
 
@@ -267,11 +267,11 @@ def adhoc():
     print(f"Ontology: {eval_results.classes_assigned} classifications")
     print(f"Violations: {eval_results.new_violations} new, {eval_results.resolved} resolved")
 
-    # Refresh semantic views
+    # Refresh compliance views
     from watchdog.views import ensure_semantic_views
     ensure_semantic_views(spark, args.catalog, args.schema)
-    print("Refreshed semantic views")
+    print("Refreshed compliance views")
 
     from watchdog.views import ensure_semantic_views
     ensure_semantic_views(spark, args.catalog, args.schema)
-    print("Refreshed semantic views")
+    print("Refreshed compliance views")

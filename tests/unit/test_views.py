@@ -1,4 +1,4 @@
-"""Unit tests for semantic views — SQL structure and table reference validation.
+"""Unit tests for compliance views — SQL structure and table reference validation.
 
 Tests verify that:
   - View SQL is syntactically valid (parseable, correct f-string interpolation)

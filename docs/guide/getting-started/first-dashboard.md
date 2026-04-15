@@ -1,10 +1,10 @@
 # First Dashboard
 
-After running a scan and evaluate, Watchdog's Delta tables and semantic views contain compliance data ready for visualization. Three options are available: a pre-built Lakeview dashboard, a Genie space for natural-language queries, or custom SQL against the views.
+After running a scan and evaluate, Watchdog's Delta tables and compliance views contain governance data ready for visualization. Three options are available: a pre-built Lakeview dashboard, a Genie space for natural-language queries, or custom SQL against the views.
 
-## Semantic Views
+## Compliance Views
 
-The evaluate step creates 14 semantic views in the Watchdog schema. These views join and aggregate across the core tables to provide ready-made analytical surfaces:
+The evaluate step creates 14 compliance views in the Watchdog schema. These views join and aggregate across the core tables to provide ready-made analytical surfaces:
 
 | View | Description |
 |---|---|
@@ -49,7 +49,7 @@ The repository includes pre-built Lakeview dashboard definitions that can be imp
 
 ## Option B: Genie Space
 
-A Genie space enables natural-language queries against Watchdog data. The space is configured with 27 tables: all 14 semantic views, the core Delta tables, and relevant UC system tables including `system.serving.endpoint_usage`.
+A Genie space enables natural-language queries against Watchdog data. The space is configured with 27 tables: all 14 compliance views, the core Delta tables, and relevant UC system tables including `system.serving.endpoint_usage`.
 
 ### Deploy Steps
 
@@ -70,7 +70,7 @@ Once deployed, the Genie space answers questions like:
 
 ## Option C: Custom SQL
 
-For teams that prefer building their own dashboards or integrating with external BI tools, the semantic views support direct SQL queries. Here are four starting queries:
+For teams that prefer building their own dashboards or integrating with external BI tools, the compliance views support direct SQL queries. Here are four starting queries:
 
 ### Domain Compliance Overview
 

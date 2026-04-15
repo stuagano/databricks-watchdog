@@ -109,7 +109,7 @@ Generates a post-execution compliance report summarizing all governance checks, 
 
 ## Agent Compliance Views
 
-Watchdog creates four agent-specific semantic views after each evaluation:
+Watchdog creates four agent-specific compliance views after each evaluation:
 
 ### v_agent_inventory
 

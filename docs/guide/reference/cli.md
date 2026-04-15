@@ -78,7 +78,7 @@ python -m watchdog.entrypoints evaluate \
    - Pass 2: Evaluate each policy against matching resources.
    - Writes to `scan_results` (append-only) and `violations` (MERGE).
    - Writes to `scan_summary` (append-only).
-4. Refreshes all 14 semantic views.
+4. Refreshes all 14 compliance views.
 
 **Output:**
 
@@ -88,7 +88,7 @@ Watchdog: full mode - ontology (28 classes), rule engine (35 primitives), 42 pol
 Ontology: 312 class assignments across 156 resources
 Evaluated 42 policies
   Violations: 18 new, 3 resolved
-Refreshed semantic views: v_resource_compliance, v_class_compliance, ...
+Refreshed compliance views: v_resource_compliance, v_class_compliance, ...
 ```
 
 ---
@@ -166,7 +166,7 @@ python -m watchdog.entrypoints adhoc \
 1. Runs `crawl_all()` to discover all workspace resources.
 2. Syncs YAML policies to Delta via `sync_policies_to_delta()`.
 3. Builds a `PolicyEngine` and runs `evaluate_all()`.
-4. Refreshes all semantic views (called twice in current implementation).
+4. Refreshes all compliance views (called twice in current implementation).
 
 **Output:**
 
@@ -177,7 +177,7 @@ python -m watchdog.entrypoints adhoc \
 Synced 42 policies from YAML to Delta
 Ontology: 312 classifications
 Violations: 18 new, 3 resolved
-Refreshed semantic views
+Refreshed compliance views
 ```
 
 ---

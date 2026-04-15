@@ -72,7 +72,7 @@ def _build_space_config(
         "exceptions",
         "scan_results",
     ]
-    # Watchdog semantic views
+    # Watchdog compliance views
     watchdog_views = [
         "v_resource_compliance",
         "v_class_compliance",

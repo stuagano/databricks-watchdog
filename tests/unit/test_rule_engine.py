@@ -553,3 +553,47 @@ class TestPolicyLoading:
         policies_dir = str(Path(ontology_dir).parent / "policies")
         policies = self._load_policies_yaml(policies_dir)
         assert len(policies) > 0, "No policies loaded"
+
+
+# ── Medallion primitives ─────────────────────────────────────────────────────
+
+class TestMedallionPrimitives:
+    """Verify medallion governance primitives load and evaluate correctly."""
+
+    def test_has_source_system_pass(self, engine):
+        result = engine.evaluate({"ref": "has_source_system"}, {"source_system": "SAP"}, {})
+        assert result.passed
+
+    def test_has_source_system_fail(self, engine):
+        result = engine.evaluate({"ref": "has_source_system"}, {}, {})
+        assert not result.passed
+        assert "source_system" in result.detail
+
+    def test_has_ingestion_owner_pass(self, engine):
+        result = engine.evaluate({"ref": "has_ingestion_owner"}, {"ingestion_owner": "alice@co.com"}, {})
+        assert result.passed
+
+    def test_has_ingestion_owner_fail(self, engine):
+        result = engine.evaluate({"ref": "has_ingestion_owner"}, {}, {})
+        assert not result.passed
+
+    def test_has_source_documentation_pass(self, engine):
+        result = engine.evaluate({"ref": "has_source_documentation"}, {"source_documentation": "https://wiki/transform"}, {})
+        assert result.passed
+
+    def test_has_source_documentation_fail(self, engine):
+        result = engine.evaluate({"ref": "has_source_documentation"}, {}, {})
+        assert not result.passed
+
+    def test_silver_has_classification_pass_silver_with_class(self, engine):
+        result = engine.evaluate({"ref": "silver_has_classification"}, {"data_layer": "silver", "data_classification": "internal"}, {})
+        assert result.passed
+
+    def test_silver_has_classification_fail_silver_no_class(self, engine):
+        result = engine.evaluate({"ref": "silver_has_classification"}, {"data_layer": "silver"}, {})
+        assert not result.passed
+
+    def test_silver_has_classification_pass_non_silver(self, engine):
+        """Non-silver tables should pass vacuously (if_then condition not met)."""
+        result = engine.evaluate({"ref": "silver_has_classification"}, {"data_layer": "bronze"}, {})
+        assert result.passed

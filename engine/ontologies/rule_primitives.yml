@@ -307,5 +307,33 @@ primitives:
     type: tag_exists
     keys: [error_handler, fallback_behavior]
 
+  # ── Medallion Governance ──────────────────────────────────────────────
+
+  has_source_system:
+    type: tag_exists
+    description: "Ingestion table identifies its source system (ERP, API, file drop, etc.)"
+    keys: [source_system]
+
+  has_ingestion_owner:
+    type: tag_exists
+    description: "Ingestion table has a designated owner responsible for the data feed"
+    keys: [ingestion_owner]
+
+  has_source_documentation:
+    type: tag_exists
+    description: "Table has a link to transformation or reconciliation documentation"
+    keys: [source_documentation]
+
+  silver_has_classification:
+    type: if_then
+    description: "Silver tables must have data classification applied"
+    condition:
+      type: tag_equals
+      key: data_layer
+      value: "silver"
+    then:
+      type: tag_exists
+      keys: [data_classification]
+
   # Customer-specific conditional compositions go here.
   # See customer/ontologies/rule_primitives.yml for examples.

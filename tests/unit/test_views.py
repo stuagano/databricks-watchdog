@@ -101,13 +101,19 @@ def mock_spark():
 
 
 def _get_view_sql(mock_spark, view_fn):
-    """Call a view function and return the SQL it generates."""
+    """Call a view function and return the CREATE VIEW SQL it generates.
+
+    Some view functions (e.g., _ensure_tag_policy_coverage_view) also call
+    ensure_*_table helpers that emit CREATE TABLE statements. We filter to
+    only the CREATE OR REPLACE VIEW statement.
+    """
     mock_spark.sql_calls.clear()
     view_fn(mock_spark, CATALOG, SCHEMA)
-    assert len(mock_spark.sql_calls) == 1, (
-        f"Expected exactly 1 SQL call from {view_fn.__name__}, got {len(mock_spark.sql_calls)}"
+    view_sqls = [s for s in mock_spark.sql_calls if "CREATE OR REPLACE VIEW" in s]
+    assert len(view_sqls) == 1, (
+        f"Expected 1 CREATE VIEW from {view_fn.__name__}, got {len(view_sqls)}"
     )
-    return mock_spark.sql_calls[0]
+    return view_sqls[0]
 
 
 # ── ensure_semantic_views registration ───────────────────────────────────────
@@ -117,7 +123,8 @@ class TestEnsureSemanticViews:
 
     def test_calls_all_view_functions(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)
-        assert mock_spark.sql.call_count == 14
+        # 14 CREATE VIEW + 2 CREATE TABLE (exceptions + policies for v_tag_policy_coverage)
+        assert mock_spark.sql.call_count == 16
 
     def test_creates_all_views(self, mock_spark):
         ensure_semantic_views(mock_spark, CATALOG, SCHEMA)

@@ -26,6 +26,7 @@ import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
 from watchdog.ontology import OntologyEngine
+from watchdog.policies_table import write_policies
 from watchdog.rule_engine import RuleEngine, RuleResult
 from watchdog.violations import merge_violations, write_classifications, write_scan_summary
 
@@ -203,6 +204,10 @@ class PolicyEngine:
 
         # Pass 2: Evaluate policies
         active_policies = [p for p in self.policies if p.active]
+
+        # Persist policy definitions to Delta for v_tag_policy_coverage
+        write_policies(self.spark, self.catalog, self.schema, active_policies)
+
         scan_results = []
 
         for policy in active_policies:

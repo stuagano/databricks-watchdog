@@ -15,6 +15,7 @@ Every rule evaluation returns a RuleResult with pass/fail and a human-readable
 detail string for violation reporting.
 """
 
+import json
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -88,6 +89,7 @@ class RuleEngine:
             "any_of": self._eval_any_of,
             "none_of": self._eval_none_of,
             "if_then": self._eval_if_then,
+            "drift_check": self._eval_drift_check,
         }
 
         handler = dispatch.get(rule_type)
@@ -473,6 +475,66 @@ class RuleEngine:
                 rule_type="if_then",
             )
         return RuleResult(passed=True, rule_type="if_then")
+
+    def _eval_drift_check(self, rule: dict, tags: dict[str, str],
+                          metadata: dict[str, str]) -> RuleResult:
+        """Compare actual resource state against declared expected state.
+
+        The expected state is injected into metadata by the policy engine
+        before evaluation. If no expected state is present, the check passes
+        vacuously (no declared expectation = no drift).
+
+        Currently supports: grants (rule.check == "grants").
+        """
+        check_type = rule.get("check", "")
+        if check_type != "grants":
+            return RuleResult(
+                passed=False,
+                detail=f"Unsupported drift check type: {check_type}. Supported: grants",
+                rule_type="drift_check",
+            )
+
+        expected_json = metadata.get("expected_grants", "")
+        if not expected_json:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        try:
+            expected_entries = json.loads(expected_json)
+        except (json.JSONDecodeError, TypeError) as e:
+            return RuleResult(
+                passed=False,
+                detail=f"Failed to parse expected_grants JSON: {e}",
+                rule_type="drift_check",
+            )
+
+        if not expected_entries:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        actual_grantee = metadata.get("grantee", "")
+        actual_privilege = metadata.get("privilege", "")
+        securable = metadata.get("securable_full_name", "")
+
+        matching = [
+            e for e in expected_entries
+            if e.get("principal", "") == actual_grantee
+        ]
+
+        if not matching:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        for entry in matching:
+            expected_privs = [p.upper() for p in entry.get("privileges", [])]
+            if actual_privilege.upper() in expected_privs:
+                return RuleResult(passed=True, rule_type="drift_check")
+
+        return RuleResult(
+            passed=False,
+            detail=(
+                f"Drift detected: grant '{actual_privilege}' on {securable} "
+                f"for {actual_grantee} is not in expected state"
+            ),
+            rule_type="drift_check",
+        )
 
     # ------------------------------------------------------------------
     # Utilities

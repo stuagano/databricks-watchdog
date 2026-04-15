@@ -1,0 +1,544 @@
+version: 1
+
+# Hub Contract — Watchdog Compliance Views
+#
+# This file is the single source of truth for the schema of all
+# Hub-facing compliance views. Integration tests and the smoke
+# notebook validate actual view schemas against these definitions.
+#
+# Six views are covered here. Each entry documents:
+#   description  — what the view represents and how it is used
+#   grain        — what one row means
+#   hub_panel    — the Hub dashboard panel that consumes this view
+#   columns      — name, type, nullable, description, and example value
+
+views:
+
+  - name: v_domain_compliance
+    description: >
+      Aggregated compliance posture by governance domain
+      (CostGovernance, SecurityGovernance, DataQuality,
+      OperationalGovernance, RegulatoryCompliance). One row per domain.
+      Enriched with the set of ontology classes driving open violations
+      so that executive dashboards can surface "which classes are
+      contributing to this domain's violations" without a second join.
+    grain: one row per domain
+    hub_panel: Executive Compliance Summary
+    columns:
+      - name: domain
+        type: STRING
+        nullable: false
+        description: >
+          Governance domain label derived from the policy definition
+          (e.g. SecurityGovernance, CostGovernance).
+        example: SecurityGovernance
+
+      - name: resources_affected
+        type: BIGINT
+        nullable: false
+        description: >
+          Distinct count of resource_id values that have at least one
+          violation (any status) in this domain.
+        example: 142
+
+      - name: open_violations
+        type: BIGINT
+        nullable: false
+        description: Total count of violations with status = 'open' in this domain.
+        example: 38
+
+      - name: critical_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'critical'.
+        example: 5
+
+      - name: high_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'high'.
+        example: 14
+
+      - name: excepted_violations
+        type: BIGINT
+        nullable: false
+        description: >
+          Violations with status = 'exception' — open but covered by an
+          approved waiver.
+        example: 7
+
+      - name: resolved_violations
+        type: BIGINT
+        nullable: false
+        description: Violations with status = 'resolved'.
+        example: 91
+
+      - name: classes_with_open_violations
+        type: ARRAY<STRING>
+        nullable: true
+        description: >
+          Distinct set of ontology class names (resource_classes field)
+          that have at least one open violation in this domain. Null when
+          no open violations exist.
+        example: ["GoldTable", "PiiAsset", "ExternalTable"]
+
+
+  - name: v_class_compliance
+    description: >
+      Aggregated compliance posture per ontology class. One row per
+      class_name. Rolls violation counts up through the class hierarchy
+      so DataAsset counts include all tables, volumes, catalogs, and
+      schemas. The primary surface for Ontos dashboard grouping —
+      use root_class for executive roll-ups, class_name for drill-down.
+    grain: one row per class_name
+    hub_panel: Ontology Class Compliance
+    columns:
+      - name: class_name
+        type: STRING
+        nullable: false
+        description: >
+          Fully qualified ontology class name (e.g. GoldTable, PiiAsset).
+        example: GoldTable
+
+      - name: root_class
+        type: STRING
+        nullable: true
+        description: >
+          Top-level ancestor class in the ontology hierarchy. Null if
+          the class has no parent (i.e. it is itself a root class).
+        example: DataAsset
+
+      - name: total_resources
+        type: BIGINT
+        nullable: false
+        description: Distinct count of resources assigned to this class.
+        example: 320
+
+      - name: resources_with_open_violations
+        type: BIGINT
+        nullable: false
+        description: >
+          Distinct count of resources in this class that have at least
+          one open violation.
+        example: 47
+
+      - name: compliance_pct
+        type: DOUBLE
+        nullable: true
+        description: >
+          Percentage of resources in the class that have no open
+          violations. Null when total_resources is zero.
+        example: 85.3
+
+      - name: open_violations
+        type: BIGINT
+        nullable: false
+        description: Total open violation count across all resources in this class.
+        example: 63
+
+      - name: critical_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'critical'.
+        example: 4
+
+      - name: high_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'high'.
+        example: 18
+
+      - name: medium_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'medium'.
+        example: 41
+
+      - name: excepted_violations
+        type: BIGINT
+        nullable: false
+        description: Violations with status = 'exception'.
+        example: 9
+
+      - name: resolved_violations
+        type: BIGINT
+        nullable: false
+        description: Violations with status = 'resolved'.
+        example: 204
+
+
+  - name: v_resource_compliance
+    description: >
+      Compliance posture per resource per ontology class. One row per
+      (resource_id, class_name). A resource assigned to both GoldTable
+      and PiiTable appears in two rows so class-level roll-ups count it
+      correctly. Ontos Catalog Commander joins on resource_id to show
+      class-aware violation badges.
+    grain: one row per (resource_id, class_name)
+    hub_panel: Resource Compliance Detail
+    columns:
+      - name: resource_id
+        type: STRING
+        nullable: false
+        description: >
+          Fully qualified Unity Catalog identifier for the resource
+          (e.g. catalog.schema.table).
+        example: prod_catalog.finance.gl_transactions
+
+      - name: resource_name
+        type: STRING
+        nullable: true
+        description: Human-readable display name for the resource.
+        example: gl_transactions
+
+      - name: resource_type
+        type: STRING
+        nullable: true
+        description: >
+          UC asset type: table, schema, catalog, volume, or model.
+        example: table
+
+      - name: owner
+        type: STRING
+        nullable: true
+        description: Unity Catalog owner of the resource.
+        example: data-engineering@company.com
+
+      - name: class_name
+        type: STRING
+        nullable: false
+        description: >
+          Ontology class the resource is evaluated under in this row.
+        example: GoldTable
+
+      - name: class_ancestors
+        type: STRING
+        nullable: true
+        description: >
+          Comma-separated ancestor class names from the ontology hierarchy,
+          ordered from immediate parent to root.
+        example: MedallionTable,DataAsset
+
+      - name: root_class
+        type: STRING
+        nullable: true
+        description: Top-level ancestor class. Null for root classes.
+        example: DataAsset
+
+      - name: open_violations
+        type: BIGINT
+        nullable: false
+        description: Count of open violations for this resource under this class.
+        example: 3
+
+      - name: critical_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'critical'.
+        example: 1
+
+      - name: high_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'high'.
+        example: 2
+
+      - name: medium_open
+        type: BIGINT
+        nullable: false
+        description: Open violations with severity = 'medium'.
+        example: 0
+
+      - name: excepted_violations
+        type: BIGINT
+        nullable: false
+        description: Violations with status = 'exception'.
+        example: 1
+
+      - name: oldest_open_violation
+        type: TIMESTAMP
+        nullable: true
+        description: >
+          Timestamp of the earliest first_detected among open violations
+          for this resource/class combination. Null when no open violations.
+        example: "2026-01-15T08:23:00Z"
+
+      - name: last_violation_at
+        type: TIMESTAMP
+        nullable: true
+        description: >
+          Most recent last_detected timestamp across all violations for
+          this resource/class. Null if no violations exist.
+        example: "2026-04-10T14:55:00Z"
+
+      - name: compliance_status
+        type: STRING
+        nullable: false
+        description: >
+          Derived severity bucket: 'critical' if any critical open violation
+          exists, 'high' if any high open, 'open' if any other open violation,
+          'clean' if no open violations.
+        example: high
+
+
+  - name: v_tag_policy_coverage
+    description: >
+      Per-resource tag policy compliance state. One row per
+      (resource_id, policy_id). Crosses the latest resource inventory
+      with active policies in SecurityGovernance and DataClassification
+      domains. Includes exception metadata so dashboards distinguish
+      open violations from approved waivers.
+    grain: one row per (resource_id, policy_id)
+    hub_panel: Tag Policy Coverage
+    columns:
+      - name: resource_id
+        type: STRING
+        nullable: false
+        description: >
+          Fully qualified Unity Catalog identifier for the resource.
+        example: prod_catalog.customer_data.user_profiles
+
+      - name: resource_type
+        type: STRING
+        nullable: true
+        description: UC asset type.
+        example: table
+
+      - name: resource_name
+        type: STRING
+        nullable: true
+        description: Human-readable display name.
+        example: user_profiles
+
+      - name: owner
+        type: STRING
+        nullable: true
+        description: Unity Catalog owner of the resource.
+        example: platform-team@company.com
+
+      - name: policy_id
+        type: STRING
+        nullable: false
+        description: Unique identifier for the evaluated policy.
+        example: tag_pii_classification_required
+
+      - name: policy_name
+        type: STRING
+        nullable: true
+        description: Human-readable policy display name.
+        example: PII Classification Tag Required
+
+      - name: severity
+        type: STRING
+        nullable: true
+        description: >
+          Policy severity level: critical, high, medium, or low.
+        example: high
+
+      - name: coverage_status
+        type: STRING
+        nullable: false
+        description: >
+          One of: 'satisfied' (scan result = pass), 'violated' (scan
+          result = fail), 'not_evaluated' (no scan result for this pair).
+        example: violated
+
+      - name: violation_status
+        type: STRING
+        nullable: true
+        description: >
+          Current violation record status if one exists: 'open' or
+          'exception'. Null when no active violation.
+        example: open
+
+      - name: first_detected
+        type: TIMESTAMP
+        nullable: true
+        description: >
+          When this policy violation was first detected. Null if no
+          violation record.
+        example: "2026-02-01T09:00:00Z"
+
+      - name: last_detected
+        type: TIMESTAMP
+        nullable: true
+        description: >
+          Most recent scan that confirmed the violation. Null if no
+          violation record.
+        example: "2026-04-14T06:30:00Z"
+
+      - name: has_exception
+        type: BOOLEAN
+        nullable: true
+        description: >
+          True if an active exception waiver covers this resource/policy
+          pair. Null when no exception record exists.
+        example: false
+
+      - name: exception_expires
+        type: TIMESTAMP
+        nullable: true
+        description: >
+          Expiry timestamp of the active exception. Null if no exception.
+        example: "2026-06-30T23:59:59Z"
+
+
+  - name: v_data_classification_summary
+    description: >
+      Aggregated data classification posture by catalog. One row per
+      catalog (derived from resource_inventory.domain). Tracks the
+      percentage of tables that are classified, stewarded, sensitive,
+      and covered by ontology classification. Useful for executive
+      dashboards tracking data governance maturity across the lakehouse.
+    grain: one row per catalog
+    hub_panel: Data Classification Maturity
+    columns:
+      - name: catalog_name
+        type: STRING
+        nullable: true
+        description: >
+          Catalog identifier sourced from resource_inventory.domain.
+          Null if the domain field is not set on inventory records.
+        example: prod_catalog
+
+      - name: total_tables
+        type: BIGINT
+        nullable: false
+        description: >
+          Distinct count of table resources in this catalog in the
+          latest scan.
+        example: 512
+
+      - name: classified_tables
+        type: BIGINT
+        nullable: false
+        description: >
+          Tables with a non-null data_classification tag.
+        example: 388
+
+      - name: tables_with_steward
+        type: BIGINT
+        nullable: false
+        description: Tables with a non-null data_steward tag.
+        example: 295
+
+      - name: sensitive_tables
+        type: BIGINT
+        nullable: false
+        description: >
+          Tables whose data_classification tag value is one of: pii,
+          confidential, or restricted.
+        example: 74
+
+      - name: ontology_classified
+        type: BIGINT
+        nullable: false
+        description: >
+          Tables assigned to PiiAsset or ConfidentialAsset ontology
+          classes via resource_classifications.
+        example: 68
+
+      - name: classification_pct
+        type: DOUBLE
+        nullable: true
+        description: >
+          Percentage of total_tables that are classified.
+          Null when total_tables is zero.
+        example: 75.8
+
+      - name: stewardship_pct
+        type: DOUBLE
+        nullable: true
+        description: >
+          Percentage of classified tables that have a data steward.
+          Null when classified_tables is zero.
+        example: 76.0
+
+
+  - name: v_dq_monitoring_coverage
+    description: >
+      Data quality monitoring coverage per table. One row per table.
+      Shows which tables have DQM (Data Quality Monitoring via Watchdog
+      crawlers), LHM (Lakehouse Monitoring), both, or neither. Includes
+      anomaly counts and ontology class assignment for dashboard filtering.
+    grain: one row per table (resource_id)
+    hub_panel: DQ Monitoring Coverage
+    columns:
+      - name: resource_id
+        type: STRING
+        nullable: false
+        description: >
+          Fully qualified Unity Catalog table identifier.
+        example: prod_catalog.silver.customer_events
+
+      - name: resource_type
+        type: STRING
+        nullable: true
+        description: Asset type — always 'table' for this view.
+        example: table
+
+      - name: resource_name
+        type: STRING
+        nullable: true
+        description: Short table name without catalog/schema prefix.
+        example: customer_events
+
+      - name: owner
+        type: STRING
+        nullable: true
+        description: Unity Catalog owner of the table.
+        example: analytics-team@company.com
+
+      - name: catalog_name
+        type: STRING
+        nullable: true
+        description: Catalog name sourced from resource_inventory.domain.
+        example: prod_catalog
+
+      - name: dqm_enabled
+        type: STRING
+        nullable: false
+        description: >
+          'true' if the dqm_enabled tag is set to 'true', otherwise
+          'false'. Coalesced from tags — never null.
+        example: "true"
+
+      - name: lhm_enabled
+        type: STRING
+        nullable: false
+        description: >
+          'true' if the lhm_enabled tag is set to 'true', otherwise
+          'false'. Coalesced from tags — never null.
+        example: "false"
+
+      - name: monitoring_status
+        type: STRING
+        nullable: false
+        description: >
+          Derived coverage bucket. One of: 'both' (DQM + LHM enabled),
+          'dqm_only', 'lhm_only', 'none'.
+        example: dqm_only
+
+      - name: dqm_anomalies
+        type: STRING
+        nullable: true
+        description: >
+          Raw tag value for dqm_anomalies — count of anomalies detected
+          by DQM in the most recent scan. Null if tag not set.
+        example: "3"
+
+      - name: dqm_metrics_checked
+        type: STRING
+        nullable: true
+        description: >
+          Raw tag value for dqm_metrics_checked — number of metrics
+          evaluated by DQM in the latest run. Null if tag not set.
+        example: "12"
+
+      - name: ontology_class
+        type: STRING
+        nullable: true
+        description: >
+          Ontology class assigned to this table via resource_classifications.
+          Null if no classification exists.
+        example: SilverTable

@@ -40,8 +40,24 @@ from pyspark.sql import SparkSession
 
 logger = logging.getLogger(__name__)
 
-# Watchdog ontology class IRI base — matches the wdc: prefix in the TTL
-ONTOLOGY_BASE_IRI = "https://mirion.databricks.com/ontology/watchdog/class/"
+def resolve_ontology_base_iri(
+    ontology_base_iri: str | None = None,
+    workspace_host: str = "",
+) -> str:
+    """Resolve the ontology class IRI base with fallback chain.
+
+    Priority:
+      1. Explicit ontology_base_iri parameter
+      2. WATCHDOG_ONTOLOGY_BASE_IRI environment variable
+      3. Default: https://{workspace_host}/ontology/watchdog/class/
+    """
+    iri = ontology_base_iri or os.environ.get("WATCHDOG_ONTOLOGY_BASE_IRI", "")
+    if not iri:
+        host = workspace_host.rstrip("/")
+        iri = f"{host}/ontology/watchdog/class/"
+    if not iri.endswith("/"):
+        iri += "/"
+    return iri
 
 # Ontos entity_type for each UC resource type (non-UC types are excluded)
 _UC_ENTITY_TYPE_MAP = {
@@ -147,6 +163,7 @@ def sync_classifications_to_ontos(
     catalog: str,
     schema: str,
     ontos_url: str,
+    ontology_base_iri: Optional[str] = None,
     ontos_token: Optional[str] = None,
     ontos_user_email: Optional[str] = None,
     dry_run: bool = False,
@@ -161,6 +178,9 @@ def sync_classifications_to_ontos(
         schema: Watchdog schema name (e.g., 'watchdog').
         ontos_url: Base URL of the Ontos app
                    (e.g., 'https://ontos-7474657313075170.aws.databricksapps.com').
+        ontology_base_iri: Override the ontology class IRI base. Falls back to
+                           WATCHDOG_ONTOLOGY_BASE_IRI env var, then derives
+                           from the workspace host.
         ontos_token: Databricks access token to pass as x-forwarded-access-token.
                      Falls back to DATABRICKS_TOKEN env var, then SDK auth.
         ontos_user_email: Optional email for the x-forwarded-email header (helps
@@ -175,12 +195,17 @@ def sync_classifications_to_ontos(
     Returns:
         dict with keys: posted, skipped, errors, total_candidates
     """
-    token = _resolve_token(ontos_token, w=w, secret_scope=secret_scope)
+    client = w or WorkspaceClient()
+    token = _resolve_token(ontos_token, w=client, secret_scope=secret_scope)
     if not token and not dry_run:
         raise ValueError(
             "No Ontos auth token available. Pass ontos_token=, set "
             "DATABRICKS_TOKEN env var, or ensure the SDK can authenticate."
         )
+    base_iri = resolve_ontology_base_iri(
+        ontology_base_iri=ontology_base_iri,
+        workspace_host=client.config.host or "",
+    )
 
     classifications_table = f"{catalog}.{schema}.resource_classifications"
 
@@ -227,7 +252,7 @@ def sync_classifications_to_ontos(
 
     for row in rows:
         entity_type = _UC_ENTITY_TYPE_MAP[row.resource_type]
-        iri = f"{ONTOLOGY_BASE_IRI}{row.class_name}"
+        iri = f"{base_iri}{row.class_name}"
         payload = {
             "entity_id":   row.resource_id,
             "entity_type": entity_type,

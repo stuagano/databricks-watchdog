@@ -237,6 +237,10 @@ def _ensure_tag_policy_coverage_view(spark: SparkSession, catalog: str,
     Includes exception status so dashboards can distinguish between violations
     that are actively open vs those with approved waivers.
     """
+    from watchdog.violations import ensure_exceptions_table
+    from watchdog.policies_table import ensure_policies_table
+    ensure_exceptions_table(spark, catalog, schema)
+    ensure_policies_table(spark, catalog, schema)
     spark.sql(f"""
         CREATE OR REPLACE VIEW {catalog}.{schema}.v_tag_policy_coverage AS
         SELECT
@@ -289,7 +293,7 @@ def _ensure_data_classification_summary_view(spark: SparkSession, catalog: str,
     spark.sql(f"""
         CREATE OR REPLACE VIEW {catalog}.{schema}.v_data_classification_summary AS
         SELECT
-            ri.domain AS catalog_name,
+            COALESCE(ri.domain, SPLIT(ri.resource_name, '\\.')[0]) AS catalog_name,
             COUNT(DISTINCT ri.resource_id) AS total_tables,
             COUNT(DISTINCT CASE WHEN ri.tags['data_classification'] IS NOT NULL THEN ri.resource_id END)
                 AS classified_tables,

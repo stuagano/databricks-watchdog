@@ -16,6 +16,7 @@ The engine writes results to scan_results (append-only history) and merges
 into the violations table (deduplicated, with exception handling).
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Optional
@@ -25,6 +26,7 @@ from pyspark.sql import SparkSession, Row
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
+from watchdog.drift import load_expected_state, build_expected_grants_lookup
 from watchdog.ontology import OntologyEngine
 from watchdog.policies_table import write_policies
 from watchdog.rule_engine import RuleEngine, RuleResult
@@ -208,6 +210,18 @@ class PolicyEngine:
         # Persist policy definitions to Delta for v_tag_policy_coverage
         write_policies(self.spark, self.catalog, self.schema, active_policies)
 
+        # Load expected state for drift_check policies
+        expected_grants_lookup: dict[str, list[dict]] = {}
+        for policy in active_policies:
+            if policy.rule.get("type") == "drift_check" and "source" in policy.rule:
+                source_path = policy.rule["source"]
+                volume_path = f"/Volumes/{self.catalog}/{self.schema}/{source_path}"
+                state = load_expected_state(volume_path)
+                grants = state.get("grants", [])
+                if grants:
+                    lookup = build_expected_grants_lookup(grants)
+                    expected_grants_lookup.update(lookup)
+
         scan_results = []
 
         for policy in active_policies:
@@ -220,6 +234,15 @@ class PolicyEngine:
                 metadata = resource.metadata or {}
                 if resource.owner:
                     metadata = {**metadata, "owner": resource.owner}
+
+                # Inject expected state for drift_check evaluation
+                if resource.resource_type == "grant" and expected_grants_lookup:
+                    grantee = metadata.get("grantee", "")
+                    if grantee in expected_grants_lookup:
+                        metadata = {
+                            **metadata,
+                            "expected_grants": json.dumps(expected_grants_lookup[grantee]),
+                        }
 
                 # Evaluate the rule
                 result = self.rule_engine.evaluate(policy.rule, tags, metadata)

@@ -13,6 +13,7 @@
 #   metadata_matches:  Metadata field must match regex
 #   metadata_not_empty: Metadata field must exist and be non-empty
 #   metadata_gte:      Metadata field >= threshold (numeric/version comparison)
+#   metadata_lte:      Metadata field <= threshold (numeric/version comparison)
 #   has_owner:         Resource must have owner field or owner tag
 #   all_of:            All child rules must pass (AND)
 #   any_of:            At least one child rule must pass (OR)

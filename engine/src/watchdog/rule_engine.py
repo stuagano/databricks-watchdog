@@ -82,6 +82,7 @@ class RuleEngine:
             "metadata_matches": self._eval_metadata_matches,
             "metadata_not_empty": self._eval_metadata_not_empty,
             "metadata_gte": self._eval_metadata_gte,
+            "metadata_lte": self._eval_metadata_lte,
             "has_owner": self._eval_has_owner,
             "all_of": self._eval_all_of,
             "any_of": self._eval_any_of,
@@ -146,6 +147,12 @@ class RuleEngine:
         if "metadata_gte" in rule:
             inner = rule["metadata_gte"]
             return self._eval_metadata_gte({
+                "field": inner.get("field", ""),
+                "threshold": str(inner.get("value", inner.get("threshold", ""))),
+            }, tags, metadata)
+        if "metadata_lte" in rule:
+            inner = rule["metadata_lte"]
+            return self._eval_metadata_lte({
                 "field": inner.get("field", ""),
                 "threshold": str(inner.get("value", inner.get("threshold", ""))),
             }, tags, metadata)
@@ -313,6 +320,47 @@ class RuleEngine:
                     rule_type="metadata_gte",
                 )
         return RuleResult(passed=True, rule_type="metadata_gte")
+
+    def _eval_metadata_lte(self, rule: dict, tags: dict[str, str],
+                           metadata: dict[str, str]) -> RuleResult:
+        """Fail if a metadata field value exceeds the threshold.
+
+        Uses the same version-aware comparison as metadata_gte but reverses
+        the direction: field value must be <= threshold.
+        """
+        f = rule.get("field", "")
+        threshold = str(rule.get("threshold", ""))
+        actual = metadata.get(f, "")
+        if not actual:
+            return RuleResult(
+                passed=False,
+                detail=f"Metadata field '{f}' is empty (threshold: <= {threshold})",
+                rule_type="metadata_lte",
+            )
+        try:
+            actual_ver = self._extract_version(actual)
+            threshold_ver = self._extract_version(threshold)
+            if not actual_ver:
+                # No numeric parts — value is not a parseable number/version
+                return RuleResult(
+                    passed=False,
+                    detail=f"Metadata '{f}' is '{actual}' (not numeric; threshold: <= {threshold})",
+                    rule_type="metadata_lte",
+                )
+            if actual_ver > threshold_ver:
+                return RuleResult(
+                    passed=False,
+                    detail=f"Metadata '{f}' is '{actual}' (> {threshold})",
+                    rule_type="metadata_lte",
+                )
+        except (ValueError, TypeError):
+            if actual > threshold:
+                return RuleResult(
+                    passed=False,
+                    detail=f"Metadata '{f}' is '{actual}' (> {threshold})",
+                    rule_type="metadata_lte",
+                )
+        return RuleResult(passed=True, rule_type="metadata_lte")
 
     def _eval_has_owner(self, rule: dict, tags: dict[str, str],
                         metadata: dict[str, str]) -> RuleResult:

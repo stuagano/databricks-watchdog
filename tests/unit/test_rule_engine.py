@@ -205,6 +205,35 @@ class TestMetadataGte:
         assert not result.passed
 
 
+# ── metadata_lte ─────────────────────────────────────────────────────────────
+
+class TestMetadataLte:
+    """metadata_lte: fail if metadata field exceeds threshold."""
+
+    RULE = {"type": "metadata_lte", "field": "freshness_hours", "threshold": "48"}
+
+    def test_pass_below_threshold(self, bare):
+        result = bare.evaluate(self.RULE, {}, {"freshness_hours": "12"})
+        assert result.passed
+
+    def test_pass_exact_threshold(self, bare):
+        result = bare.evaluate(self.RULE, {}, {"freshness_hours": "48"})
+        assert result.passed
+
+    def test_fail_above_threshold(self, bare):
+        result = bare.evaluate(self.RULE, {}, {"freshness_hours": "72"})
+        assert not result.passed
+        assert "72" in result.detail
+
+    def test_fail_empty_field(self, bare):
+        result = bare.evaluate(self.RULE, {}, {})
+        assert not result.passed
+
+    def test_fail_non_numeric(self, bare):
+        result = bare.evaluate(self.RULE, {}, {"freshness_hours": "unknown"})
+        assert not result.passed
+
+
 # ── has_owner ─────────────────────────────────────────────────────────────────
 
 class TestHasOwner:

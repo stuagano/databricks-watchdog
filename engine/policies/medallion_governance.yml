@@ -1,0 +1,139 @@
+# Medallion Governance Policies
+# Domain: DataQuality + OperationalGovernance
+#
+# Policies for Bronze, Silver, and Gold layer governance plus
+# pipeline freshness. Uses existing ontology classes (BronzeTable,
+# SilverTable, GoldTable, ProductionPipeline) and medallion primitives.
+
+policies:
+
+  # ── Bronze Layer ─────────────────────────────────────────────────────
+
+  - id: POL-MED-001
+    name: "Bronze tables must identify their source system"
+    applies_to: BronzeTable
+    domain: DataQuality
+    severity: high
+    description: >
+      Raw ingestion tables must be tagged with the source system they ingest
+      from (e.g., SAP, Oracle, Salesforce, API). Without source tracking,
+      lineage is broken and impact analysis is impossible.
+    remediation: "Add a 'source_system' tag identifying the upstream source"
+    active: true
+    rule:
+      ref: has_source_system
+
+  - id: POL-MED-002
+    name: "Bronze tables must have an ingestion owner"
+    applies_to: BronzeTable
+    domain: DataQuality
+    severity: medium
+    description: >
+      Each ingestion feed needs a designated owner who is accountable for
+      data freshness and schema changes from the source system.
+    remediation: "Add an 'ingestion_owner' tag with the responsible person's email"
+    active: true
+    rule:
+      ref: has_ingestion_owner
+
+  # ── Silver Layer ─────────────────────────────────────────────────────
+
+  - id: POL-MED-003
+    name: "Silver tables must have a data steward"
+    applies_to: SilverTable
+    domain: DataQuality
+    severity: high
+    description: >
+      The Silver layer is where raw data becomes business-usable. A named
+      steward is accountable for transformation logic, data quality, and
+      reconciliation correctness.
+    remediation: "Add a 'data_steward' tag with the responsible person's email"
+    active: true
+    rule:
+      ref: has_data_steward
+
+  - id: POL-MED-004
+    name: "Silver tables must have data classification"
+    applies_to: SilverTable
+    domain: DataQuality
+    severity: high
+    description: >
+      Classification should be applied at the Silver layer where data is
+      cleaned and conformed. Bronze is too raw (classifications may not
+      yet be determinable). Gold inherits from Silver.
+    remediation: "Add a 'data_classification' tag (public, internal, confidential, restricted, pii)"
+    active: true
+    rule:
+      ref: has_data_classification
+
+  - id: POL-MED-005
+    name: "Silver tables must document their source transformations"
+    applies_to: SilverTable
+    domain: DataQuality
+    severity: medium
+    description: >
+      Silver tables transform and reconcile data from one or more Bronze
+      sources. The transformation logic must be documented so downstream
+      consumers can understand data provenance.
+    remediation: >
+      Add a 'source_documentation' tag with a link to the transformation
+      documentation (e.g., Confluence page, README, or notebook URL)
+    active: true
+    rule:
+      ref: has_source_documentation
+
+  # ── Gold Layer ───────────────────────────────────────────────────────
+
+  - id: POL-MED-006
+    name: "Gold tables must have a retention policy"
+    applies_to: GoldTable
+    domain: DataQuality
+    severity: medium
+    description: >
+      Curated consumption tables must specify how long data is retained.
+      Without retention policies, storage grows unbounded and compliance
+      obligations (GDPR, HIPAA, SOX) cannot be verified.
+    remediation: "Add a 'retention_days' tag with the maximum retention period in days"
+    active: true
+    rule:
+      ref: has_retention_policy
+
+  # ── Cross-Layer (Pipeline Freshness) ─────────────────────────────────
+
+  - id: POL-MED-007
+    name: "Production pipelines must be healthy"
+    applies_to: ProductionPipeline
+    domain: OperationalGovernance
+    severity: critical
+    description: >
+      Production DLT pipelines must have completed successfully within the
+      last 7 days. Failing pipelines mean stale data is reaching downstream
+      consumers. Requires the pipeline freshness crawler to be active.
+    remediation: >
+      1. Check pipeline logs for failure cause
+      2. Fix the failing pipeline and trigger a manual run
+      3. Verify pipeline_health tag updates to 'healthy' on next Watchdog scan
+    active: true
+    rule:
+      metadata_equals:
+        pipeline_health: "healthy"
+
+  - id: POL-MED-008
+    name: "Production pipelines must have succeeded within 48 hours"
+    applies_to: ProductionPipeline
+    domain: OperationalGovernance
+    severity: high
+    description: >
+      Production pipelines that haven't succeeded in 48 hours are delivering
+      stale data. This is a tighter check than pipeline_health — a pipeline
+      can be 'degraded' and still violate this policy if its last success
+      is too old. Adjust the 48-hour threshold for your pipeline cadence.
+    remediation: >
+      1. Investigate why the pipeline hasn't completed successfully
+      2. Check for upstream dependencies, cluster issues, or schema changes
+      3. The 48-hour threshold assumes daily pipelines — adjust for your cadence
+    active: true
+    rule:
+      type: metadata_lte
+      field: freshness_hours
+      threshold: "48"

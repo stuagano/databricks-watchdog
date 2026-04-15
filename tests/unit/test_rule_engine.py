@@ -597,3 +597,55 @@ class TestMedallionPrimitives:
         """Non-silver tables should pass vacuously (if_then condition not met)."""
         result = engine.evaluate({"ref": "silver_has_classification"}, {"data_layer": "bronze"}, {})
         assert result.passed
+
+
+class TestMedallionPolicies:
+    """Verify medallion_governance.yml loads and passes structural validation."""
+
+    @staticmethod
+    def _load_policies_yaml(policies_dir: str) -> list:
+        import yaml
+        policies = []
+        for yaml_file in sorted(Path(policies_dir).glob("*.yml")):
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f)
+            if data and "policies" in data:
+                for p in data["policies"]:
+                    policies.append(p)
+        return policies
+
+    def test_medallion_policies_load(self, ontology_dir):
+        policies_dir = str(Path(ontology_dir).parent / "policies")
+        policies = self._load_policies_yaml(policies_dir)
+        med_ids = [p["id"] for p in policies if p["id"].startswith("POL-MED")]
+        assert len(med_ids) == 8
+        for i in range(1, 9):
+            assert f"POL-MED-{i:03d}" in med_ids
+
+    def test_medallion_policies_have_required_fields(self, ontology_dir):
+        policies_dir = str(Path(ontology_dir).parent / "policies")
+        policies = self._load_policies_yaml(policies_dir)
+        required_keys = ["id", "name", "applies_to", "domain", "severity",
+                         "description", "remediation", "rule"]
+        for p in policies:
+            if not p["id"].startswith("POL-MED"):
+                continue
+            for key in required_keys:
+                assert key in p and p[key], f"{p['id']} missing or empty: {key}"
+            assert p.get("active") is True, f"{p['id']} should be active"
+
+    def test_medallion_policies_reference_valid_classes(self, ontology_dir):
+        """All applies_to values must be known ontology classes."""
+        policies_dir = str(Path(ontology_dir).parent / "policies")
+        policies = self._load_policies_yaml(policies_dir)
+        import yaml
+        with open(Path(ontology_dir) / "resource_classes.yml") as f:
+            classes_data = yaml.safe_load(f)
+        known_classes = set(classes_data.get("base_classes", {}).keys())
+        known_classes.update(classes_data.get("derived_classes", {}).keys())
+        for p in policies:
+            if not p["id"].startswith("POL-MED"):
+                continue
+            assert p["applies_to"] in known_classes, (
+                f"{p['id']} references unknown class: {p['applies_to']}"
+            )

@@ -1,0 +1,23 @@
+# Drift Detection Policies
+# Domain: AccessControl
+# Owner: security_admin
+#
+# Compares actual grants against declared expected state from UC volume.
+# External systems produce expected_state.json; Watchdog detects drift.
+#
+# Policy namespace: POL-DRIFT-* (avoids collision with built-in POL-A* policies)
+
+policies:
+
+  - id: POL-DRIFT-001
+    name: "Grant drift detection"
+    applies_to: GrantAsset
+    domain: AccessControl
+    severity: critical
+    description: "Detected grants that differ from the declared expected state. This indicates unauthorized manual grant changes that bypass the permissions-as-code pipeline."
+    remediation: "Review the drift and either update the expected state file to include this grant or revoke the unauthorized grant."
+    active: true
+    rule:
+      type: drift_check
+      source: expected_permissions/expected_state.json
+      check: grants

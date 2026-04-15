@@ -117,7 +117,7 @@ Five principles shape every architectural decision in Watchdog:
 |  +----------+  +-----------+  +-----------+  +--------+  +------------+  |
 |  | Crawlers |  | Ontology  |  | Rule      |  | Policy |  | Violations |  |
 |  | (16 types|  | Engine    |  | Engine    |  | Engine |  | Merge      |  |
-|  | SDK +    |  | 28 classes|  | 14 rule   |  | YAML + |  | dedup +    |  |
+|  | SDK +    |  | 28 classes|  | 15 rule   |  | YAML + |  | dedup +    |  |
 |  | system   |  | tag-based |  | types     |  | Delta  |  | lifecycle  |  |
 |  | tables)  |  | hierarchy |  | composable|  | hybrid |  |            |  |
 |  +----------+  +-----------+  +-----------+  +--------+  +------------+  |
@@ -190,7 +190,7 @@ PolicyEngine.evaluate_all()
         --> scan_summary (append-only, one row per scan)
 ```
 
-**Stage 1: Crawl.** Sixteen crawlers enumerate workspace resources from UC `information_schema`, the Databricks SDK, and system tables. All resources land in `resource_inventory` with a `scan_id` for point-in-time queries. FMAPI endpoints are auto-tagged as `ManagedModelEndpoint` to prevent noise in agent governance dashboards.
+**Stage 1: Crawl.** Sixteen crawlers enumerate workspace resources from UC `information_schema`, the Databricks SDK, and system tables. All resources land in `resource_inventory` with a `scan_id` for point-in-time queries. FMAPI endpoints are auto-tagged as `ManagedModelEndpoint` to prevent noise in agent governance dashboards. Three enrichment crawlers (DQM status, LHM status, pipeline freshness) then UPDATE existing inventory rows with derived tags from system tables.
 
 **Stage 2: Classify.** The ontology engine assigns each resource to one or more ontology classes based on its tags and metadata. Classifications are written to `resource_classifications` with full ancestry chains.
 

@@ -63,7 +63,7 @@
 │  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌────────┐  ┌────────┐ │
 │  │ Crawlers │  │ Ontology  │  │ Rule      │  │ Policy │  │Violatio│ │
 │  │ (16 types│  │ Engine    │  │ Engine    │  │ Engine │  │ns Merge│ │
-│  │ SDK +    │  │ 28 classes│  │ 14 rule   │  │ YAML + │  │ dedup  │ │
+│  │ SDK +    │  │ 28 classes│  │ 15 rule   │  │ YAML + │  │ dedup  │ │
 │  │ system   │  │ tag-based │  │ types     │  │ Delta  │  │ + life │ │
 │  │ tables)  │  │ hierarchy │  │ composable│  │ hybrid │  │ cycle  │ │
 │  └──────────┘  └───────────┘  └───────────┘  └────────┘  └────────┘ │

@@ -44,6 +44,50 @@ INVENTORY_SCHEMA = T.StructType([
 ])
 
 
+def derive_pipeline_health(
+    last_success_at: str | None,
+    last_failure_at: str | None,
+    failure_count_7d: int,
+    now: datetime | None = None,
+) -> dict:
+    """Derive pipeline freshness tags from run history.
+
+    Pure function for testability. Called by _crawl_pipeline_freshness()
+    with data from system.lakeflow.pipeline_event_log.
+
+    Returns dict of tags to merge into the pipeline's inventory row.
+    """
+    now = now or datetime.now(timezone.utc)
+    tags = {
+        "last_success_at": last_success_at or "",
+        "last_failure_at": last_failure_at or "",
+        "failure_count_7d": str(failure_count_7d),
+    }
+
+    if not last_success_at:
+        tags["freshness_hours"] = "-1"
+        tags["pipeline_health"] = "failing"
+        return tags
+
+    success_dt = datetime.fromisoformat(last_success_at.replace("Z", "+00:00"))
+    hours_since = int((now - success_dt).total_seconds() // 3600)
+    tags["freshness_hours"] = str(hours_since)
+
+    # Determine health
+    if last_failure_at:
+        failure_dt = datetime.fromisoformat(last_failure_at.replace("Z", "+00:00"))
+        if failure_dt > success_dt:
+            tags["pipeline_health"] = "failing"
+            return tags
+
+    if failure_count_7d > 0:
+        tags["pipeline_health"] = "degraded"
+    else:
+        tags["pipeline_health"] = "healthy"
+
+    return tags
+
+
 def ensure_inventory_table(spark: SparkSession, catalog: str, schema: str) -> None:
     """Create the resource_inventory table if it doesn't exist.
 
@@ -161,6 +205,7 @@ class ResourceCrawler:
         for crawler_fn in [
             self._crawl_dqm_status,
             self._crawl_lhm_status,
+            self._crawl_pipeline_freshness,
         ]:
             result, rows = self._safe_crawl(crawler_fn)
             results.append(result)
@@ -961,3 +1006,76 @@ class ResourceCrawler:
 
         print(f"  LHM: {len(monitored_tables)} tables with Lakehouse Monitoring")
         return []  # Enrichment only
+
+    def _crawl_pipeline_freshness(self) -> list:
+        """Enrich pipeline inventory rows with freshness tags from system tables.
+
+        Reads system.lakeflow.pipeline_event_log for the last 7 days,
+        computes per-pipeline health metrics, and UPDATEs the existing
+        pipeline rows in resource_inventory with freshness tags.
+
+        Follows the same pattern as _crawl_dqm_status: enrichment via
+        UPDATE, graceful fallback if system table isn't available.
+        """
+        try:
+            event_rows = self.spark.sql("""
+                SELECT
+                    pipeline_id,
+                    event_type,
+                    timestamp,
+                    message
+                FROM system.lakeflow.pipeline_event_log
+                WHERE timestamp >= current_timestamp() - INTERVAL 7 DAY
+                  AND event_type IN ('create_update', 'update_progress')
+            """).collect()
+        except Exception as e:
+            print(f"  Pipeline event log not available: {e}")
+            return []
+
+        if not event_rows:
+            return []
+
+        # Aggregate per pipeline: last success, last failure, failure count
+        from collections import defaultdict
+        pipeline_stats = defaultdict(lambda: {
+            "last_success": None, "last_failure": None, "failure_count": 0
+        })
+
+        for row in event_rows:
+            pid = row.pipeline_id
+            ts = row.timestamp.isoformat() if row.timestamp else None
+            msg = (row.message or "").upper()
+
+            if row.event_type == "update_progress":
+                if "COMPLETED" in msg:
+                    cur = pipeline_stats[pid]["last_success"]
+                    if cur is None or ts > cur:
+                        pipeline_stats[pid]["last_success"] = ts
+                elif "FAILED" in msg or "ERROR" in msg:
+                    pipeline_stats[pid]["failure_count"] += 1
+                    cur = pipeline_stats[pid]["last_failure"]
+                    if cur is None or ts > cur:
+                        pipeline_stats[pid]["last_failure"] = ts
+
+        # Enrich inventory rows
+        for pid, stats in pipeline_stats.items():
+            health_tags = derive_pipeline_health(
+                last_success_at=stats["last_success"],
+                last_failure_at=stats["last_failure"],
+                failure_count_7d=stats["failure_count"],
+                now=self.now,
+            )
+            # Build SET clause for tag updates
+            tag_updates = ", ".join(
+                f"'{k}', '{v}'" for k, v in health_tags.items()
+            )
+            self.spark.sql(f"""
+                UPDATE {self.inventory_table}
+                SET tags = map_concat(tags, map({tag_updates}))
+                WHERE scan_id = '{self.scan_id}'
+                  AND resource_type = 'pipeline'
+                  AND resource_id = '{pid}'
+            """)
+
+        print(f"  pipeline_freshness: enriched {len(pipeline_stats)} pipelines")
+        return []  # Enrichment only, no new inventory rows

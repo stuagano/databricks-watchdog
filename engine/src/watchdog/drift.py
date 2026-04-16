@@ -10,31 +10,64 @@ without knowing where it came from — keeping the rule engine pure.
 
 import json
 import logging
+import tarfile
 from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
 
-def load_expected_state(file_path: str) -> dict:
-    """Load expected state from a JSON file.
-
-    Args:
-        file_path: Path to the expected state JSON file. In Databricks,
-            this is a UC volume mount path like
-            /Volumes/{catalog}/{schema}/{volume}/expected_state.json
+def _load_from_bundle(path: str) -> dict:
+    """Extract and parse data.json from an OPA-style .tar.gz bundle.
 
     Returns:
-        Parsed JSON dict, or empty dict if file not found or invalid.
+        Parsed dict from data.json, or empty dict if data.json is absent.
     """
     try:
-        with open(file_path) as f:
-            return json.load(f)
+        with tarfile.open(path, "r:gz") as tf:
+            try:
+                member = tf.getmember("data.json")
+            except KeyError:
+                logger.warning("Bundle %s has no data.json member", path)
+                return {}
+            f = tf.extractfile(member)
+            if f is None:
+                return {}
+            return json.loads(f.read())
+    except (tarfile.TarError, OSError) as e:
+        logger.warning("Failed to open bundle %s: %s", path, e)
+        return {}
+
+
+def load_expected_state(file_path: str, data_path: str | None = None) -> dict:
+    """Load expected state from a JSON file or OPA .tar.gz bundle.
+
+    Args:
+        file_path: Path to the expected state JSON file or .tar.gz bundle.
+            In Databricks, this is a UC volume mount path like
+            /Volumes/{catalog}/{schema}/{volume}/expected_state.json
+        data_path: Optional dot-free key to navigate into the loaded dict
+            before returning.  E.g. "permissions" returns data["permissions"].
+
+    Returns:
+        Parsed JSON dict (or nested sub-dict), or empty dict if file not
+        found, invalid, or data_path key is missing.
+    """
+    try:
+        if file_path.endswith(".tar.gz"):
+            data = _load_from_bundle(file_path)
+        else:
+            with open(file_path) as f:
+                data = json.load(f)
     except FileNotFoundError:
         logger.warning("Expected state file not found: %s", file_path)
         return {}
     except (json.JSONDecodeError, OSError) as e:
         logger.warning("Failed to load expected state from %s: %s", file_path, e)
         return {}
+
+    if data_path is not None:
+        data = data.get(data_path, {})
+    return data
 
 
 def build_expected_grants_lookup(grants: list[dict]) -> dict[str, list[dict]]:
@@ -53,3 +86,27 @@ def build_expected_grants_lookup(grants: list[dict]) -> dict[str, list[dict]]:
         if principal:
             lookup[principal].append(entry)
     return dict(lookup)
+
+
+def build_expected_row_filters_lookup(
+    row_filters: list[dict],
+) -> dict[str, dict]:
+    """Keyed by table_full_name → {table, function}."""
+    return {entry["table"]: entry for entry in row_filters}
+
+
+def build_expected_column_masks_lookup(
+    column_masks: list[dict],
+) -> dict[str, dict]:
+    """Keyed by '{table}.{column}' → {table, column, function}."""
+    return {
+        f"{entry['table']}.{entry['column']}": entry
+        for entry in column_masks
+    }
+
+
+def build_expected_group_membership_lookup(
+    group_membership: list[dict],
+) -> dict[str, set[str]]:
+    """Keyed by group_name → set of expected member values."""
+    return {entry["group"]: set(entry["members"]) for entry in group_membership}

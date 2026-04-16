@@ -560,6 +560,9 @@ class RuleEngine:
                 rule_type="drift_check",
             )
 
+        if not expected:
+            return RuleResult(passed=True, rule_type="drift_check")
+
         table = metadata.get("table_full_name", "")
         actual_fn = metadata.get("filter_function", "")
         expected_fn = expected.get("function", "")
@@ -591,6 +594,9 @@ class RuleEngine:
                 rule_type="drift_check",
             )
 
+        if not expected:
+            return RuleResult(passed=True, rule_type="drift_check")
+
         table = metadata.get("table_full_name", "")
         column = metadata.get("column_name", "")
         actual_fn = metadata.get("mask_function", "")
@@ -615,7 +621,7 @@ class RuleEngine:
             return RuleResult(passed=True, rule_type="drift_check")
 
         try:
-            expected_members = json.loads(expected_json)
+            expected_members = set(json.loads(expected_json))
         except (json.JSONDecodeError, TypeError) as e:
             return RuleResult(
                 passed=False,

@@ -233,7 +233,6 @@ class TestDriftCheckRowFilters:
 
     def test_pass_function_matches_expected(self, bare):
         """Actual filter function matches expected — pass."""
-        import json
         expected = json.dumps({"table": "gold.finance.gl_balances", "function": "gold.sec.my_filter"})
         metadata = {
             "table_full_name": "gold.finance.gl_balances",
@@ -245,7 +244,6 @@ class TestDriftCheckRowFilters:
 
     def test_fail_function_mismatch(self, bare):
         """Actual filter function differs from expected — fail."""
-        import json
         expected = json.dumps({"table": "gold.finance.gl_balances", "function": "gold.sec.expected_filter"})
         metadata = {
             "table_full_name": "gold.finance.gl_balances",
@@ -287,7 +285,6 @@ class TestDriftCheckColumnMasks:
 
     def test_pass_function_matches_expected(self, bare):
         """Actual mask function matches expected — pass."""
-        import json
         expected = json.dumps({
             "table": "gold.finance.gl_balances",
             "column": "cost_center",
@@ -304,7 +301,6 @@ class TestDriftCheckColumnMasks:
 
     def test_fail_function_mismatch(self, bare):
         """Actual mask function differs from expected — fail."""
-        import json
         expected = json.dumps({
             "table": "gold.finance.gl_balances",
             "column": "cost_center",
@@ -352,7 +348,6 @@ class TestDriftCheckGroupMembership:
 
     def test_pass_member_in_expected(self, bare):
         """Actual member is in the expected members list — pass."""
-        import json
         metadata = {
             "group_name": "finance-analysts",
             "member_value": "user@company.com",
@@ -364,7 +359,6 @@ class TestDriftCheckGroupMembership:
 
     def test_fail_member_not_in_expected(self, bare):
         """Actual member not in expected list — fail with detail."""
-        import json
         metadata = {
             "group_name": "finance-analysts",
             "member_value": "unauthorized@company.com",
@@ -378,7 +372,6 @@ class TestDriftCheckGroupMembership:
 
     def test_fail_empty_expected_list(self, bare):
         """Empty expected_group_members list — any actual member is unauthorized."""
-        import json
         metadata = {
             "group_name": "finance-analysts",
             "member_value": "user@company.com",

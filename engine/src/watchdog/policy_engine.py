@@ -26,7 +26,13 @@ from pyspark.sql import SparkSession, Row
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
 
-from watchdog.drift import load_expected_state, build_expected_grants_lookup
+from watchdog.drift import (
+    load_expected_state,
+    build_expected_grants_lookup,
+    build_expected_row_filters_lookup,
+    build_expected_column_masks_lookup,
+    build_expected_group_membership_lookup,
+)
 from watchdog.ontology import OntologyEngine
 from watchdog.policies_table import write_policies
 from watchdog.rule_engine import RuleEngine, RuleResult
@@ -129,6 +135,82 @@ class PolicyEngine:
     def _violations_table(self) -> str:
         return f"{self.catalog}.{self.schema}.violations"
 
+    # ------------------------------------------------------------------
+    # Drift-check helpers — extracted for testability (no Spark required)
+    # ------------------------------------------------------------------
+
+    def _build_drift_lookups(self, expected_state: dict) -> dict:
+        """Build lookup tables for all drift-check resource types.
+
+        Returns a dict with four lookup tables:
+          - grants: principal → [grant entries]
+          - row_filters: table_full_name → {table, function}
+          - column_masks: '{table}.{column}' → {table, column, function}
+          - group_membership: group_name → set of member values
+        """
+        return {
+            "grants": build_expected_grants_lookup(expected_state.get("grants", [])),
+            "row_filters": build_expected_row_filters_lookup(expected_state.get("row_filters", [])),
+            "column_masks": build_expected_column_masks_lookup(expected_state.get("column_masks", [])),
+            "group_membership": build_expected_group_membership_lookup(
+                expected_state.get("group_membership", [])
+            ),
+        }
+
+    def _inject_drift_metadata(
+        self, resource_type: str, metadata: dict, lookups: dict
+    ) -> dict:
+        """Inject pre-computed expected-state values into resource metadata.
+
+        Called per-resource during evaluate_all. Returns a (possibly augmented)
+        copy of metadata — never mutates the input dict.
+        """
+        if resource_type == "grant":
+            grants_lookup = lookups.get("grants", {})
+            if grants_lookup:
+                grantee = metadata.get("grantee", "")
+                if grantee in grants_lookup:
+                    metadata = {
+                        **metadata,
+                        "expected_grants": json.dumps(grants_lookup[grantee]),
+                    }
+
+        elif resource_type == "row_filter":
+            rf_lookup = lookups.get("row_filters", {})
+            if rf_lookup:
+                table = metadata.get("table_full_name", "")
+                if table in rf_lookup:
+                    metadata = {
+                        **metadata,
+                        "expected_row_filters": json.dumps(rf_lookup[table]),
+                    }
+
+        elif resource_type == "column_mask":
+            cm_lookup = lookups.get("column_masks", {})
+            if cm_lookup:
+                table = metadata.get("table_full_name", "")
+                col = metadata.get("column_name", "")
+                key = f"{table}.{col}"
+                if key in cm_lookup:
+                    metadata = {
+                        **metadata,
+                        "expected_column_masks": json.dumps(cm_lookup[key]),
+                    }
+
+        elif resource_type == "group_member":
+            gm_lookup = lookups.get("group_membership", {})
+            if gm_lookup:
+                group = metadata.get("group_name", "")
+                if group in gm_lookup:
+                    metadata = {
+                        **metadata,
+                        "expected_group_members": json.dumps(
+                            list(gm_lookup[group])
+                        ),
+                    }
+
+        return metadata
+
     def evaluate_all(self) -> EvaluationSummary:
         """Evaluate all active policies against the latest resource inventory.
 
@@ -211,16 +293,15 @@ class PolicyEngine:
         write_policies(self.spark, self.catalog, self.schema, active_policies)
 
         # Load expected state for drift_check policies
-        expected_grants_lookup: dict[str, list[dict]] = {}
+        # Keyed by policy_id so each policy can reference a different source file.
+        drift_lookups_by_policy: dict[str, dict] = {}
         for policy in active_policies:
             if policy.rule.get("type") == "drift_check" and "source" in policy.rule:
                 source_path = policy.rule["source"]
                 volume_path = f"/Volumes/{self.catalog}/{self.schema}/{source_path}"
-                state = load_expected_state(volume_path)
-                grants = state.get("grants", [])
-                if grants:
-                    lookup = build_expected_grants_lookup(grants)
-                    expected_grants_lookup.update(lookup)
+                data_path = policy.rule.get("data_path")
+                state = load_expected_state(volume_path, data_path=data_path)
+                drift_lookups_by_policy[policy.policy_id] = self._build_drift_lookups(state)
 
         scan_results = []
 
@@ -236,13 +317,11 @@ class PolicyEngine:
                     metadata = {**metadata, "owner": resource.owner}
 
                 # Inject expected state for drift_check evaluation
-                if resource.resource_type == "grant" and expected_grants_lookup:
-                    grantee = metadata.get("grantee", "")
-                    if grantee in expected_grants_lookup:
-                        metadata = {
-                            **metadata,
-                            "expected_grants": json.dumps(expected_grants_lookup[grantee]),
-                        }
+                if policy.rule.get("type") == "drift_check":
+                    lookups = drift_lookups_by_policy.get(policy.policy_id, {})
+                    metadata = self._inject_drift_metadata(
+                        resource.resource_type, metadata, lookups
+                    )
 
                 # Evaluate the rule
                 result = self.rule_engine.evaluate(policy.rule, tags, metadata)

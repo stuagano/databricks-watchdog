@@ -21,3 +21,42 @@ policies:
       type: drift_check
       source: expected_permissions/expected_state.json
       check: grants
+
+  - id: POL-DRIFT-002
+    name: "Row filter drift detection"
+    applies_to: RowFilterAsset
+    domain: AccessControl
+    severity: critical
+    description: "Detected a row filter that differs from the declared expected state."
+    remediation: "Review the drift and update the expected state file or remove the unauthorized row filter."
+    active: true
+    rule:
+      type: drift_check
+      source: expected_permissions/expected_state.json
+      check: row_filters
+
+  - id: POL-DRIFT-003
+    name: "Column mask drift detection"
+    applies_to: ColumnMaskAsset
+    domain: AccessControl
+    severity: critical
+    description: "Detected a column mask that differs from the declared expected state."
+    remediation: "Review the drift and update the expected state file or remove the unauthorized column mask."
+    active: true
+    rule:
+      type: drift_check
+      source: expected_permissions/expected_state.json
+      check: column_masks
+
+  - id: POL-DRIFT-004
+    name: "Group membership drift detection"
+    applies_to: GroupMemberAsset
+    domain: AccessControl
+    severity: high
+    description: "Detected a group member not present in the declared expected state."
+    remediation: "Review the drift and update the expected state file or remove the unexpected group member."
+    active: true
+    rule:
+      type: drift_check
+      source: expected_permissions/expected_state.json
+      check: group_membership

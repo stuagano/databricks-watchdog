@@ -3,9 +3,35 @@
 
 Run with: pytest tests/unit/test_remediation_router.py -v
 """
+import sys
+from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock
 
 import pytest
+
+# Ensure ontos-adapter package is importable
+_REPO_ROOT = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(_REPO_ROOT / "ontos-adapter" / "src"))
+
+# Stub out databricks.sql before any watchdog_governance imports trigger it
+if "databricks.sql" not in sys.modules:
+    _db_sql = ModuleType("databricks.sql")
+    _db_sql.connect = MagicMock()
+    sys.modules["databricks.sql"] = _db_sql
+    if "databricks" in sys.modules:
+        sys.modules["databricks"].sql = _db_sql
+
+# Clear any previously cached watchdog_governance modules so the stub takes effect
+for _mod_name in list(sys.modules.keys()):
+    if _mod_name.startswith("watchdog_governance"):
+        del sys.modules[_mod_name]
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from watchdog_governance.routers.remediation import router
+from watchdog_governance.routers._deps import get_provider
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -88,6 +114,7 @@ def _make_mock_provider():
         "context_json": '{"owner": "jane", "reason": "table owner is jane"}',
         "citations": "",
         "pre_state": '{"data_steward": null}',
+        "proposed_state": '{"data_steward": "jane"}',
         "review_history": [],
     }
 
@@ -166,3 +193,184 @@ class TestSubmitReview:
         provider.submit_review.assert_called_once_with(
             "prop-001", "rejected", "bad SQL", reviewer="bob@co.com"
         )
+
+
+# ── TestClient integration tests ────────────────────────────────────────────
+
+
+def _make_test_client(provider=None):
+    """Create a FastAPI TestClient with the remediation router and mock provider."""
+    if provider is None:
+        provider = _make_mock_provider()
+    app = FastAPI()
+    app.include_router(router)
+    app.dependency_overrides[get_provider] = lambda: provider
+    return TestClient(app)
+
+
+class TestRemediationRouter:
+    """Integration tests — exercise actual HTTP endpoints with mock provider."""
+
+    # -- Funnel --
+
+    def test_funnel_endpoint_returns_200(self):
+        client = _make_test_client()
+        resp = client.get("/remediation/funnel")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["total_violations"] == 247
+        assert data["pending_review"] == 12
+        assert data["verified"] == 48
+
+    # -- Agent effectiveness --
+
+    def test_agents_endpoint_returns_200(self):
+        client = _make_test_client()
+        resp = client.get("/remediation/agents")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert data[0]["agent_id"] == "steward-agent"
+
+    # -- Reviewer load --
+
+    def test_reviewer_load_endpoint_returns_200(self):
+        client = _make_test_client()
+        resp = client.get("/remediation/reviewer-load")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+        assert data[0]["reviewer"] == "alice@co.com"
+
+    # -- Proposals list --
+
+    def test_proposals_default_status_filter(self):
+        provider = _make_mock_provider()
+        client = _make_test_client(provider)
+        resp = client.get("/remediation/proposals")
+        assert resp.status_code == 200
+        call_args = provider.list_proposals.call_args
+        filters = call_args[0][0]
+        assert filters.status == "pending_review"
+
+    def test_proposals_custom_status_filter(self):
+        provider = _make_mock_provider()
+        client = _make_test_client(provider)
+        resp = client.get("/remediation/proposals?status=approved")
+        assert resp.status_code == 200
+        call_args = provider.list_proposals.call_args
+        filters = call_args[0][0]
+        assert filters.status == "approved"
+
+    def test_proposals_passes_limit_and_offset(self):
+        provider = _make_mock_provider()
+        client = _make_test_client(provider)
+        resp = client.get("/remediation/proposals?limit=50&offset=10")
+        assert resp.status_code == 200
+        call_args = provider.list_proposals.call_args
+        filters = call_args[0][0]
+        assert filters.limit == 50
+        assert filters.offset == 10
+
+    # -- Proposal detail --
+
+    def test_proposal_detail_returns_200(self):
+        client = _make_test_client()
+        resp = client.get("/remediation/proposals/prop-001")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["proposal_id"] == "prop-001"
+        assert "context_json" in data
+        assert "review_history" in data
+
+    def test_proposal_detail_404_when_not_found(self):
+        provider = _make_mock_provider()
+        provider.get_proposal.side_effect = LookupError("not found")
+        client = _make_test_client(provider)
+        resp = client.get("/remediation/proposals/nonexistent")
+        assert resp.status_code == 404
+        assert "nonexistent" in resp.json()["detail"]
+
+    # -- Review action --
+
+    def test_review_approve_returns_200(self):
+        client = _make_test_client()
+        resp = client.post(
+            "/remediation/proposals/prop-001/review",
+            json={"decision": "approved", "reasoning": "looks good"},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["decision"] == "approved"
+
+    def test_review_reject_returns_200(self):
+        provider = _make_mock_provider()
+        provider.submit_review.return_value = {
+            "review_id": "rev-002",
+            "proposal_id": "prop-001",
+            "decision": "rejected",
+            "status": "rejected",
+        }
+        client = _make_test_client(provider)
+        resp = client.post(
+            "/remediation/proposals/prop-001/review",
+            json={"decision": "rejected", "reasoning": "bad SQL"},
+        )
+        assert resp.status_code == 200
+        assert resp.json()["decision"] == "rejected"
+
+    def test_review_reassign_requires_reassigned_to(self):
+        client = _make_test_client()
+        resp = client.post(
+            "/remediation/proposals/prop-001/review",
+            json={"decision": "reassigned"},
+        )
+        assert resp.status_code == 422
+
+    def test_review_reassign_with_reassigned_to_returns_200(self):
+        provider = _make_mock_provider()
+        provider.submit_review.return_value = {
+            "review_id": "rev-003",
+            "proposal_id": "prop-001",
+            "decision": "reassigned",
+            "status": "pending_review",
+        }
+        client = _make_test_client(provider)
+        resp = client.post(
+            "/remediation/proposals/prop-001/review",
+            json={"decision": "reassigned", "reassigned_to": "bob@co.com"},
+        )
+        assert resp.status_code == 200
+
+    def test_review_404_when_proposal_not_found(self):
+        provider = _make_mock_provider()
+        provider.submit_review.side_effect = LookupError("not found")
+        client = _make_test_client(provider)
+        resp = client.post(
+            "/remediation/proposals/nonexistent/review",
+            json={"decision": "approved", "reasoning": "looks good"},
+        )
+        assert resp.status_code == 404
+        assert "nonexistent" in resp.json()["detail"]
+
+    def test_review_409_on_invalid_status_transition(self):
+        provider = _make_mock_provider()
+        provider.submit_review.side_effect = ValueError("Proposal is already approved")
+        client = _make_test_client(provider)
+        resp = client.post(
+            "/remediation/proposals/prop-001/review",
+            json={"decision": "approved", "reasoning": "duplicate approval"},
+        )
+        assert resp.status_code == 409
+        assert "already approved" in resp.json()["detail"]
+
+    def test_review_passes_user_header_to_provider(self):
+        provider = _make_mock_provider()
+        client = _make_test_client(provider)
+        client.post(
+            "/remediation/proposals/prop-001/review",
+            json={"decision": "approved", "reasoning": "lgtm"},
+            headers={"x-forwarded-user": "alice@co.com"},
+        )
+        call_kwargs = provider.submit_review.call_args[1]
+        assert call_kwargs["reviewer"] == "alice@co.com"

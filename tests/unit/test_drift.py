@@ -7,7 +7,13 @@ from pathlib import Path
 
 import pytest
 from watchdog.rule_engine import RuleEngine
-from watchdog.drift import load_expected_state, build_expected_grants_lookup
+from watchdog.drift import (
+    load_expected_state,
+    build_expected_grants_lookup,
+    build_expected_row_filters_lookup,
+    build_expected_column_masks_lookup,
+    build_expected_group_membership_lookup,
+)
 
 
 @pytest.fixture(scope="module")
@@ -402,11 +408,10 @@ import tarfile as _tarfile_mod
 
 def _make_bundle(data: dict, inner_path: str = "data.json") -> bytes:
     """Build a minimal in-memory .tar.gz bundle with a single JSON file."""
-    import io, tarfile, json
     content = json.dumps(data).encode()
     buf = io.BytesIO()
-    with tarfile.open(fileobj=buf, mode="w:gz") as tf:
-        info = tarfile.TarInfo(name=inner_path)
+    with _tarfile_mod.open(fileobj=buf, mode="w:gz") as tf:
+        info = _tarfile_mod.TarInfo(name=inner_path)
         info.size = len(content)
         tf.addfile(info, io.BytesIO(content))
     return buf.getvalue()
@@ -415,8 +420,6 @@ def _make_bundle(data: dict, inner_path: str = "data.json") -> bytes:
 class TestLoadExpectedStateBundleLoader:
     def test_load_from_plain_json(self, tmp_path):
         """Existing JSON behaviour is unchanged."""
-        import json
-        from watchdog.drift import load_expected_state
         state = {"grants": [{"principal": "alice", "privilege": "SELECT", "resource": "t"}]}
         p = tmp_path / "state.json"
         p.write_text(json.dumps(state))
@@ -425,7 +428,6 @@ class TestLoadExpectedStateBundleLoader:
 
     def test_load_from_tar_gz_bundle(self, tmp_path):
         """Bundle .tar.gz: extracts data.json from root."""
-        from watchdog.drift import load_expected_state
         state = {"grants": [], "row_filters": [{"table": "t", "function": "f"}]}
         bundle_bytes = _make_bundle(state)
         p = tmp_path / "bundle.tar.gz"
@@ -435,7 +437,6 @@ class TestLoadExpectedStateBundleLoader:
 
     def test_load_from_bundle_with_data_path(self, tmp_path):
         """data_path navigates to a nested key before reading sections."""
-        from watchdog.drift import load_expected_state
         state = {"permissions": {"grants": [], "group_membership": [{"group": "g", "members": ["u@x.com"]}]}}
         bundle_bytes = _make_bundle(state)
         p = tmp_path / "bundle.tar.gz"
@@ -445,7 +446,6 @@ class TestLoadExpectedStateBundleLoader:
 
     def test_load_from_bundle_missing_data_json(self, tmp_path):
         """Bundle missing data.json returns empty dict (graceful)."""
-        from watchdog.drift import load_expected_state
         state = {"some": "value"}
         bundle_bytes = _make_bundle(state, inner_path="other.json")
         p = tmp_path / "bundle.tar.gz"
@@ -459,18 +459,15 @@ class TestLoadExpectedStateBundleLoader:
 
 class TestBuildExpectedRowFiltersLookup:
     def test_empty_input(self):
-        from watchdog.drift import build_expected_row_filters_lookup
         assert build_expected_row_filters_lookup([]) == {}
 
     def test_single_entry(self):
-        from watchdog.drift import build_expected_row_filters_lookup
         entry = {"table": "gold.finance.gl_balances", "function": "gold.sec.f"}
         result = build_expected_row_filters_lookup([entry])
         assert "gold.finance.gl_balances" in result
         assert result["gold.finance.gl_balances"]["function"] == "gold.sec.f"
 
     def test_multiple_entries(self):
-        from watchdog.drift import build_expected_row_filters_lookup
         entries = [
             {"table": "gold.finance.t1", "function": "gold.sec.f1"},
             {"table": "gold.finance.t2", "function": "gold.sec.f2"},
@@ -479,14 +476,21 @@ class TestBuildExpectedRowFiltersLookup:
         assert len(result) == 2
         assert result["gold.finance.t2"]["function"] == "gold.sec.f2"
 
+    def test_skips_entry_missing_table_key(self):
+        entries = [
+            {"table": "gold.finance.t1", "function": "gold.sec.f1"},
+            {"function": "gold.sec.orphan"},  # missing "table"
+        ]
+        result = build_expected_row_filters_lookup(entries)
+        assert len(result) == 1
+        assert "gold.finance.t1" in result
+
 
 class TestBuildExpectedColumnMasksLookup:
     def test_empty_input(self):
-        from watchdog.drift import build_expected_column_masks_lookup
         assert build_expected_column_masks_lookup([]) == {}
 
     def test_single_entry(self):
-        from watchdog.drift import build_expected_column_masks_lookup
         entry = {"table": "gold.finance.gl_balances", "column": "cost_center_owner", "function": "gold.sec.m"}
         result = build_expected_column_masks_lookup([entry])
         key = "gold.finance.gl_balances.cost_center_owner"
@@ -494,7 +498,6 @@ class TestBuildExpectedColumnMasksLookup:
         assert result[key]["function"] == "gold.sec.m"
 
     def test_multiple_columns_same_table(self):
-        from watchdog.drift import build_expected_column_masks_lookup
         entries = [
             {"table": "gold.finance.t1", "column": "col_a", "function": "gold.sec.f1"},
             {"table": "gold.finance.t1", "column": "col_b", "function": "gold.sec.f2"},
@@ -503,14 +506,21 @@ class TestBuildExpectedColumnMasksLookup:
         assert len(result) == 2
         assert "gold.finance.t1.col_b" in result
 
+    def test_skips_entry_missing_column_key(self):
+        entries = [
+            {"table": "gold.finance.t1", "column": "col_a", "function": "gold.sec.f1"},
+            {"table": "gold.finance.t1", "function": "gold.sec.f2"},  # missing "column"
+        ]
+        result = build_expected_column_masks_lookup(entries)
+        assert len(result) == 1
+        assert "gold.finance.t1.col_a" in result
+
 
 class TestBuildExpectedGroupMembershipLookup:
     def test_empty_input(self):
-        from watchdog.drift import build_expected_group_membership_lookup
         assert build_expected_group_membership_lookup([]) == {}
 
     def test_single_group(self):
-        from watchdog.drift import build_expected_group_membership_lookup
         entries = [{"group": "finance-analysts", "members": ["alice@co.com", "bob@co.com"]}]
         result = build_expected_group_membership_lookup(entries)
         assert "finance-analysts" in result
@@ -518,7 +528,6 @@ class TestBuildExpectedGroupMembershipLookup:
         assert isinstance(result["finance-analysts"], set)
 
     def test_multiple_groups(self):
-        from watchdog.drift import build_expected_group_membership_lookup
         entries = [
             {"group": "g1", "members": ["a@x.com"]},
             {"group": "g2", "members": ["b@x.com", "c@x.com"]},
@@ -526,3 +535,12 @@ class TestBuildExpectedGroupMembershipLookup:
         result = build_expected_group_membership_lookup(entries)
         assert len(result) == 2
         assert len(result["g2"]) == 2
+
+    def test_skips_entry_missing_group_key(self):
+        entries = [
+            {"group": "g1", "members": ["a@x.com"]},
+            {"members": ["b@x.com"]},  # missing "group"
+        ]
+        result = build_expected_group_membership_lookup(entries)
+        assert len(result) == 1
+        assert "g1" in result

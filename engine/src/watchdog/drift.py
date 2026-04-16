@@ -45,8 +45,8 @@ def load_expected_state(file_path: str, data_path: str | None = None) -> dict:
         file_path: Path to the expected state JSON file or .tar.gz bundle.
             In Databricks, this is a UC volume mount path like
             /Volumes/{catalog}/{schema}/{volume}/expected_state.json
-        data_path: Optional dot-free key to navigate into the loaded dict
-            before returning.  E.g. "permissions" returns data["permissions"].
+        data_path: Optional single top-level key to navigate into the loaded dict.
+            E.g. "permissions" returns data["permissions"]. Dot-separated paths are not supported.
 
     Returns:
         Parsed JSON dict (or nested sub-dict), or empty dict if file not
@@ -92,21 +92,35 @@ def build_expected_row_filters_lookup(
     row_filters: list[dict],
 ) -> dict[str, dict]:
     """Keyed by table_full_name → {table, function}."""
-    return {entry["table"]: entry for entry in row_filters}
+    lookup = {}
+    for entry in row_filters:
+        key = entry.get("table", "")
+        if key:
+            lookup[key] = entry
+    return lookup
 
 
 def build_expected_column_masks_lookup(
     column_masks: list[dict],
 ) -> dict[str, dict]:
     """Keyed by '{table}.{column}' → {table, column, function}."""
-    return {
-        f"{entry['table']}.{entry['column']}": entry
-        for entry in column_masks
-    }
+    lookup = {}
+    for entry in column_masks:
+        table = entry.get("table", "")
+        column = entry.get("column", "")
+        if table and column:
+            lookup[f"{table}.{column}"] = entry
+    return lookup
 
 
 def build_expected_group_membership_lookup(
     group_membership: list[dict],
 ) -> dict[str, set[str]]:
     """Keyed by group_name → set of expected member values."""
-    return {entry["group"]: set(entry["members"]) for entry in group_membership}
+    lookup = {}
+    for entry in group_membership:
+        key = entry.get("group", "")
+        members = entry.get("members") or []
+        if key:
+            lookup[key] = set(members)
+    return lookup

@@ -92,3 +92,41 @@ def register_agent(spark: SparkSession, catalog: str, schema: str,
 
     df = spark.createDataFrame(row, schema=schema_def)
     df.write.mode("append").saveAsTable(table)
+
+
+def ensure_remediation_reviews_table(spark: SparkSession, catalog: str, schema: str) -> None:
+    """Create the remediation_reviews table."""
+    table = f"{catalog}.{schema}.remediation_reviews"
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {table} (
+            review_id STRING NOT NULL,
+            proposal_id STRING NOT NULL,
+            reviewer STRING NOT NULL,
+            decision STRING NOT NULL,
+            reasoning STRING,
+            reassigned_to STRING,
+            reviewed_at TIMESTAMP NOT NULL
+        )
+        USING DELTA
+    """)
+
+
+def ensure_remediation_applied_table(spark: SparkSession, catalog: str, schema: str) -> None:
+    """Create the remediation_applied table."""
+    table = f"{catalog}.{schema}.remediation_applied"
+    spark.sql(f"""
+        CREATE TABLE IF NOT EXISTS {table} (
+            apply_id STRING NOT NULL,
+            proposal_id STRING NOT NULL,
+            executed_sql STRING,
+            pre_state STRING,
+            post_state STRING,
+            applied_at TIMESTAMP NOT NULL,
+            verify_scan_id STRING,
+            verify_status STRING NOT NULL DEFAULT 'pending'
+        )
+        USING DELTA
+        TBLPROPERTIES (
+            'delta.feature.allowColumnDefaults' = 'supported'
+        )
+    """)

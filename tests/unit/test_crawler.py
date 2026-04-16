@@ -354,7 +354,7 @@ class TestCrawlRowFilters:
         assert len(rows) == 1
         row = rows[0]
         assert row[2] == "row_filter"
-        assert "gold.finance.gl_balances" in row[3]
+        assert row[3] == "row_filter:gold.finance.gl_balances"
         meta = row[8]
         assert meta["table_full_name"] == "gold.finance.gl_balances"
         assert meta["filter_function"] == "gold.sec.filter_gl"
@@ -374,8 +374,7 @@ class TestCrawlColumnMasks:
         assert len(rows) == 1
         row = rows[0]
         assert row[2] == "column_mask"
-        assert "gl_balances" in row[3]
-        assert "cost_center_owner" in row[3]
+        assert row[3] == "column_mask:gold.finance.gl_balances.cost_center_owner"
         meta = row[8]
         assert meta["table_full_name"] == "gold.finance.gl_balances"
         assert meta["column_name"] == "cost_center_owner"

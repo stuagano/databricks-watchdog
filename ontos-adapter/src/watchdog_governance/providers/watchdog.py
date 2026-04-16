@@ -7,7 +7,9 @@ Uses the Databricks SQL Connector (no Spark session required).
 
 from __future__ import annotations
 
+import json
 import os
+import re
 import uuid
 from functools import lru_cache
 from pathlib import Path
@@ -41,6 +43,21 @@ from watchdog_governance.models import (
     ViolationFilters,
     ViolationSummary,
 )
+
+
+def _parse_proposed_state(proposed_sql: str) -> str:
+    """Extract tag key-value pairs from a SET TAGS SQL statement.
+
+    Returns a JSON string of {key: value} pairs.
+    Falls back to empty dict if SQL doesn't match the expected pattern.
+    """
+    match = re.search(r"SET TAGS\s*\((.+)\)", proposed_sql)
+    if not match:
+        return "{}"
+    state = {}
+    for pair in re.finditer(r"'([^']+)'\s*=\s*'([^']*)'", match.group(1)):
+        state[pair.group(1)] = pair.group(2)
+    return json.dumps(state)
 
 
 class WatchdogProvider:
@@ -1047,7 +1064,7 @@ class WatchdogProvider:
                 p.created_at,
                 p.context_json,
                 p.citations,
-                '{}' AS pre_state
+                '{{}}' AS pre_state
             FROM {self._tbl('remediation_proposals')} p
             JOIN {self._tbl('violations')} v
                 ON p.violation_id = v.violation_id
@@ -1070,6 +1087,7 @@ class WatchdogProvider:
             ORDER BY reviewed_at ASC
         """)
         proposal["review_history"] = reviews
+        proposal["proposed_state"] = _parse_proposed_state(proposal.get("proposed_sql", ""))
         return proposal
 
     def submit_review(

@@ -47,6 +47,7 @@ interface ProposalDetail extends ProposalSummary {
   context_json: string
   citations: string
   pre_state: string
+  proposed_state: string
   review_history: ReviewRecord[]
 }
 
@@ -181,23 +182,10 @@ export default function RemediationInbox() {
     return t('watchdog:filter_all')
   }
 
-  // Parse pre_state and derive proposed state from SQL context
+  // Parse pre_state and proposed_state from backend-provided JSON
   const preState = selected ? parseState(selected.pre_state) : {}
   const context = selected ? parseContext(selected.context_json) : {}
-
-  // Derive proposed state: merge pre_state with changes from context
-  const proposedState = selected ? (() => {
-    const state = { ...preState }
-    // Extract tag changes from proposed_sql pattern: SET TAGS ('key' = 'value')
-    const tagMatch = selected.proposed_sql.match(/SET TAGS \((.+)\)/)
-    if (tagMatch) {
-      const pairs = tagMatch[1].matchAll(/'([^']+)'\s*=\s*'([^']*)'/g)
-      for (const m of pairs) {
-        state[m[1]] = m[2]
-      }
-    }
-    return state
-  })() : {}
+  const proposedState = selected ? parseState(selected.proposed_state) : {}
 
   return (
     <div className="flex gap-0 h-[calc(100vh-12rem)]">

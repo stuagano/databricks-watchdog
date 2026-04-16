@@ -349,6 +349,7 @@ class ProposalDetail(ProposalSummary):
     context_json: str
     citations: str
     pre_state: str
+    proposed_state: str
     review_history: list[ReviewRecord]
 
 

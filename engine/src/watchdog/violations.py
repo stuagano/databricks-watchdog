@@ -48,7 +48,8 @@ def ensure_violations_table(spark: SparkSession, catalog: str, schema: str) -> N
             last_detected TIMESTAMP NOT NULL,
             resolved_at TIMESTAMP,
             status STRING NOT NULL DEFAULT 'open',
-            notified_at TIMESTAMP
+            notified_at TIMESTAMP,
+            remediation_status STRING
         )
         USING DELTA
         TBLPROPERTIES (

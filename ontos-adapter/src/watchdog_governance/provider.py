@@ -32,6 +32,7 @@ from watchdog_governance.models import (
     PolicyBase,
     PolicyFilters,
     PolicyVersion,
+    ProposalFilters,
     Resource,
     ResourceDetail,
     ResourceFilters,
@@ -194,4 +195,38 @@ class GovernanceProvider(Protocol):
 
     def validate_ontology(self) -> ValidationResult:
         """Validate the deployed ontology YAML. Returns errors and warnings."""
+        ...
+
+    # ── Remediation (read + review) ──────────────────────────────────────
+
+    def remediation_funnel(self) -> dict:
+        """Funnel counts: violations → proposed → pending → applied → verified."""
+        ...
+
+    def agent_effectiveness(self) -> list[dict]:
+        """Per-agent scorecard: proposals, verified, rejected, precision."""
+        ...
+
+    def reviewer_load(self) -> list[dict]:
+        """Per-reviewer workload: pending, approved, rejected counts."""
+        ...
+
+    def list_proposals(self, filters: "ProposalFilters") -> list[dict]:
+        """List proposals with enriched violation/policy data."""
+        ...
+
+    def get_proposal(self, proposal_id: str) -> dict:
+        """Single proposal with full context and review history."""
+        ...
+
+    def submit_review(
+        self,
+        proposal_id: str,
+        decision: str,
+        reasoning: str,
+        *,
+        reassigned_to: str | None = None,
+        reviewer: str = "unknown",
+    ) -> dict:
+        """Submit a review decision (approve/reject/reassign)."""
         ...

@@ -281,3 +281,84 @@ class MetastoreInfo(BaseModel):
     latest_scan: str | None = None
     resource_count: int = 0
     last_scanned: str | None = None
+
+
+# ── Remediation ────────────────────────────────────────────────────────────
+
+
+class RemediationFunnel(BaseModel):
+    total_violations: int
+    with_remediation: int
+    pending_review: int
+    approved: int
+    applied: int
+    verified: int
+    verification_failed: int
+    rejected: int
+
+
+class AgentEffectiveness(BaseModel):
+    agent_id: str
+    agent_version: str
+    total_proposals: int
+    verified: int
+    failed: int
+    rejected: int
+    precision_pct: float | None
+    avg_confidence: float | None
+
+
+class ReviewerLoad(BaseModel):
+    reviewer: str
+    pending_reviews: int
+    total_approved: int
+    total_rejected: int
+    total_reassigned: int
+    total_reviews: int
+
+
+class ProposalSummary(BaseModel):
+    proposal_id: str
+    violation_id: str
+    resource_id: str
+    resource_name: str
+    resource_type: str
+    policy_id: str
+    policy_name: str
+    severity: Literal["critical", "high", "medium", "low"]
+    domain: str
+    agent_id: str
+    agent_version: str
+    status: str
+    confidence: float
+    proposed_sql: str
+    created_at: str
+
+
+class ReviewRecord(BaseModel):
+    review_id: str
+    proposal_id: str
+    reviewer: str
+    decision: str
+    reasoning: str
+    reassigned_to: str | None
+    reviewed_at: str
+
+
+class ProposalDetail(ProposalSummary):
+    context_json: str
+    citations: str
+    pre_state: str
+    review_history: list[ReviewRecord]
+
+
+class ProposalFilters(BaseModel):
+    status: str = "pending_review"
+    limit: int = 200
+    offset: int = 0
+
+
+class ReviewAction(BaseModel):
+    decision: Literal["approved", "rejected", "reassigned"]
+    reasoning: str = ""
+    reassigned_to: str | None = None

@@ -1047,7 +1047,7 @@ class WatchdogProvider:
                 p.created_at,
                 p.context_json,
                 p.citations,
-                COALESCE(p.context_json, '') AS pre_state
+                '{}' AS pre_state
             FROM {self._tbl('remediation_proposals')} p
             JOIN {self._tbl('violations')} v
                 ON p.violation_id = v.violation_id

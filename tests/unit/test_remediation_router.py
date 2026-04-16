@@ -3,7 +3,6 @@
 
 Run with: pytest tests/unit/test_remediation_router.py -v
 """
-import uuid
 from unittest.mock import MagicMock
 
 import pytest

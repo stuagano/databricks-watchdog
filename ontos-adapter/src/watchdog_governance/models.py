@@ -353,9 +353,12 @@ class ProposalDetail(ProposalSummary):
 
 
 class ProposalFilters(BaseModel):
-    status: str = "pending_review"
-    limit: int = 200
-    offset: int = 0
+    status: Literal[
+        "pending_review", "approved", "applied",
+        "verified", "rejected", ""
+    ] = "pending_review"
+    limit: int = Field(default=200, ge=1, le=1000)
+    offset: int = Field(default=0, ge=0)
 
 
 class ReviewAction(BaseModel):

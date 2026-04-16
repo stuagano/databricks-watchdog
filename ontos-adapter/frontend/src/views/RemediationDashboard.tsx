@@ -127,7 +127,7 @@ export default function RemediationDashboard() {
       {funnel && (
         <div className="mb-8">
           <h3 className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wide">
-            Remediation Funnel
+            {t('watchdog:remediation_review')}
           </h3>
           <div className="space-y-3">
             {FUNNEL_STAGES.map(({ key, color }) => {

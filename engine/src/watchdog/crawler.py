@@ -228,7 +228,13 @@ class ResourceCrawler:
         try:
             rows = fn()
             resource_type = fn.__name__.replace("_crawl_", "")
-            return CrawlResult(resource_type=resource_type, count=len(rows)), rows
+            # Count only the rows whose resource_type matches the crawler's primary
+            # resource type. Crawlers like _crawl_groups() emit multiple resource
+            # types (e.g. "group" + "group_member"), so using len(rows) would
+            # inflate the reported count for the primary type.
+            primary_count = sum(1 for r in rows if r[2] == resource_type)
+            count = primary_count if primary_count > 0 else len(rows)
+            return CrawlResult(resource_type=resource_type, count=count), rows
         except Exception as e:
             resource_type = fn.__name__.replace("_crawl_", "")
             return CrawlResult(resource_type=resource_type, count=0, errors=[str(e)]), []

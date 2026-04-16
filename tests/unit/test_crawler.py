@@ -425,6 +425,8 @@ class TestCrawlGroupMembers:
         assert "group_name" in meta
         assert "member_value" in meta
         assert "member_type" in meta
+        assert meta["member_value"] != ""
+        assert meta["member_type"] in ("user", "service_principal", "group")
 
     def test_member_type_inferred_from_ref(self, crawler_with_group):
         """Member type is inferred from the $ref field (Users -> user)."""
@@ -486,3 +488,26 @@ class TestCrawlGroupMembers:
         member_rows = [r for r in all_rows if r[2] == "group_member"]
         assert len(member_rows) == 1
         assert member_rows[0][8]["member_type"] == "service_principal"
+
+    def test_group_member_type(self):
+        """A member with a Groups ref gets member_type='group'."""
+        c = _make_crawler()
+        nested_member = SimpleNamespace(
+            value="sub-group",
+            display="Sub Group",
+            ref="https://host/api/2.0/scim/v2/Groups/grp-999",
+        )
+        group = SimpleNamespace(
+            id="grp-parent",
+            display_name="parent-group",
+            meta=SimpleNamespace(resource_type="Group"),
+            members=[nested_member],
+            entitlements=None,
+        )
+        c.w.groups.list.return_value = [group]
+        all_rows = c._crawl_groups()
+        member_rows = [r for r in all_rows if r[2] == "group_member"]
+        assert len(member_rows) == 1
+        meta = member_rows[0][8]
+        assert meta["member_type"] == "group"
+        assert meta["member_value"] == "sub-group"

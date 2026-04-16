@@ -30,6 +30,7 @@ from watchdog_governance.models import (
     PolicyBreakdown,
     PolicyFilters,
     PolicyVersion,
+    ProposalFilters,
     Resource,
     ResourceDetail,
     ResourceFilters,
@@ -965,3 +966,176 @@ class WatchdogProvider:
         return ValidationResult(
             valid=len(errors) == 0, errors=errors, warnings=warnings
         )
+
+    # ── Remediation ──────────────────────────────────────────────────────
+
+    def remediation_funnel(self) -> dict:
+        rows = self._execute(
+            f"SELECT * FROM {self._tbl('v_remediation_funnel')}"
+        )
+        if not rows:
+            return {
+                "total_violations": 0, "with_remediation": 0,
+                "pending_review": 0, "approved": 0, "applied": 0,
+                "verified": 0, "verification_failed": 0, "rejected": 0,
+            }
+        return rows[0]
+
+    def agent_effectiveness(self) -> list[dict]:
+        return self._execute(
+            f"SELECT * FROM {self._tbl('v_agent_effectiveness')}"
+        )
+
+    def reviewer_load(self) -> list[dict]:
+        return self._execute(
+            f"SELECT * FROM {self._tbl('v_reviewer_load')}"
+        )
+
+    def list_proposals(self, filters) -> list[dict]:
+        status_clause = f"AND p.status = '{self._esc(filters.status)}'" if filters.status else ""
+        return self._execute(f"""
+            SELECT
+                p.proposal_id,
+                p.violation_id,
+                v.resource_id,
+                COALESCE(v.resource_name, v.resource_id) AS resource_name,
+                v.resource_type,
+                v.policy_id,
+                pol.policy_name,
+                pol.severity,
+                pol.domain,
+                p.agent_id,
+                p.agent_version,
+                p.status,
+                p.confidence,
+                p.proposed_sql,
+                p.created_at
+            FROM {self._tbl('remediation_proposals')} p
+            JOIN {self._tbl('violations')} v
+                ON p.violation_id = v.violation_id
+            JOIN {self._tbl('policies')} pol
+                ON v.policy_id = pol.policy_id
+            WHERE 1=1 {status_clause}
+            ORDER BY
+                CASE pol.severity
+                    WHEN 'critical' THEN 1
+                    WHEN 'high' THEN 2
+                    WHEN 'medium' THEN 3
+                    WHEN 'low' THEN 4
+                END ASC,
+                p.confidence ASC
+            LIMIT {filters.limit} OFFSET {filters.offset}
+        """)
+
+    def get_proposal(self, proposal_id: str) -> dict:
+        rows = self._execute(f"""
+            SELECT
+                p.proposal_id,
+                p.violation_id,
+                v.resource_id,
+                COALESCE(v.resource_name, v.resource_id) AS resource_name,
+                v.resource_type,
+                v.policy_id,
+                pol.policy_name,
+                pol.severity,
+                pol.domain,
+                p.agent_id,
+                p.agent_version,
+                p.status,
+                p.confidence,
+                p.proposed_sql,
+                p.created_at,
+                p.context_json,
+                p.citations,
+                COALESCE(p.context_json, '') AS pre_state
+            FROM {self._tbl('remediation_proposals')} p
+            JOIN {self._tbl('violations')} v
+                ON p.violation_id = v.violation_id
+            JOIN {self._tbl('policies')} pol
+                ON v.policy_id = pol.policy_id
+            WHERE p.proposal_id = '{self._esc(proposal_id)}'
+        """)
+        if not rows:
+            raise LookupError(f"Proposal {proposal_id} not found")
+
+        proposal = rows[0]
+
+        # Fetch review history
+        reviews = self._execute(f"""
+            SELECT
+                review_id, proposal_id, reviewer, decision,
+                reasoning, reassigned_to, reviewed_at
+            FROM {self._tbl('remediation_reviews')}
+            WHERE proposal_id = '{self._esc(proposal_id)}'
+            ORDER BY reviewed_at ASC
+        """)
+        proposal["review_history"] = reviews
+        return proposal
+
+    def submit_review(
+        self,
+        proposal_id: str,
+        decision: str,
+        reasoning: str,
+        *,
+        reassigned_to: str | None = None,
+        reviewer: str = "unknown",
+    ) -> dict:
+        from watchdog.remediation.review import (
+            approve_proposal,
+            reject_proposal,
+            reassign_proposal,
+        )
+
+        # Fetch current proposal
+        rows = self._execute(f"""
+            SELECT * FROM {self._tbl('remediation_proposals')}
+            WHERE proposal_id = '{self._esc(proposal_id)}'
+        """)
+        if not rows:
+            raise LookupError(f"Proposal {proposal_id} not found")
+
+        proposal = rows[0]
+
+        if decision == "approved":
+            updated, review = approve_proposal(proposal, reviewer, reasoning)
+        elif decision == "rejected":
+            updated, review = reject_proposal(proposal, reviewer, reasoning)
+        elif decision == "reassigned":
+            if not reassigned_to:
+                raise ValueError("reassigned_to is required for reassign")
+            updated, review = reassign_proposal(
+                proposal, reviewer, reassigned_to, reasoning
+            )
+        else:
+            raise ValueError(f"Invalid decision: {decision}")
+
+        # Write updated proposal status
+        self._execute_write(f"""
+            UPDATE {self._tbl('remediation_proposals')}
+            SET status = '{self._esc(updated["status"])}'
+            WHERE proposal_id = '{self._esc(proposal_id)}'
+        """)
+
+        # Write review record
+        self._execute_write(f"""
+            INSERT INTO {self._tbl('remediation_reviews')}
+            (review_id, proposal_id, reviewer, decision, reasoning,
+             reassigned_to, reviewed_at)
+            VALUES (
+                '{self._esc(review["review_id"])}',
+                '{self._esc(review["proposal_id"])}',
+                '{self._esc(review["reviewer"])}',
+                '{self._esc(review["decision"])}',
+                '{self._esc(review["reasoning"])}',
+                {f"'{self._esc(review['reassigned_to'])}'" if review["reassigned_to"] else "NULL"},
+                '{review["reviewed_at"].isoformat()}'
+            )
+        """)
+
+        return {
+            "review_id": review["review_id"],
+            "proposal_id": proposal_id,
+            "decision": decision,
+            "status": updated["status"],
+        }

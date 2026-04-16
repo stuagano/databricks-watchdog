@@ -64,5 +64,59 @@
   "edit_policy": "Edit Policy",
   "yaml_locked": "YAML-managed (read-only)",
   "yaml_locked_description": "This policy is managed in git. Edit the YAML file and redeploy to change it.",
-  "invalid_json": "rule_json is not valid JSON"
+  "invalid_json": "rule_json is not valid JSON",
+
+  "remediation_review": "Remediation Review",
+  "remediation_inbox": "Review Inbox",
+  "remediation_dashboard": "Remediation Dashboard",
+
+  "funnel_violations": "Open Violations",
+  "funnel_proposed": "Proposals Generated",
+  "funnel_pending": "Pending Review",
+  "funnel_approved": "Approved",
+  "funnel_applied": "Applied",
+  "funnel_verified": "Verified",
+  "funnel_failed": "Verification Failed",
+  "funnel_rejected": "Rejected",
+
+  "agent_effectiveness": "Agent Effectiveness",
+  "total_proposals": "Total Proposals",
+  "precision": "Precision",
+  "avg_confidence": "Avg Confidence",
+
+  "reviewer_load": "Reviewer Load",
+  "pending_reviews": "Pending",
+  "total_approved": "Approved",
+  "total_rejected": "Rejected",
+  "review_now": "Review Now",
+
+  "proposal_detail": "Proposal Detail",
+  "current_state": "Current State",
+  "proposed_state": "Proposed State",
+  "proposed_sql": "Proposed SQL",
+  "agent_context": "Agent Reasoning",
+  "review_history": "Review History",
+  "confidence": "Confidence",
+
+  "action_approve": "Approve",
+  "action_reject": "Reject",
+  "action_reassign": "Reassign",
+  "reasoning_placeholder": "Provide reasoning for this decision",
+  "reassign_to_placeholder": "Enter reviewer email",
+  "confirm_approve": "Approve this proposal?",
+  "confirm_approve_desc": "The proposed SQL will be queued for application.",
+  "confirm_reject": "Reject this proposal?",
+  "confirm_reject_desc": "The proposal will be archived. Provide reasoning.",
+  "confirm_reassign": "Reassign this proposal?",
+  "confirm_reassign_desc": "The proposal will be sent to a different reviewer.",
+  "review_submitted": "Review submitted successfully.",
+  "review_failed": "Failed to submit review.",
+
+  "no_proposals": "No proposals to review.",
+  "select_proposal": "Select a proposal from the list to review.",
+
+  "filter_pending": "Pending",
+  "filter_approved": "Approved",
+  "filter_applied": "Applied",
+  "filter_all": "All"
 }

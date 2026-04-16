@@ -30,4 +30,13 @@ export const watchdogFeatures = [
     group: 'govern' as const,
     maturity: 'beta' as const,
   },
+  {
+    id: 'watchdog-remediation',
+    name: 'Remediation Review',
+    path: '/governance/remediation',
+    description: 'Review and approve AI-generated remediation proposals',
+    icon: 'Wrench',
+    group: 'govern' as const,
+    maturity: 'beta' as const,
+  },
 ]

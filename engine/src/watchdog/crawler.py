@@ -291,6 +291,29 @@ class ResourceCrawler:
                     "entitlements": ",".join(entitlements),
                 },
             ))
+
+            for member in (group.members or []):
+                member_value = member.value or ""
+                ref = getattr(member, "ref", "") or ""
+                if "ServicePrincipals" in ref:
+                    member_type = "service_principal"
+                elif "Groups" in ref:
+                    member_type = "group"
+                elif "Users" in ref:
+                    member_type = "user"
+                else:
+                    member_type = "user"  # default
+
+                rows.append(self._make_row(
+                    resource_type="group_member",
+                    resource_id=f"group_member:{group.display_name}:{member_value}",
+                    resource_name=group.display_name,
+                    metadata={
+                        "group_name": group.display_name,
+                        "member_value": member_value,
+                        "member_type": member_type,
+                    },
+                ))
         return rows
 
     def _crawl_service_principals(self) -> list:

@@ -383,3 +383,106 @@ class TestCrawlColumnMasks:
     def test_empty_catalogs_returns_no_rows(self, crawler_no_catalogs):
         rows = crawler_no_catalogs._crawl_column_masks()
         assert rows == []
+
+
+# ── Group members ─────────────────────────────────────────────────────────────
+
+
+def _make_mock_group_with_member():
+    """Return a mock group object with one user member."""
+    member = SimpleNamespace(
+        value="alice@example.com",
+        display="Alice",
+        ref="https://host/api/2.0/scim/v2/Users/abc-123",
+    )
+    group = SimpleNamespace(
+        id="grp-001",
+        display_name="admins",
+        meta=SimpleNamespace(resource_type="Group"),
+        members=[member],
+        entitlements=None,
+    )
+    return group
+
+
+@pytest.fixture
+def crawler_with_group():
+    """Crawler with a mocked group that has one member."""
+    c = _make_crawler()
+    c.w.groups.list.return_value = [_make_mock_group_with_member()]
+    return c
+
+
+class TestCrawlGroupMembers:
+    def test_emits_one_row_per_member(self, crawler_with_group):
+        """Each group member produces a group_member resource row."""
+        all_rows = crawler_with_group._crawl_groups()
+        member_rows = [r for r in all_rows if r[2] == "group_member"]
+        assert len(member_rows) >= 1
+        row = member_rows[0]
+        assert row[2] == "group_member"
+        meta = row[8]  # metadata dict
+        assert "group_name" in meta
+        assert "member_value" in meta
+        assert "member_type" in meta
+
+    def test_member_type_inferred_from_ref(self, crawler_with_group):
+        """Member type is inferred from the $ref field (Users -> user)."""
+        all_rows = crawler_with_group._crawl_groups()
+        member_rows = [r for r in all_rows if r[2] == "group_member"]
+        assert len(member_rows) == 1
+        meta = member_rows[0][8]
+        assert meta["member_type"] == "user"
+        assert meta["member_value"] == "alice@example.com"
+        assert meta["group_name"] == "admins"
+
+    def test_member_resource_id_format(self, crawler_with_group):
+        """resource_id for group_member includes group name and member value."""
+        all_rows = crawler_with_group._crawl_groups()
+        member_rows = [r for r in all_rows if r[2] == "group_member"]
+        row = member_rows[0]
+        assert row[3] == "group_member:admins:alice@example.com"
+
+    def test_group_resource_rows_still_emitted(self, crawler_with_group):
+        """Original group rows are still emitted alongside group_member rows."""
+        all_rows = crawler_with_group._crawl_groups()
+        group_rows = [r for r in all_rows if r[2] == "group"]
+        assert len(group_rows) >= 1
+
+    def test_no_members_emits_no_member_rows(self):
+        """A group with no members emits only the group row."""
+        c = _make_crawler()
+        group = SimpleNamespace(
+            id="grp-002",
+            display_name="empty-group",
+            meta=SimpleNamespace(resource_type="Group"),
+            members=None,
+            entitlements=None,
+        )
+        c.w.groups.list.return_value = [group]
+        all_rows = c._crawl_groups()
+        member_rows = [r for r in all_rows if r[2] == "group_member"]
+        assert member_rows == []
+        group_rows = [r for r in all_rows if r[2] == "group"]
+        assert len(group_rows) == 1
+
+    def test_service_principal_member_type(self):
+        """Members with ServicePrincipals in ref get member_type=service_principal."""
+        c = _make_crawler()
+        sp_member = SimpleNamespace(
+            value="sp-app-id-123",
+            display="my-sp",
+            ref="https://host/api/2.0/scim/v2/ServicePrincipals/sp-app-id-123",
+        )
+        group = SimpleNamespace(
+            id="grp-003",
+            display_name="sp-group",
+            meta=SimpleNamespace(resource_type="Group"),
+            members=[sp_member],
+            entitlements=None,
+        )
+        c.w.groups.list.return_value = [group]
+        all_rows = c._crawl_groups()
+        member_rows = [r for r in all_rows if r[2] == "group_member"]
+        assert len(member_rows) == 1
+        assert member_rows[0][8]["member_type"] == "service_principal"

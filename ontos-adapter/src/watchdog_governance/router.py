@@ -26,6 +26,7 @@ from watchdog_governance.routers.grants import router as grants_router
 from watchdog_governance.routers.ontology import router as ontology_router
 from watchdog_governance.routers.policies import router as policies_router
 from watchdog_governance.routers.violations import router as violations_router
+from watchdog_governance.routers.remediation import router as remediation_router
 
 root_router = APIRouter()
 root_router.include_router(violations_router)
@@ -33,6 +34,7 @@ root_router.include_router(policies_router)
 root_router.include_router(exceptions_router)
 root_router.include_router(grants_router)
 root_router.include_router(ontology_router)
+root_router.include_router(remediation_router)
 
 
 @root_router.get("/health")

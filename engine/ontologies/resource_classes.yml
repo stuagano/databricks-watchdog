@@ -28,6 +28,18 @@ base_classes:
     description: "Any grant (permission assignment) in Unity Catalog"
     matches_resource_types: [grant]
 
+  RowFilterAsset:
+    description: "A Unity Catalog row filter applied to a table"
+    matches_resource_types: [row_filter]
+
+  ColumnMaskAsset:
+    description: "A Unity Catalog column mask applied to a table column"
+    matches_resource_types: [column_mask]
+
+  GroupMemberAsset:
+    description: "A member of a workspace or account-level group"
+    matches_resource_types: [group_member]
+
   AgentAsset:
     description: "AI agent or agent execution"
     matches_resource_types: [agent, agent_execution]

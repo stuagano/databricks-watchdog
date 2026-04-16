@@ -484,16 +484,29 @@ class RuleEngine:
         before evaluation. If no expected state is present, the check passes
         vacuously (no declared expectation = no drift).
 
-        Currently supports: grants (rule.check == "grants").
+        Supported check types: grants, row_filters, column_masks, group_membership.
         """
         check_type = rule.get("check", "")
-        if check_type != "grants":
+        if check_type == "grants":
+            return self._eval_drift_grants(metadata)
+        elif check_type == "row_filters":
+            return self._eval_drift_row_filters(metadata)
+        elif check_type == "column_masks":
+            return self._eval_drift_column_masks(metadata)
+        elif check_type == "group_membership":
+            return self._eval_drift_group_membership(metadata)
+        else:
             return RuleResult(
                 passed=False,
-                detail=f"Unsupported drift check type: {check_type}. Supported: grants",
+                detail=(
+                    f"Unsupported drift check type: {check_type}. "
+                    "Supported: grants, row_filters, column_masks, group_membership"
+                ),
                 rule_type="drift_check",
             )
 
+    def _eval_drift_grants(self, metadata: dict[str, str]) -> RuleResult:
+        """Check if actual grant is in declared expected state."""
         expected_json = metadata.get("expected_grants", "")
         if not expected_json:
             return RuleResult(passed=True, rule_type="drift_check")
@@ -514,11 +527,7 @@ class RuleEngine:
         actual_privilege = metadata.get("privilege", "")
         securable = metadata.get("securable_full_name", "")
 
-        matching = [
-            e for e in expected_entries
-            if e.get("principal", "") == actual_grantee
-        ]
-
+        matching = [e for e in expected_entries if e.get("principal", "") == actual_grantee]
         if not matching:
             return RuleResult(passed=True, rule_type="drift_check")
 
@@ -532,6 +541,99 @@ class RuleEngine:
             detail=(
                 f"Drift detected: grant '{actual_privilege}' on {securable} "
                 f"for {actual_grantee} is not in expected state"
+            ),
+            rule_type="drift_check",
+        )
+
+    def _eval_drift_row_filters(self, metadata: dict[str, str]) -> RuleResult:
+        """Check if actual row filter function matches declared expected state."""
+        expected_json = metadata.get("expected_row_filters", "")
+        if not expected_json:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        try:
+            expected = json.loads(expected_json)
+        except (json.JSONDecodeError, TypeError) as e:
+            return RuleResult(
+                passed=False,
+                detail=f"Failed to parse expected_row_filters JSON: {e}",
+                rule_type="drift_check",
+            )
+
+        table = metadata.get("table_full_name", "")
+        actual_fn = metadata.get("filter_function", "")
+        expected_fn = expected.get("function", "")
+
+        if actual_fn == expected_fn:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        return RuleResult(
+            passed=False,
+            detail=(
+                f"Drift detected: row filter '{actual_fn}' on {table} "
+                f"does not match expected '{expected_fn}'"
+            ),
+            rule_type="drift_check",
+        )
+
+    def _eval_drift_column_masks(self, metadata: dict[str, str]) -> RuleResult:
+        """Check if actual column mask function matches declared expected state."""
+        expected_json = metadata.get("expected_column_masks", "")
+        if not expected_json:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        try:
+            expected = json.loads(expected_json)
+        except (json.JSONDecodeError, TypeError) as e:
+            return RuleResult(
+                passed=False,
+                detail=f"Failed to parse expected_column_masks JSON: {e}",
+                rule_type="drift_check",
+            )
+
+        table = metadata.get("table_full_name", "")
+        column = metadata.get("column_name", "")
+        actual_fn = metadata.get("mask_function", "")
+        expected_fn = expected.get("function", "")
+
+        if actual_fn == expected_fn:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        return RuleResult(
+            passed=False,
+            detail=(
+                f"Drift detected: column mask '{actual_fn}' on {table}.{column} "
+                f"does not match expected '{expected_fn}'"
+            ),
+            rule_type="drift_check",
+        )
+
+    def _eval_drift_group_membership(self, metadata: dict[str, str]) -> RuleResult:
+        """Check if actual group member is in declared expected members list."""
+        expected_json = metadata.get("expected_group_members", "")
+        if not expected_json:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        try:
+            expected_members = json.loads(expected_json)
+        except (json.JSONDecodeError, TypeError) as e:
+            return RuleResult(
+                passed=False,
+                detail=f"Failed to parse expected_group_members JSON: {e}",
+                rule_type="drift_check",
+            )
+
+        group = metadata.get("group_name", "")
+        member = metadata.get("member_value", "")
+
+        if member in expected_members:
+            return RuleResult(passed=True, rule_type="drift_check")
+
+        return RuleResult(
+            passed=False,
+            detail=(
+                f"Drift detected: member '{member}' in group '{group}' "
+                f"is not in expected state"
             ),
             rule_type="drift_check",
         )

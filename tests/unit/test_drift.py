@@ -138,11 +138,11 @@ class TestDriftCheckRuleType:
         assert result.rule_type == "drift_check"
 
     def test_unknown_check_type_fails(self, bare):
-        rule = {"type": "drift_check", "check": "row_filters"}
+        rule = {"type": "drift_check", "check": "unsupported_type"}
         metadata = {"expected_grants": "[]"}
         result = bare.evaluate(rule, {}, metadata)
         assert not result.passed
-        assert "row_filters" in result.detail
+        assert "unsupported_type" in result.detail
 
 
 # ── Expected state loader ────────────────────────────────────────────────────
@@ -214,3 +214,188 @@ class TestBuildExpectedGrantsLookup:
         ]
         lookup = build_expected_grants_lookup(grants)
         assert len(lookup["analysts"]) == 2
+
+
+# ── row_filters drift_check ───────────────────────────────────────────────────
+
+ROW_FILTER_RULE = {"type": "drift_check", "check": "row_filters"}
+
+
+class TestDriftCheckRowFilters:
+    def test_pass_no_expected_state(self, bare):
+        """No expected_row_filters in metadata — vacuously true."""
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "filter_function": "gold.sec.my_filter",
+        }
+        result = bare.evaluate(ROW_FILTER_RULE, {}, metadata)
+        assert result.passed
+
+    def test_pass_function_matches_expected(self, bare):
+        """Actual filter function matches expected — pass."""
+        import json
+        expected = json.dumps({"table": "gold.finance.gl_balances", "function": "gold.sec.my_filter"})
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "filter_function": "gold.sec.my_filter",
+            "expected_row_filters": expected,
+        }
+        result = bare.evaluate(ROW_FILTER_RULE, {}, metadata)
+        assert result.passed
+
+    def test_fail_function_mismatch(self, bare):
+        """Actual filter function differs from expected — fail."""
+        import json
+        expected = json.dumps({"table": "gold.finance.gl_balances", "function": "gold.sec.expected_filter"})
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "filter_function": "gold.sec.unauthorized_filter",
+            "expected_row_filters": expected,
+        }
+        result = bare.evaluate(ROW_FILTER_RULE, {}, metadata)
+        assert not result.passed
+        assert "unauthorized_filter" in result.detail
+        assert "gold.finance.gl_balances" in result.detail
+
+    def test_fail_malformed_json(self, bare):
+        """Malformed expected_row_filters JSON — fail gracefully."""
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "filter_function": "gold.sec.my_filter",
+            "expected_row_filters": "not-json{{{",
+        }
+        result = bare.evaluate(ROW_FILTER_RULE, {}, metadata)
+        assert not result.passed
+        assert "parse" in result.detail.lower() or "json" in result.detail.lower()
+
+
+# ── column_masks drift_check ──────────────────────────────────────────────────
+
+COLUMN_MASK_RULE = {"type": "drift_check", "check": "column_masks"}
+
+
+class TestDriftCheckColumnMasks:
+    def test_pass_no_expected_state(self, bare):
+        """No expected_column_masks in metadata — vacuously true."""
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "column_name": "cost_center",
+            "mask_function": "gold.sec.my_mask",
+        }
+        result = bare.evaluate(COLUMN_MASK_RULE, {}, metadata)
+        assert result.passed
+
+    def test_pass_function_matches_expected(self, bare):
+        """Actual mask function matches expected — pass."""
+        import json
+        expected = json.dumps({
+            "table": "gold.finance.gl_balances",
+            "column": "cost_center",
+            "function": "gold.sec.my_mask",
+        })
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "column_name": "cost_center",
+            "mask_function": "gold.sec.my_mask",
+            "expected_column_masks": expected,
+        }
+        result = bare.evaluate(COLUMN_MASK_RULE, {}, metadata)
+        assert result.passed
+
+    def test_fail_function_mismatch(self, bare):
+        """Actual mask function differs from expected — fail."""
+        import json
+        expected = json.dumps({
+            "table": "gold.finance.gl_balances",
+            "column": "cost_center",
+            "function": "gold.sec.expected_mask",
+        })
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "column_name": "cost_center",
+            "mask_function": "gold.sec.unauthorized_mask",
+            "expected_column_masks": expected,
+        }
+        result = bare.evaluate(COLUMN_MASK_RULE, {}, metadata)
+        assert not result.passed
+        assert "unauthorized_mask" in result.detail
+        assert "cost_center" in result.detail
+
+    def test_fail_malformed_json(self, bare):
+        """Malformed expected_column_masks JSON — fail gracefully."""
+        metadata = {
+            "table_full_name": "gold.finance.gl_balances",
+            "column_name": "cost_center",
+            "mask_function": "gold.sec.my_mask",
+            "expected_column_masks": "not-json{{{",
+        }
+        result = bare.evaluate(COLUMN_MASK_RULE, {}, metadata)
+        assert not result.passed
+        assert "parse" in result.detail.lower() or "json" in result.detail.lower()
+
+
+# ── group_membership drift_check ──────────────────────────────────────────────
+
+GROUP_MEMBER_RULE = {"type": "drift_check", "check": "group_membership"}
+
+
+class TestDriftCheckGroupMembership:
+    def test_pass_no_expected_state(self, bare):
+        """No expected_group_members in metadata — vacuously true."""
+        metadata = {
+            "group_name": "finance-analysts",
+            "member_value": "user@company.com",
+            "member_type": "user",
+        }
+        result = bare.evaluate(GROUP_MEMBER_RULE, {}, metadata)
+        assert result.passed
+
+    def test_pass_member_in_expected(self, bare):
+        """Actual member is in the expected members list — pass."""
+        import json
+        metadata = {
+            "group_name": "finance-analysts",
+            "member_value": "user@company.com",
+            "member_type": "user",
+            "expected_group_members": json.dumps(["user@company.com", "other@company.com"]),
+        }
+        result = bare.evaluate(GROUP_MEMBER_RULE, {}, metadata)
+        assert result.passed
+
+    def test_fail_member_not_in_expected(self, bare):
+        """Actual member not in expected list — fail with detail."""
+        import json
+        metadata = {
+            "group_name": "finance-analysts",
+            "member_value": "unauthorized@company.com",
+            "member_type": "user",
+            "expected_group_members": json.dumps(["alice@company.com", "bob@company.com"]),
+        }
+        result = bare.evaluate(GROUP_MEMBER_RULE, {}, metadata)
+        assert not result.passed
+        assert "unauthorized@company.com" in result.detail
+        assert "finance-analysts" in result.detail
+
+    def test_fail_empty_expected_list(self, bare):
+        """Empty expected_group_members list — any actual member is unauthorized."""
+        import json
+        metadata = {
+            "group_name": "finance-analysts",
+            "member_value": "user@company.com",
+            "member_type": "user",
+            "expected_group_members": json.dumps([]),
+        }
+        result = bare.evaluate(GROUP_MEMBER_RULE, {}, metadata)
+        assert not result.passed
+
+    def test_fail_malformed_json(self, bare):
+        """Malformed expected_group_members JSON — fail gracefully."""
+        metadata = {
+            "group_name": "finance-analysts",
+            "member_value": "user@company.com",
+            "member_type": "user",
+            "expected_group_members": "not-json{{{",
+        }
+        result = bare.evaluate(GROUP_MEMBER_RULE, {}, metadata)
+        assert not result.passed
+        assert "parse" in result.detail.lower() or "json" in result.detail.lower()

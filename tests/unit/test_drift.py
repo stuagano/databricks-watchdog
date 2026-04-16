@@ -2,7 +2,9 @@
 
 Run with: pytest tests/unit/test_drift.py -v
 """
+import io
 import json
+import tarfile as _tarfile_mod
 from pathlib import Path
 
 import pytest
@@ -221,6 +223,17 @@ class TestBuildExpectedGrantsLookup:
         lookup = build_expected_grants_lookup(grants)
         assert len(lookup["analysts"]) == 2
 
+    def test_skips_entry_missing_principal_key(self):
+        grants = [
+            {"catalog": "gold", "schema": "finance", "table": None,
+             "principal": "analysts", "privileges": ["SELECT"]},
+            {"catalog": "gold", "schema": "finance", "table": None,
+             "privileges": ["SELECT"]},  # missing "principal"
+        ]
+        lookup = build_expected_grants_lookup(grants)
+        assert len(lookup) == 1
+        assert "analysts" in lookup
+
 
 # ── row_filters drift_check ───────────────────────────────────────────────────
 
@@ -401,9 +414,6 @@ class TestDriftCheckGroupMembership:
 
 
 # ── OPA bundle loader ─────────────────────────────────────────────────────────
-
-import io
-import tarfile as _tarfile_mod
 
 
 def _make_bundle(data: dict, inner_path: str = "data.json") -> bytes:

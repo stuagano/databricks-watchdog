@@ -55,6 +55,11 @@ _CLASS_TYPE_FALLBACK: dict[str, set[str]] = {
     "InteractiveCluster": {"cluster"},
     "ProductionCluster": {"cluster"},
     "ComputeResource": {"job", "cluster", "warehouse", "pipeline"},
+    # Fine-grained access control asset types
+    "RowFilterAsset": {"row_filter"},
+    "ColumnMaskAsset": {"column_mask"},
+    "GroupMemberAsset": {"group_member"},
+    "GrantAsset": {"grant"},
 }
 
 

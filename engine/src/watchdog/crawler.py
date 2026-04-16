@@ -321,7 +321,7 @@ class ResourceCrawler:
 
                 rows.append(self._make_row(
                     resource_type="group_member",
-                    resource_id=f"group_member:{group.display_name}:{member_value}",
+                    resource_id=f"group_member:{group.id}:{member_value}",
                     resource_name=group.display_name,
                     metadata={
                         "group_name": group.display_name,

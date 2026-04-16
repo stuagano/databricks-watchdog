@@ -443,7 +443,7 @@ class TestCrawlGroupMembers:
         all_rows = crawler_with_group._crawl_groups()
         member_rows = [r for r in all_rows if r[2] == "group_member"]
         row = member_rows[0]
-        assert row[3] == "group_member:admins:alice@example.com"
+        assert row[3] == "group_member:grp-001:alice@example.com"
 
     def test_group_resource_rows_still_emitted(self, crawler_with_group):
         """Original group rows are still emitted alongside group_member rows."""

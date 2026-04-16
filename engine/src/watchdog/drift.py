@@ -91,7 +91,11 @@ def build_expected_grants_lookup(grants: list[dict]) -> dict[str, list[dict]]:
 def build_expected_row_filters_lookup(
     row_filters: list[dict],
 ) -> dict[str, dict]:
-    """Keyed by table_full_name → {table, function}."""
+    """Keyed by table_full_name → {table, function}.
+
+    Note: the expected-state JSON uses "table" (not "table_full_name") as
+    the field name for the full table identifier.
+    """
     lookup = {}
     for entry in row_filters:
         key = entry.get("table", "")
@@ -103,7 +107,11 @@ def build_expected_row_filters_lookup(
 def build_expected_column_masks_lookup(
     column_masks: list[dict],
 ) -> dict[str, dict]:
-    """Keyed by '{table}.{column}' → {table, column, function}."""
+    """Keyed by '{table}.{column}' → {table, column, function}.
+
+    Note: the expected-state JSON uses "table" (not "table_full_name") as
+    the field name for the full table identifier.
+    """
     lookup = {}
     for entry in column_masks:
         table = entry.get("table", "")

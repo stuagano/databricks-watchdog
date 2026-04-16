@@ -51,6 +51,7 @@ sys.modules.setdefault("databricks.sdk", _databricks_sdk)
 
 from watchdog.remediation.protocol import RemediationAgent
 from watchdog.remediation.agents.noop import NoOpAgent
+from watchdog.remediation.dispatcher import dispatch_remediations
 
 
 # ── Protocol conformance ─────────────────────────────────────────────────────
@@ -135,3 +136,82 @@ class TestRemediationTables:
 
         sql = sql_calls[0]
         assert "remediation_status" in sql
+
+
+# ── Dispatcher ───────────────────────────────────────────────────────────────
+
+class TestDispatcher:
+    def _make_violation(self, violation_id="v-001", policy_id="POL-TEST-001"):
+        return {
+            "violation_id": violation_id,
+            "policy_id": policy_id,
+            "resource_id": "gold.finance.gl_balances",
+            "resource_name": "gold.finance.gl_balances",
+            "severity": "high",
+            "owner": "stuart.gano@company.com",
+            "status": "open",
+            "remediation_status": None,
+        }
+
+    def test_dispatches_to_matching_agent(self):
+        agent = NoOpAgent()
+        violations = [self._make_violation()]
+        result = dispatch_remediations(violations, [agent])
+        assert result["dispatched"] == 1
+        assert result["skipped"] == 0
+        assert len(result["proposals"]) == 1
+
+    def test_proposal_has_correct_fields(self):
+        agent = NoOpAgent()
+        violations = [self._make_violation()]
+        result = dispatch_remediations(violations, [agent])
+        proposal = result["proposals"][0]
+        assert proposal["violation_id"] == "v-001"
+        assert proposal["agent_id"] == "noop-agent"
+        assert proposal["agent_version"] == "1.0.0"
+        assert proposal["status"] == "pending_review"
+        assert "proposed_sql" in proposal
+        assert "confidence" in proposal
+        assert "created_at" in proposal
+
+    def test_skips_when_no_matching_agent(self):
+        agent = NoOpAgent()  # handles POL-TEST-001
+        violations = [self._make_violation(policy_id="POL-UNKNOWN-999")]
+        result = dispatch_remediations(violations, [agent])
+        assert result["dispatched"] == 0
+        assert result["skipped"] == 1
+
+    def test_skips_already_proposed_violations(self):
+        agent = NoOpAgent()
+        violations = [self._make_violation()]
+        existing = {("v-001", "noop-agent", "1.0.0")}
+        result = dispatch_remediations(violations, [agent], existing)
+        assert result["dispatched"] == 0
+        assert result["skipped"] == 1
+
+    def test_dispatches_multiple_violations(self):
+        agent = NoOpAgent()
+        violations = [
+            self._make_violation(violation_id="v-001"),
+            self._make_violation(violation_id="v-002"),
+            self._make_violation(violation_id="v-003", policy_id="POL-OTHER"),
+        ]
+        result = dispatch_remediations(violations, [agent])
+        assert result["dispatched"] == 2  # v-001 and v-002
+        assert result["skipped"] == 1    # v-003 (no matching agent)
+
+    def test_handles_agent_error_gracefully(self):
+        class FailingAgent:
+            agent_id = "failing-agent"
+            handles = ["POL-TEST-001"]
+            version = "1.0.0"
+            model = ""
+            def gather_context(self, v):
+                raise RuntimeError("LLM unavailable")
+            def propose_fix(self, c):
+                return {}
+
+        violations = [self._make_violation()]
+        result = dispatch_remediations(violations, [FailingAgent()])
+        assert result["dispatched"] == 0
+        assert result["errors"] == 1

@@ -165,13 +165,15 @@ class ResourceCrawler:
             all_rows.extend(rows)
 
         # Identity resources via SDK
-        for crawler_fn in [
-            self._crawl_groups,
-            self._crawl_service_principals,
-        ]:
-            result, rows = self._safe_crawl(crawler_fn)
-            results.append(result)
-            all_rows.extend(rows)
+        # _crawl_groups emits "group" + "group_member" rows; pass primary_type
+        # so _safe_crawl counts only "group" rows, not the combined total.
+        result, rows = self._safe_crawl(self._crawl_groups, primary_type="group")
+        results.append(result)
+        all_rows.extend(rows)
+
+        result, rows = self._safe_crawl(self._crawl_service_principals)
+        results.append(result)
+        all_rows.extend(rows)
 
         # ── AI Agent resources ────────────────────────────────────────
         result, agent_rows = self._safe_crawl(self._crawl_agents)
@@ -221,18 +223,25 @@ class ResourceCrawler:
 
         return results
 
-    def _safe_crawl(self, fn) -> tuple[CrawlResult, list]:
+    def _safe_crawl(self, fn, primary_type: str | None = None) -> tuple[CrawlResult, list]:
         """Execute a crawler function, catching all exceptions so one bad resource
         type never aborts the full scan. Errors are surfaced in CrawlResult.errors
-        and printed by the entrypoint — the scan continues regardless."""
+        and printed by the entrypoint — the scan continues regardless.
+
+        primary_type: the resource_type string to count as the primary resource.
+        If omitted, it is derived from the function name by stripping "_crawl_".
+        Pass explicitly when the derived name would not match the emitted resource_type
+        (e.g. _crawl_groups emits "group", not "groups").
+        """
         try:
             rows = fn()
             resource_type = fn.__name__.replace("_crawl_", "")
+            pt = primary_type if primary_type is not None else resource_type
             # Count only the rows whose resource_type matches the crawler's primary
             # resource type. Crawlers like _crawl_groups() emit multiple resource
             # types (e.g. "group" + "group_member"), so using len(rows) would
             # inflate the reported count for the primary type.
-            primary_count = sum(1 for r in rows if r[2] == resource_type)
+            primary_count = sum(1 for r in rows if r[2] == pt)
             count = primary_count if primary_count > 0 else len(rows)
             return CrawlResult(resource_type=resource_type, count=count), rows
         except Exception as e:

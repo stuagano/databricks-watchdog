@@ -511,3 +511,49 @@ class TestCrawlGroupMembers:
         meta = member_rows[0][8]
         assert meta["member_type"] == "group"
         assert meta["member_value"] == "sub-group"
+
+
+# ── _safe_crawl primary_type fix ─────────────────────────────────────────────
+
+class TestSafeCrawl:
+    """Verify _safe_crawl correctly counts primary-type rows.
+
+    The bug: stripping "_crawl_" from "_crawl_groups" yields "groups" (plural),
+    but the emitted resource_type is "group" (singular). Without primary_type,
+    primary_count would always be 0 and fall back to len(rows), which includes
+    both "group" and "group_member" rows — inflating the reported count.
+    """
+
+    def test_groups_count_without_primary_type_inflated(self, crawler_with_group):
+        """Without primary_type, count falls back to all rows (group + group_member)."""
+        result, rows = crawler_with_group._safe_crawl(crawler_with_group._crawl_groups)
+        group_rows = [r for r in rows if r[2] == "group"]
+        member_rows = [r for r in rows if r[2] == "group_member"]
+        # The bug: count == len(rows) == group + member rows combined
+        assert result.count == len(rows)
+        assert result.count > len(group_rows), (
+            "Without primary_type the count is inflated to include group_member rows"
+        )
+        _ = member_rows  # confirm member rows exist in the combined total
+
+    def test_groups_count_with_primary_type_is_accurate(self, crawler_with_group):
+        """With primary_type='group', count reflects only 'group' rows."""
+        result, rows = crawler_with_group._safe_crawl(
+            crawler_with_group._crawl_groups, primary_type="group"
+        )
+        group_rows = [r for r in rows if r[2] == "group"]
+        assert result.count == len(group_rows), (
+            "With primary_type='group', count must equal the number of group rows"
+        )
+
+    def test_safe_crawl_exception_returns_empty(self):
+        """A crashing crawler yields count=0 and a non-empty errors list."""
+        c = _make_crawler()
+
+        def _crawl_exploding():
+            raise RuntimeError("network timeout")
+
+        result, rows = c._safe_crawl(_crawl_exploding)
+        assert result.count == 0
+        assert rows == []
+        assert "network timeout" in result.errors[0]

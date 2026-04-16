@@ -185,6 +185,8 @@ class ResourceCrawler:
         # UC grant resources via information_schema + SDK
         for crawler_fn in [
             self._crawl_grants,
+            self._crawl_row_filters,
+            self._crawl_column_masks,
         ]:
             result, rows = self._safe_crawl(crawler_fn)
             results.append(result)
@@ -736,6 +738,72 @@ class ResourceCrawler:
             except Exception:
                 continue  # Skip catalogs we can't read grants for
 
+        return rows
+
+    def _crawl_row_filters(self) -> list:
+        """Crawl UC row filters via information_schema.
+
+        Row filters are security policies that restrict which rows a user can
+        see in a table. Each filter is tied to a table and a filter function.
+        Used by data-access governance policies to ensure row-level security
+        is applied consistently and filter functions are owned and audited.
+        """
+        rows = []
+        for cat in self.w.catalogs.list():
+            try:
+                filter_rows = self.spark.sql(f"""
+                    SELECT table_catalog, table_schema, table_name, filter_function_name
+                    FROM {cat.name}.information_schema.row_filters
+                """).collect()
+                for row in filter_rows:
+                    table_full_name = f"{row.table_catalog}.{row.table_schema}.{row.table_name}"
+                    resource_id = f"row_filter:{table_full_name}"
+                    rows.append(self._make_row(
+                        resource_type="row_filter",
+                        resource_id=resource_id,
+                        resource_name=row.table_name,
+                        domain=row.table_catalog,
+                        metadata={
+                            "table_full_name": table_full_name,
+                            "filter_function": row.filter_function_name or "",
+                        },
+                    ))
+            except Exception:
+                continue  # Skip catalogs we can't read
+        return rows
+
+    def _crawl_column_masks(self) -> list:
+        """Crawl UC column masks via information_schema.
+
+        Column masks are security policies that apply a masking function to a
+        column so that sensitive data is obscured for unauthorized users. Each
+        mask is tied to a specific table column and a mask function. Used by
+        data-access governance policies to ensure PII and sensitive columns are
+        masked, and masking functions are owned and audited.
+        """
+        rows = []
+        for cat in self.w.catalogs.list():
+            try:
+                mask_rows = self.spark.sql(f"""
+                    SELECT table_catalog, table_schema, table_name, column_name, mask_function_name
+                    FROM {cat.name}.information_schema.column_masks
+                """).collect()
+                for row in mask_rows:
+                    table_full_name = f"{row.table_catalog}.{row.table_schema}.{row.table_name}"
+                    resource_id = f"column_mask:{table_full_name}.{row.column_name}"
+                    rows.append(self._make_row(
+                        resource_type="column_mask",
+                        resource_id=resource_id,
+                        resource_name=f"{row.table_name}.{row.column_name}",
+                        domain=row.table_catalog,
+                        metadata={
+                            "table_full_name": table_full_name,
+                            "column_name": row.column_name or "",
+                            "mask_function": row.mask_function_name or "",
+                        },
+                    ))
+            except Exception:
+                continue  # Skip catalogs we can't read
         return rows
 
     # ------------------------------------------------------------------

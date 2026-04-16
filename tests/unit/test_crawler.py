@@ -289,3 +289,98 @@ class TestCrawlGrants:
 
         rows = crawler._crawl_grants()
         assert rows == []
+
+
+# ── Fixtures for row_filters and column_masks tests ───────────────────────────
+
+def _make_catalog_ns(name):
+    return SimpleNamespace(name=name)
+
+
+def _make_row_filter_record():
+    return SimpleNamespace(
+        table_catalog="gold",
+        table_schema="finance",
+        table_name="gl_balances",
+        filter_function_name="gold.sec.filter_gl",
+    )
+
+
+def _make_column_mask_record():
+    return SimpleNamespace(
+        table_catalog="gold",
+        table_schema="finance",
+        table_name="gl_balances",
+        column_name="cost_center_owner",
+        mask_function_name="gold.sec.mask_cost_center",
+    )
+
+
+@pytest.fixture
+def crawler():
+    """Crawler with mocked catalogs and SQL for row_filters / column_masks."""
+    c = _make_crawler()
+    c.w.catalogs.list.return_value = [_make_catalog_ns("gold")]
+
+    def sql_side_effect(query):
+        result = MagicMock()
+        if "row_filters" in query:
+            result.collect.return_value = [_make_row_filter_record()]
+        elif "column_masks" in query:
+            result.collect.return_value = [_make_column_mask_record()]
+        else:
+            result.collect.return_value = []
+        return result
+
+    c.spark.sql.side_effect = sql_side_effect
+    return c
+
+
+@pytest.fixture
+def crawler_no_catalogs():
+    """Crawler with no catalogs — every per-catalog crawl returns empty."""
+    c = _make_crawler()
+    c.w.catalogs.list.return_value = []
+    return c
+
+
+# ── Row filters ───────────────────────────────────────────────────────────────
+
+
+class TestCrawlRowFilters:
+    def test_emits_one_row_per_filter(self, crawler):
+        """Each row_filters record produces one resource row."""
+        rows = crawler._crawl_row_filters()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row[2] == "row_filter"
+        assert "gold.finance.gl_balances" in row[3]
+        meta = row[8]
+        assert meta["table_full_name"] == "gold.finance.gl_balances"
+        assert meta["filter_function"] == "gold.sec.filter_gl"
+
+    def test_empty_catalogs_returns_no_rows(self, crawler_no_catalogs):
+        rows = crawler_no_catalogs._crawl_row_filters()
+        assert rows == []
+
+
+# ── Column masks ──────────────────────────────────────────────────────────────
+
+
+class TestCrawlColumnMasks:
+    def test_emits_one_row_per_mask(self, crawler):
+        """Each column_masks record produces one resource row."""
+        rows = crawler._crawl_column_masks()
+        assert len(rows) == 1
+        row = rows[0]
+        assert row[2] == "column_mask"
+        assert "gl_balances" in row[3]
+        assert "cost_center_owner" in row[3]
+        meta = row[8]
+        assert meta["table_full_name"] == "gold.finance.gl_balances"
+        assert meta["column_name"] == "cost_center_owner"
+        assert meta["mask_function"] == "gold.sec.mask_cost_center"
+
+    def test_empty_catalogs_returns_no_rows(self, crawler_no_catalogs):
+        rows = crawler_no_catalogs._crawl_column_masks()
+        assert rows == []

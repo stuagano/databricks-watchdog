@@ -2,15 +2,14 @@ bundle:
   name: watchdog-guardrails
 
 targets:
-  dev:
-    mode: development
-
-  prod:
+  fe-stable:
     mode: production
+    workspace:
+      profile: fe-stable
 
 resources:
   apps:
     watchdog_guardrails:
-      name: "watchdog-guardrails"
+      name: "watchdog-guardrails-fe-stable"
       description: "AI Guardrails MCP — safe data access enforcement"
       source_code_path: .

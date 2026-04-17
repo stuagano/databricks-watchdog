@@ -82,8 +82,11 @@ class TestSummarizeArguments:
     def test_unknown_tool_passes_args_through(self):
         args = {"catalog": "gold", "schema": "finance", "limit": 50}
         summary = _summarize_arguments("list_tables", args)
-        assert summary["catalog"] == "gold"
-        assert summary["limit"] == 50
+        assert "arg_keys" in summary
+        assert "catalog" in summary["arg_keys"]
+        assert "schema" in summary["arg_keys"]
+        # Values must not be present
+        assert "gold" not in str(summary)
 
 
 class TestLogToolCall:

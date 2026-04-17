@@ -17,6 +17,8 @@ from typing import Any
 
 audit_logger = logging.getLogger("ai_devkit.audit")
 
+_KNOWN_ROLES = {"user", "assistant", "system", "tool"}
+
 
 @dataclass
 class AuditEvent:
@@ -91,7 +93,10 @@ def _summarize_arguments(tool: str, args: dict[str, Any]) -> dict[str, Any]:
     elif tool == "chat_completion":
         messages = args.get("messages", [])
         summary["message_count"] = len(messages)
-        summary["roles"] = [m.get("role") for m in messages]
+        summary["roles"] = [
+            m.get("role") if m.get("role") in _KNOWN_ROLES else "unknown"
+            for m in messages
+        ]
         summary["model"] = args.get("model")
         summary["max_tokens"] = args.get("max_tokens")
 
@@ -106,6 +111,6 @@ def _summarize_arguments(tool: str, args: dict[str, Any]) -> dict[str, Any]:
         summary["has_filters"] = bool(args.get("filters"))
 
     else:
-        summary = {k: v for k, v in args.items()}
+        summary = {"arg_keys": list(args.keys())}
 
     return summary

@@ -1,8 +1,8 @@
-# Mirion Generalizations Implementation Plan
+# Medallion Generalizations Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Extract three Mirion-derived patterns into Watchdog core: parameterize the Ontos IRI, add a pipeline freshness crawler, and create medallion governance policies.
+**Goal:** Extract three medallion architecture patterns into Watchdog core: parameterize the Ontos IRI, add a pipeline freshness crawler, and create medallion governance policies.
 
 **Architecture:** The Ontos IRI fix is a parameter extraction. The pipeline freshness crawler follows the existing DQM enrichment pattern (read system table, UPDATE inventory tags). The medallion policies use existing ontology classes and rule types, plus one new `metadata_lte` rule type.
 
@@ -888,7 +888,7 @@ Replace the hardcoded constant (line 43-44):
 
 ```python
 # Watchdog ontology class IRI base — matches the wdc: prefix in the TTL
-ONTOLOGY_BASE_IRI = "https://mirion.databricks.com/ontology/watchdog/class/"
+ONTOLOGY_BASE_IRI = "https://<workspace>.databricks.com/ontology/watchdog/class/"
 ```
 
 With:
@@ -959,7 +959,7 @@ Expected: All tests pass.
 
 ```bash
 git add ontos-adapter/src/watchdog_governance/ontos_sync.py tests/unit/test_ontos_sync.py
-git commit -m "fix: parameterize Ontos IRI, remove hardcoded Mirion URL"
+git commit -m "fix: parameterize Ontos IRI, remove hardcoded URL"
 ```
 
 ---

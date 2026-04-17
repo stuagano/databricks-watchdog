@@ -1,15 +1,15 @@
-# Mirion Generalizations: IRI Parameterization, Pipeline Freshness, Medallion Policies
+# Medallion Generalizations: IRI Parameterization, Pipeline Freshness, Medallion Policies
 
-> Design spec for extracting three Mirion-derived patterns into Watchdog core.
+> Design spec for extracting three patterns into Watchdog core for any medallion architecture deployment.
 >
 > Date: 2026-04-15
 
 ## Context
 
-Mirion Technologies runs a MEDIAN architecture with 22 ERPs feeding a Bronze/Silver/Gold medallion pipeline, monitored by Watchdog. Three patterns from this implementation generalize to any customer using medallion architecture or Ontos integration:
+Three gaps exist in Watchdog's support for Bronze/Silver/Gold medallion architectures and Ontos integration:
 
-1. The Ontos adapter has a hardcoded Mirion IRI that should be parameterized.
-2. Pipeline freshness is not crawled — customers can't write policies like "pipelines must succeed within X hours."
+1. The Ontos adapter has a hardcoded workspace IRI that should be parameterized per deployment.
+2. Pipeline freshness is not crawled — operators can't write policies like "pipelines must succeed within X hours."
 3. Medallion governance policies exist only for Gold tables. Bronze and Silver layers have no coverage.
 
 ## 1. Ontos IRI Parameterization
@@ -19,10 +19,10 @@ Mirion Technologies runs a MEDIAN architecture with 22 ERPs feeding a Bronze/Sil
 `ontos-adapter/src/watchdog_governance/ontos_sync.py` line 44:
 
 ```python
-ONTOLOGY_BASE_IRI = "https://mirion.databricks.com/ontology/watchdog/class/"
+ONTOLOGY_BASE_IRI = "https://<workspace>.databricks.com/ontology/watchdog/class/"
 ```
 
-Every customer deploying the Ontos adapter must edit source code to change this.
+Every deployment of the Ontos adapter must edit source code to change this.
 
 ### Design
 
@@ -375,7 +375,7 @@ None. `BronzeTable`, `SilverTable`, `GoldTable`, and `ProductionPipeline` alread
 
 | File | Type | Description |
 |------|------|-------------|
-| `ontos-adapter/src/watchdog_governance/ontos_sync.py` | modify | Parameterize IRI, remove hardcoded Mirion URL |
+| `ontos-adapter/src/watchdog_governance/ontos_sync.py` | modify | Parameterize IRI, remove hardcoded URL |
 | `engine/src/watchdog/crawler.py` | modify | Add `_crawl_pipeline_freshness()`, register in `crawl_all()` |
 | `engine/src/watchdog/rule_engine.py` | modify | Add `metadata_lte` rule type |
 | `engine/ontologies/rule_primitives.yml` | modify | Add 4 medallion primitives |

@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    watchdog_e2e_test:
+      name: "[${bundle.target}] Watchdog — E2E Test"
+      description: "Exercise crawl → evaluate → assert in an isolated test schema"
+
+      environments:
+        - environment_key: watchdog_env
+          spec:
+            client: "1"
+            dependencies:
+              - databricks-sdk>=0.30.0
+              - pyyaml>=6.0
+
+      tasks:
+        - task_key: run_e2e
+          description: "Run the end-to-end notebook against var.catalog"
+          environment_key: watchdog_env
+          notebook_task:
+            notebook_path: ../notebooks/run_e2e_tests.py
+            base_parameters:
+              catalog: ${var.catalog}
+              cleanup: "true"
+
+      tags:
+        project: watchdog
+        cost_center: data-platform
+        owner: data-platform-admin

@@ -17,9 +17,8 @@ detail string for violation reporting.
 
 import json
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 import yaml
 

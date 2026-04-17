@@ -7,9 +7,8 @@ violation data.
 
 from datetime import datetime, timezone
 
-from pyspark.sql import SparkSession
 import pyspark.sql.types as T
-
+from pyspark.sql import SparkSession
 
 POLICIES_SCHEMA = T.StructType([
     T.StructField("policy_id", T.StringType(), False),

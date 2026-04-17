@@ -1,7 +1,10 @@
 # Review UI Design Spec
 
+> ⚠️ **Planning artifact — not shipped.** The review UI is a proposal, not
+> current product behaviour. See [`docs/superpowers/README.md`](../README.md).
+
 **Date:** 2026-04-16
-**Status:** Approved
+**Status:** Approved (design) — **implementation not started**
 **Approach:** Full Ontos Integration (Approach 1)
 
 ---

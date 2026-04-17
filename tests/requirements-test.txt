@@ -1,0 +1,14 @@
+# Dependencies required to run the unit test tier.
+#
+# Production runtime deps (pyspark, databricks-sdk) are stubbed out by
+# tests/unit/conftest.py so the unit tier stays fast and sandboxed.
+# Only pure-Python libraries are pinned here.
+
+pytest>=8.0,<10
+pytest-asyncio>=0.23
+pyyaml>=6.0
+
+# Ontos adapter uses pydantic v2 models directly in its tests
+pydantic>=2.0
+fastapi>=0.110
+httpx>=0.27  # fastapi.testclient transitive dep

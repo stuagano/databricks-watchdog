@@ -19,9 +19,8 @@ Ontos Integration:
 
 from datetime import datetime, timezone
 
-from pyspark.sql import SparkSession
-import pyspark.sql.functions as F
 import pyspark.sql.types as T
+from pyspark.sql import SparkSession
 
 
 def ensure_violations_table(spark: SparkSession, catalog: str, schema: str) -> None:
@@ -270,7 +269,7 @@ def merge_violations(spark: SparkSession, catalog: str, schema: str,
     # Scoped to the current scan's metastore to prevent cross-metastore
     # resolution — scanning metastore A must not resolve metastore B's violations.
     metastore_id_from_scan = spark.sql(
-        f"SELECT MAX(metastore_id) AS ms FROM _watchdog_current_failures"
+        "SELECT MAX(metastore_id) AS ms FROM _watchdog_current_failures"
     ).first()
     _ms_id = metastore_id_from_scan.ms if metastore_id_from_scan else None
     _ms_filter = f"AND v.metastore_id = '{_ms_id}'" if _ms_id else ""

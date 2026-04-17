@@ -38,6 +38,9 @@ ENTRYPOINTS = {
     "evaluate":               "watchdog.entrypoints:evaluate",
     "notify":                 "watchdog.entrypoints:notify",
     "adhoc":                  "watchdog.entrypoints:adhoc",
+    "remediate":              "watchdog.entrypoints:remediate",
+    "apply_remediations":     "watchdog.entrypoints:apply_approved_remediations",
+    "verify_remediations":    "watchdog.entrypoints:verify_remediations",
 }
 
 

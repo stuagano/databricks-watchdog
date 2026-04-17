@@ -60,7 +60,6 @@ def register_agent(spark: SparkSession, catalog: str, schema: str,
     Args:
         agent: Object satisfying the RemediationAgent protocol.
     """
-    import json
     from datetime import datetime, timezone
 
     ensure_remediation_agents_table(spark, catalog, schema)

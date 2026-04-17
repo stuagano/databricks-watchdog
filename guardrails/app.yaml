@@ -1,14 +1,5 @@
-command:
-  - uvicorn
-  - ai_devkit.server:app
-  - --host
-  - 0.0.0.0
-  - --port
-  - "8000"
+command: ["uvicorn", "watchdog_guardrails.server:app", "--host", "0.0.0.0", "--port", "8080"]
+
 env:
-  - name: DATABRICKS_CATALOG
-    value: serverless_stable_s0v155_catalog
-  - name: DATABRICKS_WAREHOUSE_ID
-    value: 2053827451af25b6
   - name: WATCHDOG_SCHEMA
-    value: serverless_stable_s0v155_catalog.watchdog
+    value: "platform.watchdog"

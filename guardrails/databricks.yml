@@ -1,56 +1,16 @@
-# AI DevKit Guardrails MCP Server — Databricks Asset Bundle
-#
-# Deploys governance guardrails as a standalone MCP Databricks App.
-# Provides classification-aware query validation, cost estimation,
-# column-level safety, and audit logging for AI developers.
-#
-# Complements the official AI Dev Kit (50+ tools) with governance
-# that UC alone doesn't provide.
-
 bundle:
-  name: ai-devkit-guardrails
-
-variables:
-  catalog:
-    description: "Default Unity Catalog for tools"
-  warehouse_id:
-    description: "SQL warehouse ID for governance queries"
-  watchdog_schema:
-    description: "Watchdog schema (catalog.schema) for violation data"
-    default: "platform.watchdog"
+  name: watchdog-guardrails
 
 targets:
-  # ── FE Stable (demo workspace) ──────────────────────────────────────
-  fe-stable:
+  dev:
     mode: development
-    default: true
-    workspace:
-      host: https://fevm-serverless-stable-s0v155.cloud.databricks.com
-      profile: fe-stable
-    variables:
-      catalog: serverless_stable_s0v155_catalog
-      warehouse_id: 2053827451af25b6
-      watchdog_schema: serverless_stable_s0v155_catalog.watchdog
 
-  # ── Customer non-production ───────────────────────────────────────────
-  nonprod:
-    mode: development
-    workspace:
-      host: <YOUR_NONPROD_WORKSPACE_URL>
-    variables:
-      catalog: <YOUR_CATALOG>
-      warehouse_id: <YOUR_NONPROD_WAREHOUSE_ID>
-
-  # ── Customer production ───────────────────────────────────────────────
   prod:
     mode: production
-    workspace:
-      host: <YOUR_PROD_WORKSPACE_URL>
-    run_as:
-      service_principal_name: spWatchdog
-    variables:
-      catalog: <YOUR_CATALOG>
-      warehouse_id: <YOUR_PROD_WAREHOUSE_ID>
 
-include:
-  - resources/*.yml
+resources:
+  apps:
+    watchdog_guardrails:
+      name: "watchdog-guardrails"
+      description: "AI Guardrails MCP — safe data access enforcement"
+      source_code_path: .

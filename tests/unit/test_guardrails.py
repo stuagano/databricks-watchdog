@@ -90,6 +90,22 @@ class TestCheckSqlQuery:
         result = check_sql_query("drop table catalog.schema.foo")
         assert not result.allowed
 
+    def test_create_or_replace_table_blocked(self):
+        result = check_sql_query("CREATE OR REPLACE TABLE catalog.schema.foo AS SELECT 1")
+        assert not result.allowed
+
+    def test_create_or_replace_view_blocked(self):
+        result = check_sql_query("CREATE OR REPLACE VIEW catalog.schema.v AS SELECT 1")
+        assert not result.allowed
+
+    def test_comment_injection_block_comment_blocked(self):
+        result = check_sql_query("DROP/*comment*/TABLE catalog.schema.foo")
+        assert not result.allowed
+
+    def test_comment_injection_line_comment_blocked(self):
+        result = check_sql_query("DROP --comment\nTABLE catalog.schema.foo")
+        assert not result.allowed
+
 
 class TestCheckChatCompletion:
     def test_valid_messages_allowed(self):

@@ -19,6 +19,7 @@ _BLOCKED_SQL_PATTERNS = [
     (r"\b(TRUNCATE)\s+TABLE\b", "TRUNCATE statements"),
     (r"\b(ALTER)\s+(TABLE|SCHEMA|CATALOG)", "ALTER operations"),
     (r"\b(CREATE)\s+(TABLE|SCHEMA|CATALOG|DATABASE|VIEW)", "CREATE operations"),
+    (r"\b(CREATE)\s+OR\s+REPLACE\s+(TABLE|VIEW|FUNCTION)", "CREATE OR REPLACE operations"),
     (r"\b(INSERT)\s+INTO\b", "INSERT statements"),
     (r"\b(UPDATE)\s+[\w.]+\s+SET\b", "UPDATE statements"),
     (r"\b(MERGE)\s+INTO\b", "MERGE statements"),
@@ -27,6 +28,16 @@ _BLOCKED_SQL_PATTERNS = [
 ]
 
 MAX_SQL_LENGTH = 10_000
+
+_SQL_BLOCK_COMMENT = re.compile(r"/\*.*?\*/", re.DOTALL)
+_SQL_LINE_COMMENT = re.compile(r"--[^\n]*")
+
+
+def _strip_sql_comments(query: str) -> str:
+    """Remove SQL comments before pattern matching to prevent injection bypass."""
+    query = _SQL_BLOCK_COMMENT.sub(" ", query)
+    query = _SQL_LINE_COMMENT.sub(" ", query)
+    return query
 MAX_CHAT_TOKENS = 8192
 MAX_EMBEDDING_TEXTS = 150
 
@@ -47,7 +58,9 @@ def check_sql_query(query: str) -> GuardrailResult:
             False, f"Query exceeds {MAX_SQL_LENGTH} character limit"
         )
 
-    upper = query.upper()
+    # Strip comments before pattern matching to prevent injection bypass
+    stripped = _strip_sql_comments(query)
+    upper = stripped.upper()
     for pattern, description in _BLOCKED_SQL_PATTERNS:
         if re.search(pattern, upper):
             return GuardrailResult(

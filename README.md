@@ -6,6 +6,8 @@ ABAC masks columns. Tag policies reject bad values. DQ monitors flag anomalies. 
 
 Watchdog is the compliance posture layer for Unity Catalog. It crawls your estate, classifies resources through an ontology, evaluates declarative policies across every governance domain, tracks violations with owner accountability, and gives you a single compliance percentage that goes up or down over time.
 
+![Watchdog Guardrails demo — AI assistant blocked from embedding a PII table, redirected to a safe alternative, compliance report shows clean](docs/guardrails-demo.gif)
+
 ---
 
 ## Why Watchdog Exists
@@ -677,6 +679,8 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `list_metastores` | List scanned metastores with resource counts |
 
 ### Guardrails MCP (AI build-time + runtime governance)
+
+Try the interactive demo: [`guardrails/demo/index.html`](guardrails/demo/index.html) — walks through a full agent flow: embed blocked on a PII table → safe alternative found → access logged → clean compliance report.
 
 **Build-time tools** (check before coding):
 

@@ -1,0 +1,92 @@
+resources:
+  jobs:
+    watchdog_remediation_pipeline:
+      name: "[${bundle.target}] Watchdog — Remediation Pipeline"
+      description: "Dispatch open violations to agents, apply approved proposals, verify against next scan"
+
+      schedule:
+        quartz_cron_expression: "0 30 6 * * ?"  # Daily at 06:30 UTC, after the main scan
+        timezone_id: "America/New_York"
+        pause_status: PAUSED  # Require explicit enablement in each target
+
+      environments:
+        - environment_key: watchdog_env
+          spec:
+            client: "1"
+            dependencies:
+              - databricks-sdk>=0.30.0
+              - pyyaml>=6.0
+
+      tasks:
+        - task_key: dispatch_remediations
+          description: "Route open violations to registered agents and write proposals"
+          environment_key: watchdog_env
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - remediate
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+
+        - task_key: apply_approved
+          description: "Execute approved proposals"
+          environment_key: watchdog_env
+          depends_on:
+            - task_key: dispatch_remediations
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - apply_remediations
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --dry-run
+
+        - task_key: verify_remediations
+          description: "Check applied proposals against latest scan"
+          environment_key: watchdog_env
+          depends_on:
+            - task_key: apply_approved
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - verify_remediations
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+
+      tags:
+        project: watchdog
+        cost_center: data-platform
+        owner: data-platform-admin
+
+    watchdog_multi_metastore_scan:
+      name: "[${bundle.target}] Watchdog — Multi-Metastore Scan"
+      description: "Crawl resources across all configured metastores before the main daily evaluation"
+
+      parameters:
+        - name: metastore_ids
+          default: ""
+
+      environments:
+        - environment_key: watchdog_env
+          spec:
+            client: "1"
+            dependencies:
+              - databricks-sdk>=0.30.0
+              - pyyaml>=6.0
+
+      tasks:
+        - task_key: multi_metastore_crawl
+          environment_key: watchdog_env
+          spark_python_task:
+            python_file: ../src/run_task.py
+            parameters:
+              - crawl_all_metastores
+              - --catalog=${var.catalog}
+              - --schema=${var.schema}
+              - --secret-scope=${var.secret_scope}
+              - --metastore-ids={{job.parameters.metastore_ids}}
+
+      tags:
+        project: watchdog
+        cost_center: data-platform
+        owner: data-platform-admin

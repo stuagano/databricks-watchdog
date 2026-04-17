@@ -15,9 +15,13 @@ setup(
     entry_points={
         "console_scripts": [
             "watchdog-crawl=watchdog.entrypoints:crawl",
+            "watchdog-crawl-all-metastores=watchdog.entrypoints:crawl_all_metastores",
             "watchdog-evaluate=watchdog.entrypoints:evaluate",
             "watchdog-notify=watchdog.entrypoints:notify",
             "watchdog-adhoc=watchdog.entrypoints:adhoc",
+            "watchdog-remediate=watchdog.entrypoints:remediate",
+            "watchdog-apply-remediations=watchdog.entrypoints:apply_approved_remediations",
+            "watchdog-verify-remediations=watchdog.entrypoints:verify_remediations",
         ],
     },
 )

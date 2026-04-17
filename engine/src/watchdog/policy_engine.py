@@ -19,23 +19,22 @@ into the violations table (deduplicated, with exception handling).
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
 
-from databricks.sdk import WorkspaceClient
-from pyspark.sql import SparkSession, Row
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
+from databricks.sdk import WorkspaceClient
+from pyspark.sql import Row, SparkSession
 
 from watchdog.drift import (
-    load_expected_state,
-    build_expected_grants_lookup,
-    build_expected_row_filters_lookup,
     build_expected_column_masks_lookup,
+    build_expected_grants_lookup,
     build_expected_group_membership_lookup,
+    build_expected_row_filters_lookup,
+    load_expected_state,
 )
 from watchdog.ontology import OntologyEngine
 from watchdog.policies_table import write_policies
-from watchdog.rule_engine import RuleEngine, RuleResult
+from watchdog.rule_engine import RuleEngine
 from watchdog.violations import merge_violations, write_classifications, write_scan_summary
 
 # Fallback mapping: ontology class name → resource_types it covers.

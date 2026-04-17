@@ -1,18 +1,20 @@
-"""Notification service — dual-path: Delta queue + Azure Communication Services.
+"""Notification service — dual-path: Delta queue + outbound delivery channels.
 
 Path 1 (always): Write un-notified violations to `notification_queue` table.
     Enterprise email systems consume this table via CDF or scheduled query.
 
-Path 2 (optional): Send digest emails via Azure Communication Services (ACS).
-    Enabled when ACS_CONNECTION_STRING is set in the secret scope.
-    Sends one email per owner with their open violations grouped by severity.
+Path 2 (optional): Deliver digests via a configurable outbound channel:
+    - Azure Communication Services email (``send_acs_emails``)
+    - Generic HTTPS webhook — Slack, Teams, or any JSON consumer
+      (``send_webhook_notifications``)
 
-The notify entrypoint runs both paths. Path 1 is the durable handoff —
-Path 2 is convenience for platform admins who want immediate alerts.
+The notify entrypoint runs Path 1 always and dispatches Path 2 based on what
+secrets are configured. Path 1 is the durable handoff; Path 2 is convenience
+for platform admins who want immediate alerts.
 """
 
+import json
 from dataclasses import dataclass
-from datetime import datetime, timezone
 
 from pyspark.sql import SparkSession
 
@@ -128,7 +130,6 @@ def write_to_queue(spark: SparkSession, catalog: str, schema: str,
     ensure_notification_queue(spark, catalog, schema)
     queue_table = f"{catalog}.{schema}.notification_queue"
     violations_table = f"{catalog}.{schema}.violations"
-    now = datetime.now(timezone.utc)
 
     if not digests:
         return 0
@@ -192,10 +193,10 @@ def send_acs_emails(digests: list[OwnerDigest], acs_connection_string: str,
         lines = [
             f"Governance Violations for {d.owner}",
             f"{'=' * 50}",
-            f"",
+            "",
             f"Total: {d.total} open violations",
             f"  Critical: {d.critical}  |  High: {d.high}  |  Medium: {d.medium}  |  Low: {d.low}",
-            f"",
+            "",
         ]
 
         for v in d.violations:
@@ -227,5 +228,158 @@ def send_acs_emails(digests: list[OwnerDigest], acs_connection_string: str,
             sent += 1
         except Exception as e:
             print(f"WARNING: Failed to send email to {d.owner}: {e}")
+
+    return sent
+
+
+def build_webhook_payload(digest: "OwnerDigest", dashboard_url: str = "",
+                          flavor: str = "generic") -> dict:
+    """Build a JSON webhook payload for one owner's digest.
+
+    Three payload flavors are supported so the same endpoint can be used for
+    Slack incoming webhooks, Microsoft Teams office-connector webhooks, or a
+    generic downstream consumer that reads the full digest verbatim:
+
+      - ``generic``: flat JSON with the full violation list (default)
+      - ``slack``:   Slack-compatible ``blocks`` layout
+      - ``teams``:   Teams MessageCard (legacy connector)
+
+    Callers that need a custom schema can build their own payload from the
+    OwnerDigest and POST it directly — nothing in this module hides the
+    violations list from them.
+    """
+    violations_summary = [
+        {
+            "policy_id": v.get("policy_id", ""),
+            "severity": v.get("severity", ""),
+            "resource": v.get("resource_name", ""),
+            "detail": v.get("detail", ""),
+            "remediation": v.get("remediation", ""),
+        }
+        for v in digest.violations
+    ]
+    header = (
+        f"Watchdog: {digest.total} governance violation"
+        f"{'s' if digest.total != 1 else ''} for {digest.owner} "
+        f"({digest.severity_summary})"
+    )
+
+    if flavor == "slack":
+        blocks: list[dict] = [
+            {"type": "header",
+             "text": {"type": "plain_text", "text": header}},
+        ]
+        # Slack limits blocks to 50; cap violations shown inline.
+        for v in violations_summary[:10]:
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        f"*[{v['severity'].upper()}]* `{v['resource']}` — "
+                        f"{v['policy_id']}\n{v['detail']}"
+                        + (f"\n_Fix:_ {v['remediation']}" if v["remediation"] else "")
+                    ),
+                },
+            })
+        if len(violations_summary) > 10:
+            blocks.append({
+                "type": "context",
+                "elements": [{"type": "mrkdwn",
+                              "text": f"_…and {len(violations_summary) - 10} more._"}],
+            })
+        if dashboard_url:
+            blocks.append({
+                "type": "actions",
+                "elements": [{
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Open dashboard"},
+                    "url": dashboard_url,
+                }],
+            })
+        return {"text": header, "blocks": blocks}
+
+    if flavor == "teams":
+        facts = [
+            {"name": "Critical", "value": str(digest.critical)},
+            {"name": "High", "value": str(digest.high)},
+            {"name": "Medium", "value": str(digest.medium)},
+            {"name": "Low", "value": str(digest.low)},
+        ]
+        card = {
+            "@type": "MessageCard",
+            "@context": "http://schema.org/extensions",
+            "summary": header,
+            "title": header,
+            "themeColor": "B00020" if digest.critical else "F2994A",
+            "sections": [{"facts": facts, "markdown": True}],
+        }
+        if dashboard_url:
+            card["potentialAction"] = [{
+                "@type": "OpenUri",
+                "name": "Open dashboard",
+                "targets": [{"os": "default", "uri": dashboard_url}],
+            }]
+        return card
+
+    # generic
+    return {
+        "owner": digest.owner,
+        "total": digest.total,
+        "critical": digest.critical,
+        "high": digest.high,
+        "medium": digest.medium,
+        "low": digest.low,
+        "severity_summary": digest.severity_summary,
+        "dashboard_url": dashboard_url,
+        "violations": violations_summary,
+    }
+
+
+def send_webhook_notifications(digests: list[OwnerDigest], webhook_url: str,
+                                dashboard_url: str = "",
+                                flavor: str = "generic",
+                                timeout_seconds: float = 10.0) -> int:
+    """POST a per-owner JSON digest to an HTTPS webhook (Path 2 alternative).
+
+    Uses stdlib ``urllib.request`` so there is no extra runtime dependency on
+    Databricks clusters. Returns the count of webhooks that returned 2xx.
+
+    ``flavor`` selects the payload shape — see ``build_webhook_payload``.
+
+    This function never raises; it logs and continues so one bad digest cannot
+    block the entire run. The caller is expected to inspect the return value
+    to compare against ``len(digests)`` for partial-success alerting.
+    """
+    import urllib.error
+    import urllib.request
+
+    if not webhook_url:
+        return 0
+    if not webhook_url.lower().startswith(("http://", "https://")):
+        print(f"WARNING: webhook_url must be http(s): got {webhook_url!r}")
+        return 0
+
+    sent = 0
+    for d in digests:
+        payload = build_webhook_payload(d, dashboard_url=dashboard_url, flavor=flavor)
+        body = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            webhook_url,
+            data=body,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=timeout_seconds) as resp:
+                status = resp.status
+                if 200 <= status < 300:
+                    sent += 1
+                else:
+                    print(f"WARNING: webhook {d.owner} returned HTTP {status}")
+        except urllib.error.HTTPError as e:
+            print(f"WARNING: webhook {d.owner} HTTP error: {e.code} {e.reason}")
+        except Exception as e:
+            print(f"WARNING: webhook {d.owner} failed: {e}")
 
     return sent

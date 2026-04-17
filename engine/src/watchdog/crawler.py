@@ -14,11 +14,10 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Optional
 
+import pyspark.sql.types as T
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.catalog import SecurableType
-from pyspark.sql import SparkSession, DataFrame
-import pyspark.sql.functions as F
-import pyspark.sql.types as T
+from pyspark.sql import SparkSession
 
 
 @dataclass
@@ -148,72 +147,68 @@ class ResourceCrawler:
     def inventory_table(self) -> str:
         return f"{self.catalog}.{self.schema}.resource_inventory"
 
-    def crawl_all(self) -> list[CrawlResult]:
-        """Run all crawlers and write combined inventory to Delta."""
+    # Registry of primary_type → (crawler_method_name, primary_type_override)
+    # Used by crawl_all() and the ad-hoc filter to pick which crawlers to run.
+    _CRAWLERS: list[tuple[str, str, str | None]] = [
+        ("catalog", "_crawl_catalogs", None),
+        ("schema", "_crawl_schemas", None),
+        ("table", "_crawl_tables", None),
+        ("volume", "_crawl_volumes", None),
+        ("group", "_crawl_groups", "group"),
+        ("service_principal", "_crawl_service_principals", None),
+        ("agent", "_crawl_agents", None),
+        ("agent_trace", "_crawl_agent_traces", None),
+        ("grant", "_crawl_grants", None),
+        ("row_filter", "_crawl_row_filters", None),
+        ("column_mask", "_crawl_column_masks", None),
+        ("job", "_crawl_jobs", None),
+        ("cluster", "_crawl_clusters", None),
+        ("warehouse", "_crawl_warehouses", None),
+        ("pipeline", "_crawl_pipelines", None),
+    ]
+
+    # DQ crawlers emit enrichment rows only — never written to inventory.
+    _DQ_CRAWLERS: list[tuple[str, str]] = [
+        ("dqm_status", "_crawl_dqm_status"),
+        ("lhm_status", "_crawl_lhm_status"),
+        ("pipeline_freshness", "_crawl_pipeline_freshness"),
+    ]
+
+    def crawl_all(self,
+                  resource_types: Optional[set[str]] = None,
+                  resource_id: Optional[str] = None) -> list[CrawlResult]:
+        """Run all crawlers and write combined inventory to Delta.
+
+        Args:
+            resource_types: If provided, only run crawlers whose primary type is
+                in the set (e.g. {"table"}). None means run everything.
+            resource_id: If provided, only rows matching this resource_id are
+                written to inventory. The crawler still enumerates the full
+                type because the Databricks APIs do not expose per-id fetches
+                uniformly — filtering happens in memory. Useful for ad-hoc scans.
+        """
         results = []
         all_rows = []
 
-        # UC resources via information_schema
-        for crawler_fn in [
-            self._crawl_catalogs,
-            self._crawl_schemas,
-            self._crawl_tables,
-            self._crawl_volumes,
-        ]:
-            result, rows = self._safe_crawl(crawler_fn)
+        for primary_type, method_name, pt_override in self._CRAWLERS:
+            if resource_types and primary_type not in resource_types:
+                continue
+            fn = getattr(self, method_name)
+            result, rows = self._safe_crawl(fn, primary_type=pt_override)
             results.append(result)
             all_rows.extend(rows)
 
-        # Identity resources via SDK
-        # _crawl_groups emits "group" + "group_member" rows; pass primary_type
-        # so _safe_crawl counts only "group" rows, not the combined total.
-        result, rows = self._safe_crawl(self._crawl_groups, primary_type="group")
-        results.append(result)
-        all_rows.extend(rows)
+        # DQ crawlers enrich table tags — skip unless tables are in scope.
+        if not resource_types or "table" in resource_types or "pipeline" in resource_types:
+            for _pt, method_name in self._DQ_CRAWLERS:
+                fn = getattr(self, method_name)
+                result, _rows = self._safe_crawl(fn)
+                results.append(result)
 
-        result, rows = self._safe_crawl(self._crawl_service_principals)
-        results.append(result)
-        all_rows.extend(rows)
-
-        # ── AI Agent resources ────────────────────────────────────────
-        result, agent_rows = self._safe_crawl(self._crawl_agents)
-        results.append(result)
-        all_rows.extend(agent_rows)
-
-        result, trace_rows = self._safe_crawl(self._crawl_agent_traces)
-        results.append(result)
-        all_rows.extend(trace_rows)
-
-        # UC grant resources via information_schema + SDK
-        for crawler_fn in [
-            self._crawl_grants,
-            self._crawl_row_filters,
-            self._crawl_column_masks,
-        ]:
-            result, rows = self._safe_crawl(crawler_fn)
-            results.append(result)
-            all_rows.extend(rows)
-
-        # Workspace resources via SDK
-        for crawler_fn in [
-            self._crawl_jobs,
-            self._crawl_clusters,
-            self._crawl_warehouses,
-            self._crawl_pipelines,
-        ]:
-            result, rows = self._safe_crawl(crawler_fn)
-            results.append(result)
-            all_rows.extend(rows)
-
-        # DQ system table crawlers (enrich tags on table resources)
-        for crawler_fn in [
-            self._crawl_dqm_status,
-            self._crawl_lhm_status,
-            self._crawl_pipeline_freshness,
-        ]:
-            result, rows = self._safe_crawl(crawler_fn)
-            results.append(result)
-            # DQ crawlers return enrichment rows, not inventory rows
+        # Post-filter by resource_id when the caller wants a single asset.
+        # Row tuples match INVENTORY_SCHEMA: index 3 is resource_id.
+        if resource_id:
+            all_rows = [r for r in all_rows if r[3] == resource_id]
 
         # Write to Delta
         if all_rows:

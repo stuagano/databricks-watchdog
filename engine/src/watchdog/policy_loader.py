@@ -24,13 +24,12 @@ Hybrid policy management:
 """
 
 import json
-import os
 from pathlib import Path
 
-import yaml
-from pyspark.sql import SparkSession
 import pyspark.sql.functions as F
 import pyspark.sql.types as T
+import yaml
+from pyspark.sql import SparkSession
 
 from watchdog.policy_engine import PolicyDefinition
 

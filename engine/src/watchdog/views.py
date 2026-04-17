@@ -237,8 +237,8 @@ def _ensure_tag_policy_coverage_view(spark: SparkSession, catalog: str,
     Includes exception status so dashboards can distinguish between violations
     that are actively open vs those with approved waivers.
     """
-    from watchdog.violations import ensure_exceptions_table
     from watchdog.policies_table import ensure_policies_table
+    from watchdog.violations import ensure_exceptions_table
     ensure_exceptions_table(spark, catalog, schema)
     ensure_policies_table(spark, catalog, schema)
     spark.sql(f"""

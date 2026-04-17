@@ -19,7 +19,6 @@ from pathlib import Path
 
 from watchdog.ontology import OntologyEngine
 
-
 # OWL/Turtle namespace prefixes
 PREFIXES = """\
 @prefix owl:   <http://www.w3.org/2002/07/owl#> .
@@ -131,7 +130,6 @@ def export_turtle(ontology: OntologyEngine | None = None,
     domain_hints = {
         "PiiAsset": "SecurityGovernance",
         "ConfidentialAsset": "SecurityGovernance",
-        "ConfidentialAsset": "SecurityGovernance",
         "GoldTable": "DataQuality",
         "SilverTable": "DataQuality",
         "BronzeTable": "DataQuality",
@@ -157,7 +155,7 @@ def export_turtle(ontology: OntologyEngine | None = None,
             lines.append(f"    rdfs:subClassOf {_class_uri(cls.parent)} ;")
         else:
             # Root class
-            lines.append(f"    rdfs:subClassOf owl:Thing ;")
+            lines.append("    rdfs:subClassOf owl:Thing ;")
 
         # Base class resource type mapping
         if cls.is_base_class():

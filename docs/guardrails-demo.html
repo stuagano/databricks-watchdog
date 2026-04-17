@@ -16,15 +16,9 @@
   --text: #ececec;
   --muted: #8e8ea0;
   --accent: #10a37f;
-  --tool-bg: #1a1a2e;
-  --tool-border: #2d2d5e;
-  --tool-text: #818cf8;
   --blocked-bg: #2d1515;
   --blocked-border: #7f1d1d;
   --blocked-text: #fca5a5;
-  --warn-bg: #2d2010;
-  --warn-border: #78350f;
-  --warn-text: #fcd34d;
   --ok-bg: #0f2d1a;
   --ok-border: #14532d;
   --ok-text: #86efac;
@@ -43,14 +37,14 @@ body {
 
 /* ── Sidebar ── */
 .sidebar {
-  width: 260px;
+  width: 240px;
   flex-shrink: 0;
   background: var(--sidebar);
   border-right: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   padding: 16px 12px;
-  gap: 6px;
+  gap: 4px;
 }
 
 .sidebar-title {
@@ -59,7 +53,7 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--muted);
-  padding: 4px 8px 8px;
+  padding: 4px 8px 10px;
 }
 
 .sidebar-item {
@@ -71,13 +65,9 @@ body {
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background 0.1s, color 0.1s;
 }
 
-.sidebar-item:hover { background: rgba(255,255,255,0.05); color: var(--text); }
-.sidebar-item.active { background: rgba(255,255,255,0.08); color: var(--text); }
-
-.sidebar-item .icon { font-size: 15px; flex-shrink: 0; }
+.sidebar-item.active { background: rgba(255,255,255,0.07); color: var(--text); }
 
 .status-dot {
   width: 7px; height: 7px;
@@ -93,20 +83,12 @@ body {
   border-top: 1px solid var(--border);
   padding-top: 12px;
   font-size: 11px;
-  color: var(--muted);
+  color: #444;
   line-height: 1.6;
   padding-left: 8px;
 }
 
-.sidebar-footer .url {
-  font-family: var(--mono);
-  font-size: 10px;
-  word-break: break-all;
-  color: #555;
-  margin-top: 4px;
-}
-
-/* ── Chat area ── */
+/* ── Chat ── */
 .chat {
   flex: 1;
   display: flex;
@@ -119,14 +101,13 @@ body {
   padding: 14px 24px;
   font-size: 14px;
   font-weight: 500;
-  color: var(--text);
   display: flex;
   align-items: center;
   gap: 10px;
   flex-shrink: 0;
 }
 
-.chat-header .model-badge {
+.model-badge {
   font-size: 11px;
   color: var(--muted);
   background: var(--surface);
@@ -139,47 +120,34 @@ body {
 .messages {
   flex: 1;
   overflow-y: auto;
-  padding: 32px 0;
+  padding: 28px 0 8px;
   display: flex;
   flex-direction: column;
-  gap: 0;
 }
 
-.messages::-webkit-scrollbar { width: 6px; }
-.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+.messages::-webkit-scrollbar { width: 4px; }
+.messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
 /* ── Message rows ── */
-.msg {
-  padding: 8px 24px;
-  max-width: 100%;
-  animation: fadeIn 0.3s ease;
-}
+.msg { padding: 6px 24px; animation: fadeUp 0.25s ease; }
 
-@keyframes fadeIn {
-  from { opacity: 0; transform: translateY(6px); }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.msg.user {
-  display: flex;
-  justify-content: flex-end;
-}
+.msg.user { display: flex; justify-content: flex-end; }
 
 .msg.user .bubble {
   background: var(--surface);
   border-radius: 18px 18px 4px 18px;
   padding: 10px 16px;
-  max-width: 70%;
+  max-width: 65%;
   font-size: 14px;
   line-height: 1.5;
-  color: var(--text);
 }
 
-.msg.assistant {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-}
+.msg.assistant { display: flex; gap: 12px; align-items: flex-start; }
 
 .avatar {
   width: 28px; height: 28px;
@@ -190,178 +158,105 @@ body {
   align-items: center;
   justify-content: center;
   font-size: 14px;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .msg.assistant .body {
   flex: 1;
   min-width: 0;
-  max-width: 700px;
+  max-width: 680px;
 }
 
 .msg.assistant .body p {
   font-size: 14px;
-  line-height: 1.65;
+  line-height: 1.6;
   color: var(--text);
   margin-bottom: 10px;
 }
 
 .msg.assistant .body p:last-child { margin-bottom: 0; }
 
-/* ── Tool call blocks ── */
-.tool-call {
-  background: var(--tool-bg);
-  border: 1px solid var(--tool-border);
-  border-radius: 8px;
-  margin: 8px 0 12px;
-  overflow: hidden;
-  font-family: var(--mono);
-  font-size: 12px;
-}
-
-.tool-call-header {
-  padding: 7px 12px;
-  background: rgba(99,102,241,0.08);
-  border-bottom: 1px solid var(--tool-border);
+/* ── Inline guard notice ── */
+.guard-notice {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--tool-text);
-  font-size: 11px;
-}
-
-.tool-call-header .chevron { opacity: 0.5; }
-
-.tool-call-body {
-  padding: 10px 12px;
-  color: #94a3b8;
-  white-space: pre-wrap;
+  align-items: flex-start;
+  gap: 10px;
+  background: var(--blocked-bg);
+  border: 1px solid var(--blocked-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin: 4px 0 10px;
+  font-size: 13px;
   line-height: 1.5;
+  color: var(--blocked-text);
 }
 
-/* ── Verdict badges ── */
-.verdict {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 6px;
-  margin: 6px 0 10px;
-  letter-spacing: 0.02em;
-}
+.guard-notice .icon { flex-shrink: 0; font-size: 14px; margin-top: 1px; }
 
-.verdict.blocked { background: var(--blocked-bg); border: 1px solid var(--blocked-border); color: var(--blocked-text); }
-.verdict.warning { background: var(--warn-bg); border: 1px solid var(--warn-border); color: var(--warn-text); }
-.verdict.proceed { background: var(--ok-bg); border: 1px solid var(--ok-border); color: var(--ok-text); }
-
-/* ── Table preview ── */
-.data-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-family: var(--mono);
-  font-size: 11px;
-  margin: 8px 0 12px;
-}
-
-.data-table th {
-  background: var(--surface);
-  padding: 6px 10px;
-  text-align: left;
-  color: var(--muted);
-  font-weight: 600;
-  border-bottom: 1px solid var(--border);
-}
-
-.data-table td {
-  padding: 5px 10px;
-  border-bottom: 1px solid rgba(61,61,61,0.5);
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  max-width: 220px;
-  text-overflow: ellipsis;
-}
-
-.data-table tr:last-child td { border-bottom: none; }
-.data-table tr:hover td { background: rgba(255,255,255,0.02); }
-
+/* ── Data table ── */
 .table-wrap {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
-  margin: 8px 0 12px;
+  margin: 8px 0 10px;
 }
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.data-table th {
+  background: rgba(255,255,255,0.04);
+  padding: 7px 12px;
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(61,61,61,0.5);
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.data-table tr:last-child td { border-bottom: none; }
+.data-table .overdue { color: #fca5a5; }
+.data-table .highlight { color: #fde68a; }
 
 .table-meta {
   font-size: 11px;
   color: var(--muted);
-  margin-top: 4px;
+  margin: 2px 0 8px;
 }
-
-/* ── Compliance report ── */
-.report {
-  background: var(--ok-bg);
-  border: 1px solid var(--ok-border);
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin: 8px 0;
-}
-
-.report-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ok-text);
-  margin-bottom: 10px;
-}
-
-.report-row {
-  display: flex;
-  justify-content: space-between;
-  font-size: 12px;
-  padding: 3px 0;
-  border-bottom: 1px solid rgba(20,83,45,0.4);
-}
-
-.report-row:last-child { border-bottom: none; }
-.report-row .label { color: #6ee7b7; }
-.report-row .value { color: var(--ok-text); font-family: var(--mono); }
 
 /* ── Typing indicator ── */
-.typing {
-  display: none;
-  align-items: center;
-  gap: 12px;
-  padding: 8px 24px;
-}
-
+.typing { display: none; align-items: center; gap: 12px; padding: 8px 24px; }
 .typing.visible { display: flex; }
-
-.typing-dots {
-  display: flex;
-  gap: 4px;
-}
-
+.typing-dots { display: flex; gap: 4px; }
 .typing-dots span {
   width: 6px; height: 6px;
   border-radius: 50%;
   background: var(--muted);
   animation: bounce 1.2s infinite;
 }
-
 .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
 .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
 
 @keyframes bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+  0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
   30% { transform: translateY(-4px); opacity: 1; }
 }
 
 /* ── Input area ── */
 .input-area {
   border-top: 1px solid var(--border);
-  padding: 12px 24px 20px;
+  padding: 10px 24px 18px;
   flex-shrink: 0;
 }
 
@@ -370,42 +265,27 @@ body {
   gap: 8px;
   flex-wrap: wrap;
   margin-bottom: 10px;
-  min-height: 32px;
+  min-height: 30px;
 }
 
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 5px 12px;
-  font-size: 12px;
+  padding: 5px 13px;
+  font-size: 12.5px;
   color: var(--muted);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.12s;
   user-select: none;
   white-space: nowrap;
 }
 
-.pill:hover {
-  border-color: var(--accent);
-  color: var(--text);
-  background: rgba(16,163,127,0.08);
-}
+.pill:hover { border-color: var(--accent); color: var(--text); }
 
-.pill.active {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(16,163,127,0.12);
-}
-
-.input-row {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
+.input-row { display: flex; gap: 10px; align-items: flex-end; }
 
 .input-box {
   flex: 1;
@@ -418,10 +298,10 @@ body {
   color: var(--text);
   resize: none;
   outline: none;
-  min-height: 44px;
-  max-height: 120px;
+  min-height: 42px;
+  max-height: 100px;
   line-height: 1.5;
-  transition: border-color 0.15s;
+  transition: border-color 0.12s;
 }
 
 .input-box:focus { border-color: var(--accent); }
@@ -438,255 +318,146 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: opacity 0.15s;
   flex-shrink: 0;
+  transition: opacity 0.12s;
 }
 
 .send-btn:hover { opacity: 0.85; }
-.send-btn:disabled { opacity: 0.3; cursor: default; }
 
 code {
   font-family: var(--mono);
   font-size: 12px;
-  background: rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.07);
   padding: 1px 5px;
   border-radius: 3px;
 }
-
-ul { padding-left: 18px; }
-ul li { font-size: 14px; line-height: 1.7; color: var(--text); }
 </style>
 </head>
 <body>
 
-<!-- ── Sidebar ── -->
 <div class="sidebar">
   <div class="sidebar-title">Watchdog</div>
-
   <div class="sidebar-item active">
-    <span class="icon">🛡️</span>
-    Guardrails Demo
+    <span>🛡️</span> Billing Assistant
     <div class="status-dot"></div>
   </div>
-
-  <div class="sidebar-item">
-    <span class="icon">📋</span>
-    Violations
-  </div>
-
-  <div class="sidebar-item">
-    <span class="icon">📊</span>
-    Policies
-  </div>
-
-  <div class="sidebar-item">
-    <span class="icon">🔍</span>
-    Scan History
-  </div>
-
+  <div class="sidebar-item"><span>📋</span> Violations</div>
+  <div class="sidebar-item"><span>📊</span> Policies</div>
+  <div class="sidebar-item"><span>🔍</span> Scan History</div>
   <div class="sidebar-footer">
-    MCP connected
-    <div class="url">watchdog-guardrails-fe-stable-7474657313075170.aws.databricksapps.com</div>
+    Watchdog Guardrails · fe-stable<br>
+    explain_my_bill · 4 tables
   </div>
 </div>
 
-<!-- ── Main chat ── -->
 <div class="chat">
   <div class="chat-header">
-    Guardrails
-    <span class="model-badge">claude-sonnet-4-5 · fe-stable</span>
+    Billing Assistant
+    <span class="model-badge">Guardrails MCP · fe-stable</span>
   </div>
 
   <div class="messages" id="messages"></div>
 
   <div class="typing" id="typing">
     <div class="avatar">🛡️</div>
-    <div class="typing-dots">
-      <span></span><span></span><span></span>
-    </div>
+    <div class="typing-dots"><span></span><span></span><span></span></div>
   </div>
 
   <div class="input-area">
     <div class="suggestions" id="suggestions"></div>
     <div class="input-row">
-      <textarea class="input-box" id="input" rows="1" placeholder="Ask about data access, run validations, or try a query…"></textarea>
-      <button class="send-btn" id="sendBtn" onclick="sendCurrent()">↑</button>
+      <textarea class="input-box" id="input" rows="1"
+        placeholder="Ask about billing, customers, or usage…"></textarea>
+      <button class="send-btn" onclick="sendCurrent()">↑</button>
     </div>
   </div>
 </div>
 
 <script>
-// ─────────────────────────────────────────────
-// Scripted conversation
-// ─────────────────────────────────────────────
-
-const TABLE_RESTRICTED = "serverless_stable_s0v155_catalog.explain_my_bill.customer_usage_detail";
-const TABLE_SAFE       = "serverless_stable_s0v155_catalog.explain_my_bill.rate_plan_descriptions";
-
 const SCRIPT = [
   {
-    pill: "I want to embed the customer billing data for semantic search",
-    user: "I want to embed the customer billing data to power a semantic search experience. The table is <code>explain_my_bill.customer_usage_detail</code>.",
-    delay: 900,
+    pill: "Which customers have overdue bills right now?",
+    user: "Which customers have overdue bills right now?",
+    delay: 950,
     response: [
       {
-        type: "tool",
-        name: "validate_ai_query",
-        args: `table:     ${TABLE_RESTRICTED}\noperation: embed\nagent:     billing-search-v1`
-      },
-      {
-        type: "verdict",
-        level: "blocked",
-        label: "BLOCKED"
+        type: "guard",
+        text: "The customers table includes names and home addresses — I can't query it directly. Pulling the same answer from billing records instead."
       },
       {
         type: "text",
-        html: `<p>That table can't be used for embeddings. Here's why:</p>
-<ul>
-  <li><strong>pii: true</strong> — contains personally identifiable usage records</li>
-  <li><strong>classification: confidential</strong> — restricted from embedding and training operations</li>
-  <li>1 open high-severity violation (policy <code>PII-EMBED-001</code>)</li>
-</ul>
-<p>Embedding would extract PII into a vector store with no fine-grained access control. That's a governance boundary, not just a recommendation.</p>
-<p>Want me to find an alternative in the same domain that's safe to embed?</p>`
-      }
-    ],
-    nextPills: [
-      "Yes — suggest something safe I can use instead",
-      "What tables in explain_my_bill are cleared for embedding?"
-    ]
-  },
-  {
-    pill: "Yes — suggest something safe I can use instead",
-    user: "Yes, find me something safe in the same domain.",
-    delay: 800,
-    response: [
-      {
-        type: "tool",
-        name: "suggest_safe_tables",
-        args: `near:      ${TABLE_RESTRICTED}\noperation: embed\nlimit:     5`
-      },
-      {
-        type: "text",
-        html: `<p>Found 3 tables in the same catalog that are cleared for embedding:</p>
-<ul>
-  <li><code>explain_my_bill.rate_plan_descriptions</code> — classification: public · no PII tags · 0 active violations</li>
-  <li><code>explain_my_bill.billing_term_glossary</code> — classification: public · no PII tags · 0 active violations</li>
-  <li><code>explain_my_bill.service_tier_summaries</code> — classification: internal · no PII tags · 0 active violations</li>
-</ul>
-<p><strong>rate_plan_descriptions</strong> is the strongest match — it has human-readable descriptions of every rate plan, which is likely what downstream semantic search needs anyway. Want a preview?</p>`
-      }
-    ],
-    nextPills: [
-      "Show me a preview of rate_plan_descriptions",
-      "Validate rate_plan_descriptions for embed before I commit"
-    ]
-  },
-  {
-    pill: "Show me a preview of rate_plan_descriptions",
-    user: "Show me a sample from rate_plan_descriptions.",
-    delay: 700,
-    response: [
-      {
-        type: "tool",
-        name: "preview_data",
-        args: `table: ${TABLE_SAFE}\nrows:  10`
+        html: `<p>Found 3 overdue accounts:</p>`
       },
       {
         type: "table",
-        columns: ["rate_plan_id", "name", "description", "tier"],
+        columns: ["Account", "Month", "Amount Due", "Status"],
         rows: [
-          ["RP-001", "Residential Basic", "Standard residential service with flat monthly rate and tiered usage pricing", "base"],
-          ["RP-002", "Residential Time-of-Use", "Variable pricing based on peak/off-peak demand windows", "base"],
-          ["RP-007", "Small Business Standard", "Commercial flat-rate plan for accounts under 20kW demand", "commercial"],
-          ["RP-012", "EV Charging Rider", "Supplemental rate for electric vehicle charging load", "rider"],
-          ["RP-019", "Solar Export Credit", "Net metering rate for residential solar generation export", "solar"],
+          ["CUST-0008", "March 2026", "$458.70", "overdue"],
+          ["CUST-0004", "March 2026", "$419.10", "overdue"],
+          ["CUST-0008", "February 2026", "$399.30", "overdue"],
         ]
       },
       {
         type: "text",
-        html: `<p>10 rows returned (51,204 total). No PII columns — this is product catalog data, not customer records. Solid source for semantic embeddings.</p>`
+        html: `<p>CUST-0008 is two months behind — $858 outstanding. Want me to pull their rate plan and usage to see what's driving it?</p>`
       }
     ],
     nextPills: [
-      "Validate it for embed and then log my access",
-      "Run the pre-flight check before I start the embed job"
+      "Yes — show me their usage and rate plan",
+      "How does CUST-0008's bill compare to similar accounts?"
     ]
   },
   {
-    pill: "Validate it for embed and then log my access",
-    user: "Validate <code>rate_plan_descriptions</code> for embed, then log the access so there's an audit trail.",
-    delay: 1000,
+    pill: "Yes — show me their usage and rate plan",
+    user: "Yes — show me their usage and rate plan.",
+    delay: 800,
     response: [
       {
-        type: "tool",
-        name: "validate_ai_query",
-        args: `table:     ${TABLE_SAFE}\noperation: embed\nagent:     billing-search-v1`
+        type: "text",
+        html: `<p>CUST-0008 is on the <strong>Time-of-Use Residential</strong> plan. Their last two bills:</p>`
       },
       {
-        type: "verdict",
-        level: "proceed",
-        label: "PROCEED"
-      },
-      {
-        type: "tool",
-        name: "log_agent_action",
-        args: `agent:          billing-search-v1\naction:         data_access\ntarget:         ${TABLE_SAFE}\nclassification: public\njustification:  embedding approved rate plan descriptions for semantic search index`
+        type: "table",
+        columns: ["Month", "Total kWh", "Peak Charge", "Off-Peak Charge", "Amount Due"],
+        rows: [
+          ["March 2026", "1,842 kWh", "$312.40", "$94.50", "$458.70"],
+          ["Feb 2026",   "1,690 kWh", "$278.10", "$79.20", "$399.30"],
+        ]
       },
       {
         type: "text",
-        html: `<p>All clear — <code>rate_plan_descriptions</code> is approved for embedding:</p>
-<ul>
-  <li>Classification: <strong>public</strong></li>
-  <li>No PII or PHI column tags</li>
-  <li>No open violations</li>
-  <li>No active exceptions required</li>
-</ul>
-<p>Access logged to <code>watchdog.agent_audit_log</code>. Want the full compliance report for this session?</p>`
+        html: `<p>Peak usage is high — most of their load is falling in on-peak windows. On a flat-rate plan they'd be paying around $180/month. They may be a good candidate for a rate plan review conversation.</p>`
       }
     ],
     nextPills: [
-      "Show me the compliance report for this session"
-    ]
-  },
-  {
-    pill: "Show me the compliance report for this session",
-    user: "Show me the compliance report for this session.",
-    delay: 700,
-    response: [
-      {
-        type: "tool",
-        name: "report_agent_execution",
-        args: `agent:   billing-search-v1\nsession: current`
-      },
-      {
-        type: "report"
-      },
-      {
-        type: "text",
-        html: `<p>Clean session. The agent attempted one blocked operation (embed on a PII table), redirected to an approved alternative, and logged the final access. All guardrails enforced correctly.</p>`
-      }
-    ],
-    nextPills: [
-      "Try dropping a table to see the mutation block",
+      "Which other accounts are on Time-of-Use with high peak usage?",
       "Start over"
     ]
   },
   {
-    pill: "Try dropping a table to see the mutation block",
-    user: "Let's see what happens if I try to run <code>DROP TABLE explain_my_bill.old_staging</code>.",
-    delay: 400,
+    pill: "Which other accounts are on Time-of-Use with high peak usage?",
+    user: "Which other accounts are on Time-of-Use with high peak usage?",
+    delay: 750,
     response: [
       {
-        type: "verdict",
-        level: "blocked",
-        label: "BLOCKED — before warehouse connection"
+        type: "guard",
+        text: "Skipping the customers table — joining billing history to rate schedules directly instead."
       },
       {
         type: "text",
-        html: `<p>That was stopped by the SQL guardrail before any warehouse connection was made.</p>
-<p>Mutation statements — <code>DROP</code>, <code>DELETE</code>, <code>ALTER</code>, <code>INSERT</code>, <code>UPDATE</code>, <code>MERGE</code>, <code>GRANT</code>, <code>REVOKE</code> — are unconditionally blocked through this service regardless of UC permissions. No exceptions, no overrides.</p>
-<p>The guardrail also strips SQL comments before checking, so patterns like <code>/* allowed */ DROP TABLE</code> don't bypass it.</p>`
+        html: `<p>2 Time-of-Use accounts with above-average peak charges this month:</p>`
+      },
+      {
+        type: "table",
+        columns: ["Account", "Peak kWh", "Peak Charge", "% of Bill"],
+        rows: [
+          ["CUST-0008", "1,842 kWh", "$312.40", "68%"],
+          ["CUST-0003", "1,204 kWh", "$198.70", "61%"],
+        ]
+      },
+      {
+        type: "text",
+        html: `<p>Both accounts are spending over 60% of their bill on peak usage. These are your best candidates for a demand response or rate plan conversation this month.</p>`
       }
     ],
     nextPills: [
@@ -700,89 +471,62 @@ const SCRIPT = [
   }
 ];
 
-// ─────────────────────────────────────────────
-// State
-// ─────────────────────────────────────────────
+// ── Engine ──────────────────────────────────────────
 
-let step = 0;
 let busy = false;
 
-// ─────────────────────────────────────────────
-// Render helpers
-// ─────────────────────────────────────────────
-
-function renderMessages() {
-  const container = document.getElementById('messages');
-  container.innerHTML = '';
-}
-
-function appendUserMsg(html) {
-  const container = document.getElementById('messages');
+function appendUserMsg(text) {
+  const c = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg user';
-  el.innerHTML = `<div class="bubble">${html}</div>`;
-  container.appendChild(el);
+  el.innerHTML = `<div class="bubble">${text}</div>`;
+  c.appendChild(el);
   scrollBottom();
 }
 
 function appendAssistantMsg(parts) {
-  const container = document.getElementById('messages');
+  const c = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg assistant';
 
-  let bodyHTML = '';
-  for (const part of parts) {
-    if (part.type === 'tool') {
-      bodyHTML += `
-        <div class="tool-call">
-          <div class="tool-call-header">
-            <span>⚙</span> ${part.name}
-            <span class="chevron" style="margin-left:auto">▸ result</span>
-          </div>
-          <div class="tool-call-body">${part.args}</div>
-        </div>`;
-    } else if (part.type === 'verdict') {
-      const cls = part.level === 'blocked' ? 'blocked' : part.level === 'warning' ? 'warning' : 'proceed';
-      const icon = cls === 'blocked' ? '⛔' : cls === 'warning' ? '⚠️' : '✓';
-      bodyHTML += `<div class="verdict ${cls}">${icon} ${part.label}</div>`;
-    } else if (part.type === 'text') {
-      bodyHTML += part.html;
-    } else if (part.type === 'table') {
-      const headers = part.columns.map(c => `<th>${c}</th>`).join('');
-      const rows = part.rows.map(r =>
-        `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`
-      ).join('');
-      bodyHTML += `
-        <div class="table-wrap">
-          <table class="data-table">
-            <thead><tr>${headers}</tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        </div>
-        <div class="table-meta">Showing 5 of 10 rows sampled · 51,204 total rows</div>`;
-    } else if (part.type === 'report') {
-      bodyHTML += `
-        <div class="report">
-          <div class="report-title">✓ Session Compliance Report — billing-search-v1</div>
-          <div class="report-row"><span class="label">Total tool calls</span><span class="value">5</span></div>
-          <div class="report-row"><span class="label">Blocked operations</span><span class="value">1 (embed on PII table)</span></div>
-          <div class="report-row"><span class="label">Mutations attempted</span><span class="value">0</span></div>
-          <div class="report-row"><span class="label">SQL mutations blocked</span><span class="value">0</span></div>
-          <div class="report-row"><span class="label">Data accesses logged</span><span class="value">1</span></div>
-          <div class="report-row"><span class="label">Active violations at access time</span><span class="value">0</span></div>
-          <div class="report-row"><span class="label">Overall status</span><span class="value">COMPLIANT</span></div>
-        </div>`;
+  let html = '';
+  for (const p of parts) {
+    if (p.type === 'guard') {
+      html += `<div class="guard-notice"><span class="icon">🔒</span><span>${p.text}</span></div>`;
+    } else if (p.type === 'text') {
+      html += `<div class="body-text">${p.html}</div>`;
+    } else if (p.type === 'table') {
+      const heads = p.columns.map(c => `<th>${c}</th>`).join('');
+      const rows  = p.rows.map(r => {
+        const cells = r.map((cell, i) => {
+          const cls = r[r.length-1] === 'overdue' && i < r.length-1 ? ' class="overdue"' :
+                      i === r.length-2 && r[r.length-1] === 'overdue' ? ' class="overdue"' : '';
+          return `<td${i === 1 && r[r.length-1] === 'overdue' ? '' : ''}>${cell}</td>`;
+        });
+        // For status rows, mark whole row
+        if (r[r.length-1] === 'overdue') {
+          return `<tr>${r.slice(0,-1).map(c => `<td class="overdue">${c}</td>`).join('')}</tr>`;
+        }
+        return `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`;
+      }).join('');
+      html += `<div class="table-wrap"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}</tbody></table></div>`;
     }
   }
 
-  el.innerHTML = `<div class="avatar">🛡️</div><div class="body">${bodyHTML}</div>`;
-  container.appendChild(el);
+  el.innerHTML = `<div class="avatar">🛡️</div><div class="body">${html}</div>`;
+  // Fix: wrap loose text in body p tags
+  el.querySelectorAll('.body-text p').forEach(p => {
+    p.style.fontSize = '14px';
+    p.style.lineHeight = '1.6';
+    p.style.marginBottom = '8px';
+  });
+  c.appendChild(el);
   scrollBottom();
 }
 
-function setTyping(visible) {
-  document.getElementById('typing').className = visible ? 'typing visible' : 'typing';
-  if (visible) scrollBottom();
+function setTyping(v) {
+  document.getElementById('typing').className = v ? 'typing visible' : 'typing';
+  if (v) scrollBottom();
 }
 
 function scrollBottom() {
@@ -791,34 +535,25 @@ function scrollBottom() {
 }
 
 function renderPills(pills) {
-  const container = document.getElementById('suggestions');
-  container.innerHTML = '';
+  const c = document.getElementById('suggestions');
+  c.innerHTML = '';
   (pills || []).forEach(label => {
-    const btn = document.createElement('button');
-    btn.className = 'pill';
-    btn.textContent = label;
-    btn.onclick = () => triggerPill(label);
-    container.appendChild(btn);
+    const b = document.createElement('button');
+    b.className = 'pill';
+    b.textContent = label;
+    b.onclick = () => triggerPill(label);
+    c.appendChild(b);
   });
 }
-
-// ─────────────────────────────────────────────
-// Flow control
-// ─────────────────────────────────────────────
 
 function triggerPill(label) {
   if (busy) return;
   const s = SCRIPT.find(s => s.pill === label);
   if (!s) return;
-
-  if (s.action === 'reset') {
-    reset();
-    return;
-  }
+  if (s.action === 'reset') { reset(); return; }
 
   renderPills([]);
   appendUserMsg(s.user);
-  step++;
   busy = true;
 
   setTimeout(() => {
@@ -828,64 +563,45 @@ function triggerPill(label) {
       appendAssistantMsg(s.response);
       renderPills(s.nextPills || []);
       busy = false;
-    }, s.delay || 900);
-  }, 300);
+    }, s.delay);
+  }, 280);
 }
 
 function sendCurrent() {
-  const input = document.getElementById('input');
-  const text = input.value.trim();
+  const inp = document.getElementById('input');
+  const text = inp.value.trim();
   if (!text || busy) return;
-  input.value = '';
+  inp.value = '';
   appendUserMsg(text);
   busy = true;
   setTimeout(() => {
     setTyping(true);
     setTimeout(() => {
       setTyping(false);
-      appendAssistantMsg([{
-        type: 'text',
-        html: `<p>I can validate queries, preview tables, suggest safe alternatives, log agent actions, and generate compliance reports — all through the Watchdog Guardrails MCP. Use the suggested prompts below to walk through a live demo flow, or ask me anything about data access governance.</p>`
-      }]);
+      appendAssistantMsg([{ type: 'text', html: `<p>I can query billing history, usage data, and rate plans while keeping customer names and addresses protected. Use the suggestions below to try a guided flow, or ask me anything.</p>` }]);
       busy = false;
-    }, 700);
+    }, 650);
   }, 200);
 }
 
 function reset() {
-  step = 0;
   busy = false;
   document.getElementById('messages').innerHTML = '';
   renderPills([SCRIPT[0].pill]);
-
   setTimeout(() => {
-    appendAssistantMsg([{
-      type: 'text',
-      html: `<p>Connected to Watchdog Guardrails on fe-stable. I can help you validate queries before they run, find safe data alternatives, log agent actions, and generate compliance reports.</p>
-<p>Try embedding some data to see how the guardrails respond.</p>`
-    }]);
-  }, 300);
+    appendAssistantMsg([{ type: 'text', html: `<p>Connected to your billing data on fe-stable. I can answer questions about customers, usage, and billing — and I'll automatically work around any data that needs to stay protected.</p><p>What do you want to know?</p>` }]);
+  }, 250);
 }
 
-// ─────────────────────────────────────────────
-// Input auto-resize
-// ─────────────────────────────────────────────
-
-const inputEl = document.getElementById('input');
-inputEl.addEventListener('input', () => {
-  inputEl.style.height = 'auto';
-  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+// ── Init ──
+const inp = document.getElementById('input');
+inp.addEventListener('input', () => {
+  inp.style.height = 'auto';
+  inp.style.height = Math.min(inp.scrollHeight, 100) + 'px';
 });
-inputEl.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendCurrent();
-  }
+inp.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendCurrent(); }
 });
-
-// ─────────────────────────────────────────────
-// Init
-// ─────────────────────────────────────────────
 
 reset();
 </script>

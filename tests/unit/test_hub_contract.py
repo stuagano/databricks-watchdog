@@ -120,10 +120,10 @@ def _get_view_sql(mock_spark, view_fn):
     """Call a view function and return the CREATE VIEW SQL."""
     mock_spark.sql_calls.clear()
     view_fn(mock_spark, CATALOG, SCHEMA)
-    # Filter to only CREATE OR REPLACE VIEW statements
-    view_sqls = [s for s in mock_spark.sql_calls if "CREATE OR REPLACE VIEW" in s]
+    view_sqls = [s for s in mock_spark.sql_calls if "CREATE OR REPLACE VIEW" in s.upper()]
     assert len(view_sqls) == 1, (
-        f"Expected 1 CREATE VIEW from {view_fn.__name__}, got {len(view_sqls)}"
+        f"Expected exactly 1 CREATE OR REPLACE VIEW from {view_fn.__name__}, "
+        f"got {len(view_sqls)} (total SQL calls: {len(mock_spark.sql_calls)})"
     )
     return view_sqls[0]
 
@@ -182,14 +182,19 @@ class TestViewColumnsMatchContract:
         "v_dq_monitoring_coverage",
     ])
     def test_view_columns_present_in_sql(self, mock_spark, contract, view_name):
-        """Every contract column name must appear in the view SQL."""
+        """Every contract column name must appear in the view SQL SELECT clause."""
         view_fn = VIEW_FN_MAP[view_name]
         sql = _get_view_sql(mock_spark, view_fn)
         contract_columns = [c["name"] for c in contract["views"][view_name]["columns"]]
 
+        # Extract SELECT clause only (between SELECT and first FROM)
+        import re as _re
+        select_match = _re.search(r'\bSELECT\b(.+?)\bFROM\b', sql, _re.DOTALL | _re.IGNORECASE)
+        select_clause = select_match.group(1).lower() if select_match else sql.lower()
+
         for col_name in contract_columns:
-            assert col_name in sql.lower(), (
-                f"{view_name}: contract column '{col_name}' not found in view SQL"
+            assert col_name in select_clause, (
+                f"{view_name}: contract column '{col_name}' not found in SELECT clause"
             )
 
 

@@ -131,5 +131,5 @@ def get_resource_governance(
 
 
 def _esc(value: str) -> str:
-    """Escape single quotes for SQL."""
-    return value.replace("'", "''")
+    """Escape single quotes and backticks for SQL interpolation."""
+    return value.replace("'", "''").replace("`", "``")

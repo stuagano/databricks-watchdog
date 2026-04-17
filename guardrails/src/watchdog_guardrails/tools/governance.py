@@ -603,6 +603,12 @@ async def _preview_data(w, config, args):
         if set(re.findall(r'\b[A-Z_]+\b', where_check.upper())) & dangerous or ';' in where_check:
             return [TextContent(type="text", text=json.dumps({"error": "WHERE clause contains forbidden keywords."}, indent=2))]
 
+    if columns:
+        for col in columns:
+            if not re.match(r'^[a-zA-Z0-9_]+$', col):
+                return [TextContent(type="text", text=json.dumps(
+                    {"error": f"Invalid column name: {col}"}, indent=2
+                ))]
     col_clause = ", ".join(f"`{_esc(c)}`" for c in columns) if columns else "*"
     where_clause = f"WHERE {where}" if where else ""
     query = f"SELECT {col_clause} FROM `{_esc(table_name)}` {where_clause} LIMIT {limit}"

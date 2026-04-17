@@ -3,3 +3,9 @@ command: ["uvicorn", "watchdog_guardrails.server:app", "--host", "0.0.0.0", "--p
 env:
   - name: WATCHDOG_SCHEMA
     value: "platform.watchdog"
+  # Required: set these at deployment time via Databricks Apps environment settings
+  # or override here with deployment-specific values
+  - name: DATABRICKS_WAREHOUSE_ID
+    value: ""
+  - name: DATABRICKS_CATALOG
+    value: ""

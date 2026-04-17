@@ -378,86 +378,50 @@ const SCRIPT = [
   {
     pill: "Which customers have overdue bills right now?",
     user: "Which customers have overdue bills right now?",
-    delay: 950,
-    response: [
-      {
-        type: "guard",
-        text: "The customers table includes names and home addresses — I can't query it directly. Pulling the same answer from billing records instead."
-      },
-      {
-        type: "text",
-        html: `<p>Found 3 overdue accounts:</p>`
-      },
-      {
-        type: "table",
-        columns: ["Account", "Month", "Amount Due", "Status"],
-        rows: [
-          ["CUST-0008", "March 2026", "$458.70", "overdue"],
-          ["CUST-0004", "March 2026", "$419.10", "overdue"],
-          ["CUST-0008", "February 2026", "$399.30", "overdue"],
-        ]
-      },
-      {
-        type: "text",
-        html: `<p>CUST-0008 is two months behind — $858 outstanding. Want me to pull their rate plan and usage to see what's driving it?</p>`
-      }
-    ],
-    nextPills: [
-      "Yes — show me their usage and rate plan",
-      "How does CUST-0008's bill compare to similar accounts?"
-    ]
-  },
-  {
-    pill: "Yes — show me their usage and rate plan",
-    user: "Yes — show me their usage and rate plan.",
-    delay: 800,
-    response: [
-      {
-        type: "text",
-        html: `<p>CUST-0008 is on the <strong>Time-of-Use Residential</strong> plan. Their last two bills:</p>`
-      },
-      {
-        type: "table",
-        columns: ["Month", "Total kWh", "Peak Charge", "Off-Peak Charge", "Amount Due"],
-        rows: [
-          ["March 2026", "1,842 kWh", "$312.40", "$94.50", "$458.70"],
-          ["Feb 2026",   "1,690 kWh", "$278.10", "$79.20", "$399.30"],
-        ]
-      },
-      {
-        type: "text",
-        html: `<p>Peak usage is high — most of their load is falling in on-peak windows. On a flat-rate plan they'd be paying around $180/month. They may be a good candidate for a rate plan review conversation.</p>`
-      }
-    ],
-    nextPills: [
-      "Which other accounts are on Time-of-Use with high peak usage?",
-      "Start over"
-    ]
-  },
-  {
-    pill: "Which other accounts are on Time-of-Use with high peak usage?",
-    user: "Which other accounts are on Time-of-Use with high peak usage?",
     delay: 750,
     response: [
       {
         type: "guard",
-        text: "Skipping the customers table — joining billing history to rate schedules directly instead."
-      },
-      {
-        type: "text",
-        html: `<p>2 Time-of-Use accounts with above-average peak charges this month:</p>`
+        text: "Customer names are protected — pulling from billing records instead."
       },
       {
         type: "table",
-        columns: ["Account", "Peak kWh", "Peak Charge", "% of Bill"],
+        columns: ["Account", "Amount Due", "Months Overdue"],
         rows: [
-          ["CUST-0008", "1,842 kWh", "$312.40", "68%"],
-          ["CUST-0003", "1,204 kWh", "$198.70", "61%"],
+          ["CUST-0008", "$858.00", "2", "overdue"],
+          ["CUST-0004", "$419.10", "1", "overdue"],
         ]
       },
       {
         type: "text",
-        html: `<p>Both accounts are spending over 60% of their bill on peak usage. These are your best candidates for a demand response or rate plan conversation this month.</p>`
+        html: `<p>CUST-0008 is your most at-risk — two consecutive missed payments. Want me to look at what's driving the bill?</p>`
+      }
+    ],
+    nextPills: [
+      "Yes — what's driving CUST-0008's bill?",
+      "Start over"
+    ]
+  },
+  {
+    pill: "Yes — what's driving CUST-0008's bill?",
+    user: "Yes — what's driving it?",
+    delay: 700,
+    response: [
+      {
+        type: "text",
+        html: `<p>They're on Time-of-Use pricing but 68% of their load falls in peak windows. At a flat rate they'd pay ~$180/month — they're paying $458.</p>`
+      },
+      {
+        type: "table",
+        columns: ["Month", "Peak Charge", "Total Bill"],
+        rows: [
+          ["March 2026", "$312.40", "$458.70"],
+          ["Feb 2026",   "$278.10", "$399.30"],
+        ]
+      },
+      {
+        type: "text",
+        html: `<p>Good candidate for a rate plan conversation.</p>`
       }
     ],
     nextPills: [

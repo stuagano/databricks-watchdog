@@ -10,6 +10,7 @@ Connect from Claude Code or any MCP client:
 
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 from typing import Any
 
@@ -114,7 +115,7 @@ def health():
 
 @app.get("/mcp/sse")
 async def sse_endpoint(request: Request):
-    session_id = f"session-{id(request)}"
+    session_id = str(uuid.uuid4())
     headers = dict(request.headers)
 
     _session_clients[session_id] = _get_user_client(headers)
@@ -122,11 +123,12 @@ async def sse_endpoint(request: Request):
 
     server = create_mcp_server(session_id)
 
-    async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
-        await server.run(streams[0], streams[1], server.create_initialization_options())
-
-    _session_clients.pop(session_id, None)
-    _session_users.pop(session_id, None)
+    try:
+        async with sse.connect_sse(request.scope, request.receive, request._send) as streams:
+            await server.run(streams[0], streams[1], server.create_initialization_options())
+    finally:
+        _session_clients.pop(session_id, None)
+        _session_users.pop(session_id, None)
 
 
 @app.post("/mcp/messages/")

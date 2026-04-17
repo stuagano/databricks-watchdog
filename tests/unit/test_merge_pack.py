@@ -1,6 +1,7 @@
 """Tests for scripts._merge_pack.merge_classes, merge_primitives, copy_policies."""
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from textwrap import dedent
 
@@ -264,3 +265,55 @@ class TestCopyPolicies:
 
         assert result == "updated"
         assert dest_file.read_bytes() == pack_file.read_bytes()
+
+
+# --------------------------------------------------------------------------
+# TestFullPackInstall
+# --------------------------------------------------------------------------
+
+
+class TestFullPackInstall:
+    def test_healthcare_pack_installs_cleanly(self, tmp_path: Path) -> None:
+        repo = Path(__file__).resolve().parent.parent.parent
+        pack_dir = repo / "library" / "healthcare"
+
+        engine_classes = tmp_path / "resource_classes.yml"
+        engine_prims = tmp_path / "rule_primitives.yml"
+
+        shutil.copy(repo / "engine" / "ontologies" / "resource_classes.yml", engine_classes)
+        shutil.copy(repo / "engine" / "ontologies" / "rule_primitives.yml", engine_prims)
+
+        # --- First pass: merge classes ---
+        added_c, skipped_c = merge_classes(pack_dir / "ontology_classes.yml", engine_classes, "healthcare")
+        assert len(added_c) > 0
+
+        pack_classes = _read_yaml(pack_dir / "ontology_classes.yml").get("derived_classes", {})
+        result_classes = _read_yaml(engine_classes).get("derived_classes", {})
+        for key in pack_classes:
+            assert key in result_classes, f"Pack class {key!r} not found in merged engine file"
+
+        # --- First pass: merge primitives ---
+        added_p, skipped_p = merge_primitives(pack_dir / "rule_primitives.yml", engine_prims, "healthcare")
+        assert len(added_p) > 0
+
+        pack_prims = _read_yaml(pack_dir / "rule_primitives.yml").get("primitives", {})
+        result_prims = _read_yaml(engine_prims).get("primitives", {})
+        for key in pack_prims:
+            assert key in result_prims, f"Pack primitive {key!r} not found in merged engine file"
+
+        # --- First pass: copy policies ---
+        policy_dest = tmp_path / "healthcare.yml"
+        result_copy = copy_policies(pack_dir / "policies.yml", policy_dest)
+        assert result_copy == "copied"
+
+        # --- Idempotency: second pass ---
+        added_c2, skipped_c2 = merge_classes(pack_dir / "ontology_classes.yml", engine_classes, "healthcare")
+        assert added_c2 == []
+        assert len(skipped_c2) == len(pack_classes)
+
+        added_p2, skipped_p2 = merge_primitives(pack_dir / "rule_primitives.yml", engine_prims, "healthcare")
+        assert added_p2 == []
+        assert len(skipped_p2) == len(pack_prims)
+
+        result_copy2 = copy_policies(pack_dir / "policies.yml", policy_dest)
+        assert result_copy2 == "skipped"

@@ -364,7 +364,7 @@ async def _search_tables_by_tag(w, config, args):
     where = " AND ".join(where_parts)
 
     if catalog:
-        if not re.match(r'^[\w-]+$', catalog):
+        if not re.match(r'^[a-zA-Z0-9_-]+$', catalog):
             return [TextContent(type="text", text=json.dumps({"error": f"Invalid catalog name: {catalog}"}, indent=2))]
         query = f"SELECT catalog_name, schema_name, table_name, tag_name, tag_value FROM `{catalog}`.information_schema.table_tags WHERE {where} ORDER BY schema_name, table_name"
     else:
@@ -595,8 +595,12 @@ async def _preview_data(w, config, args):
     _parse_table_name(table_name)
 
     if where:
+        # Strip SQL comments before checking for dangerous keywords
+        _block = re.compile(r'/\*.*?\*/', re.DOTALL)
+        _line = re.compile(r'--[^\n]*')
+        where_check = _line.sub(' ', _block.sub(' ', where))
         dangerous = {"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "CREATE", "MERGE", "TRUNCATE", "GRANT", "REVOKE"}
-        if set(re.findall(r'\b[A-Z_]+\b', where.upper())) & dangerous or ';' in where:
+        if set(re.findall(r'\b[A-Z_]+\b', where_check.upper())) & dangerous or ';' in where_check:
             return [TextContent(type="text", text=json.dumps({"error": "WHERE clause contains forbidden keywords."}, indent=2))]
 
     col_clause = ", ".join(f"`{_esc(c)}`" for c in columns) if columns else "*"

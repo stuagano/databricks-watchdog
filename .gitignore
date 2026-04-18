@@ -6,6 +6,13 @@ dist/
 build/
 .eggs/
 
+# Test / coverage artifacts
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.pytest_cache/
+
 # Virtual environments
 .venv/
 venv/

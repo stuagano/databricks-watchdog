@@ -19,6 +19,8 @@ from databricks.sdk import WorkspaceClient
 from databricks.sdk.service.catalog import SecurableType
 from pyspark.sql import SparkSession
 
+from watchdog.exceptions import CrawlError, TransientCrawlError
+
 
 @dataclass
 class CrawlResult:
@@ -239,9 +241,14 @@ class ResourceCrawler:
             primary_count = sum(1 for r in rows if r[2] == pt)
             count = primary_count if primary_count > 0 else len(rows)
             return CrawlResult(resource_type=resource_type, count=count), rows
+        except CrawlError as e:
+            return CrawlResult(resource_type=e.resource_type, count=0, errors=[str(e)]), []
         except Exception as e:
+            # SDK and Spark raise unstructured errors; wrap so downstream
+            # retry logic can distinguish transient from permanent failures.
             resource_type = fn.__name__.replace("_crawl_", "")
-            return CrawlResult(resource_type=resource_type, count=0, errors=[str(e)]), []
+            wrapped = TransientCrawlError(resource_type, str(e))
+            return CrawlResult(resource_type=resource_type, count=0, errors=[str(wrapped)]), []
 
     def _make_row(self, resource_type: str, resource_id: str,
                   resource_name: str, owner: Optional[str] = None,

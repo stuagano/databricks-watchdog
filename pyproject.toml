@@ -34,3 +34,70 @@ pythonpath = [
     "guardrails/src",
     "ontos-adapter/src",
 ]
+
+[tool.coverage.run]
+branch = true
+source = [
+    "engine/src/watchdog",
+    "mcp/src",
+    "guardrails/src",
+    "ontos-adapter/src",
+]
+omit = [
+    "*/tests/*",
+    "*/notebooks/*",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = false
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+
+[tool.mypy]
+python_version = "3.10"
+# Start permissive so the baseline passes, then tighten incrementally.
+# The goal is to catch obvious type errors without blocking CI on the
+# broad set of untyped SDK surfaces (pyspark, databricks-sdk).
+ignore_missing_imports = true
+follow_imports = "silent"
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_return_any = false
+check_untyped_defs = false
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+no_implicit_optional = true
+files = [
+    "engine/src/watchdog",
+]
+exclude = [
+    "engine/notebooks",
+    "tests",
+]
+
+[[tool.mypy.overrides]]
+module = [
+    "pyspark.*",
+    "databricks.*",
+    "delta.*",
+    "yaml",
+]
+ignore_missing_imports = true
+
+# Baseline tech debt: modules with pre-existing type errors.
+# New code must type-check; these should be fixed and removed from the list
+# incrementally rather than blocking the initial rollout.
+[[tool.mypy.overrides]]
+module = [
+    "watchdog.crawler",
+    "watchdog.ontology",
+    "watchdog.policy_loader",
+    "watchdog.rule_engine",
+    "watchdog.remediation.dispatcher",
+]
+ignore_errors = true

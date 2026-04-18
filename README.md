@@ -419,6 +419,8 @@ databricks bundle run watchdog_adhoc_scan -t my-workspace
 
 This crawls all resources (tables, volumes, jobs, clusters, warehouses, grants, service principals, agents, agent execution traces), classifies them via the ontology (28 classes), evaluates 46 policies, and writes violations. Takes 2-3 minutes.
 
+> **Multiple metastores?** The default scan covers the current workspace's metastore only. To scan several at once, see [Multi-metastore scanning](#multi-metastore-scanning) below — you'll set `WATCHDOG_METASTORE_IDS` and use the `crawl_all_metastores` entrypoint.
+
 ### Step 4: Check results
 
 ```sql

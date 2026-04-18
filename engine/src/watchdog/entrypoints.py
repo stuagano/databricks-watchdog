@@ -8,6 +8,7 @@ The evaluate and adhoc entrypoints now use the ontology-aware pipeline:
 """
 
 import argparse
+import sys
 
 from databricks.sdk import WorkspaceClient
 from pyspark.sql import SparkSession
@@ -85,9 +86,22 @@ def crawl():
     crawler = ResourceCrawler(spark, w, args.catalog, args.schema)
     results = crawler.crawl_all()
 
+    failed: list[str] = []
     for r in results:
         status = "OK" if not r.errors else f"ERROR: {r.errors}"
         print(f"  {r.resource_type}: {r.count} resources ({status})")
+        if r.errors:
+            failed.append(r.resource_type)
+
+    # Fail the workflow task when any resource type errored so operators don't
+    # mistake a partial scan for a successful one.
+    if failed:
+        print(
+            f"Crawl failed for {len(failed)} resource type(s): "
+            f"{', '.join(failed)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def evaluate():
@@ -220,9 +234,18 @@ def crawl_all_metastores():
     ] if args.metastore_ids else config.metastore_ids
 
     if not metastore_ids:
-        print("No metastore IDs configured. Falling back to single-metastore crawl.")
+        print(
+            "Watchdog: single-metastore mode — WATCHDOG_METASTORE_IDS not set "
+            "and --metastore-ids not provided. Falling back to crawl(). "
+            "To scan multiple metastores, set WATCHDOG_METASTORE_IDS=ms-1,ms-2."
+        )
         crawl()
         return
+
+    print(
+        f"Watchdog: multi-metastore mode — scanning {len(metastore_ids)} "
+        f"metastore(s): {', '.join(metastore_ids)}"
+    )
 
     spark = SparkSession.builder.getOrCreate()
     w = WorkspaceClient()
@@ -230,6 +253,7 @@ def crawl_all_metastores():
     from watchdog.crawler import ResourceCrawler
 
     total_resources = 0
+    failed: list[str] = []
     for metastore_id in metastore_ids:
         print(f"Scanning metastore {metastore_id}...")
         crawler = ResourceCrawler(spark, w, args.catalog, args.schema,
@@ -241,11 +265,21 @@ def crawl_all_metastores():
             status = "OK" if not r.errors else f"ERROR: {r.errors}"
             print(f"  {r.resource_type}: {r.count} resources ({status})")
             metastore_total += r.count
+            if r.errors:
+                failed.append(f"{metastore_id}:{r.resource_type}")
 
         print(f"  Metastore {metastore_id}: {metastore_total} resources")
         total_resources += metastore_total
 
     print(f"Scanned {len(metastore_ids)} metastores, {total_resources} resources")
+
+    if failed:
+        print(
+            f"Crawl failed for {len(failed)} metastore/resource pair(s): "
+            f"{', '.join(failed)}",
+            file=sys.stderr,
+        )
+        sys.exit(1)
 
 
 def adhoc():

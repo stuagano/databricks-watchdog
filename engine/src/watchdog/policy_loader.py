@@ -82,6 +82,10 @@ def load_yaml_policies(policies_dir: str | None = None) -> list[PolicyDefinition
             if not rule:
                 continue
 
+            compile_to = p.get("compile_to")
+            if compile_to is not None and not isinstance(compile_to, list):
+                compile_to = [compile_to]
+
             policies.append(PolicyDefinition(
                 policy_id=p["id"],
                 name=p["name"],
@@ -92,6 +96,7 @@ def load_yaml_policies(policies_dir: str | None = None) -> list[PolicyDefinition
                 remediation=p.get("remediation", ""),
                 rule=rule,
                 active=p.get("active", True),
+                compile_to=compile_to,
             ))
 
     return policies

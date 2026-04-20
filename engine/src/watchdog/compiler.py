@@ -94,8 +94,96 @@ class GuardrailsTarget:
         )
 
 
+class UCTagPolicyTarget:
+    """Compile a policy into a Unity Catalog tag policy spec.
+
+    UC tag policies are purely declarative: they state which tag keys
+    are required on which resource types, or which values a tag may
+    take. The platform rejects writes that violate the policy at
+    tag-set time — that's the runtime enforcement point.
+
+    Compile-down here is straightforward because the substrate has a
+    first-class API and no runtime code. The artifact is a JSON spec
+    the deployer turns into an API call; drift detection watches the
+    deployed object for out-of-band edits.
+
+    Config shape::
+
+        compile_to:
+          - target: uc_tag_policy
+            tag_key: data_steward
+            policy_type: required          # or 'allowed_values'
+            allowed_values: [dev, prod]    # required iff policy_type=allowed_values
+            resource_types: [table]        # defaults to [table]
+            scope:                         # optional — defaults to workspace-wide
+              catalog: main
+              schema: governance
+
+    Two policy_type options to start — 'required' covers the common
+    "prod tables must have a steward tag" intent, and 'allowed_values'
+    covers the "environment tag must be one of …" intent. Adding a
+    third (forbidden values) is trivial when a real policy needs it;
+    not speculatively built.
+    """
+    name = "uc_tag_policy"
+    _ALLOWED_TYPES = ("required", "allowed_values")
+
+    def compile(self, policy: PolicyDefinition, config: dict) -> EmittedArtifact:
+        tag_key = config.get("tag_key")
+        if not tag_key:
+            raise ValueError(
+                f"{policy.policy_id}: compile_to.uc_tag_policy.tag_key is required"
+            )
+
+        policy_type = config.get("policy_type", "required")
+        if policy_type not in self._ALLOWED_TYPES:
+            raise ValueError(
+                f"{policy.policy_id}: compile_to.uc_tag_policy.policy_type must be "
+                f"one of {self._ALLOWED_TYPES}, got {policy_type!r}"
+            )
+
+        allowed_values = config.get("allowed_values")
+        if policy_type == "allowed_values":
+            if not allowed_values or not isinstance(allowed_values, list):
+                raise ValueError(
+                    f"{policy.policy_id}: compile_to.uc_tag_policy.allowed_values "
+                    f"must be a non-empty list when policy_type=allowed_values"
+                )
+        elif allowed_values is not None:
+            # Guard against silently weaker emission: author probably meant
+            # policy_type=allowed_values but forgot to set it.
+            raise ValueError(
+                f"{policy.policy_id}: compile_to.uc_tag_policy.allowed_values is "
+                f"only valid when policy_type=allowed_values"
+            )
+
+        spec = {
+            "policy_id": policy.policy_id,
+            "name": policy.name,
+            "tag_key": tag_key,
+            "policy_type": policy_type,
+            "resource_types": sorted(config.get("resource_types", ["table"])),
+            "scope": config.get("scope"),
+            "severity": policy.severity,
+            "domain": policy.domain,
+            "description": policy.description.strip() or policy.name,
+        }
+        if policy_type == "allowed_values":
+            spec["allowed_values"] = sorted(allowed_values)
+
+        content = json.dumps(spec, sort_keys=True, indent=2) + "\n"
+        return EmittedArtifact(
+            policy_id=policy.policy_id,
+            target=self.name,
+            artifact_id=f"uc_tag_policy/{policy.policy_id}.json",
+            content=content,
+            emitted_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
 DEFAULT_REGISTRY: dict[str, CompileTarget] = {
     "guardrails": GuardrailsTarget(),
+    "uc_tag_policy": UCTagPolicyTarget(),
 }
 
 

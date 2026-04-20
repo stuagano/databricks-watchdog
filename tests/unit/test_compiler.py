@@ -8,6 +8,7 @@ import pytest
 from watchdog.compiler import (
     DEFAULT_REGISTRY,
     GuardrailsTarget,
+    UCTagPolicyTarget,
     artifact_hash,
     check_drift,
     compile_policies,
@@ -113,6 +114,94 @@ class TestGuardrailsTarget:
         assert check["severity"] == "critical"
         assert check["kind"] == "blocking"
         assert check["block_when"] == "classified=pii"
+
+
+class TestUCTagPolicyTarget:
+    def test_required_tag_policy(self):
+        target = UCTagPolicyTarget()
+        p = _policy("POL-STEWARD", name="Steward required")
+        artifact = target.compile(p, {
+            "target": "uc_tag_policy",
+            "tag_key": "data_steward",
+        })
+        spec = json.loads(artifact.content)
+        assert spec["tag_key"] == "data_steward"
+        assert spec["policy_type"] == "required"
+        assert spec["resource_types"] == ["table"]
+        assert "allowed_values" not in spec
+        assert artifact.artifact_id == "uc_tag_policy/POL-STEWARD.json"
+
+    def test_allowed_values_policy(self):
+        target = UCTagPolicyTarget()
+        p = _policy("POL-ENV")
+        artifact = target.compile(p, {
+            "target": "uc_tag_policy",
+            "tag_key": "environment",
+            "policy_type": "allowed_values",
+            "allowed_values": ["prod", "staging", "dev"],
+        })
+        spec = json.loads(artifact.content)
+        assert spec["policy_type"] == "allowed_values"
+        # Sorted for deterministic hashing.
+        assert spec["allowed_values"] == ["dev", "prod", "staging"]
+
+    def test_missing_tag_key_raises(self):
+        target = UCTagPolicyTarget()
+        with pytest.raises(ValueError, match="tag_key is required"):
+            target.compile(_policy("POL-1"), {"target": "uc_tag_policy"})
+
+    def test_invalid_policy_type_raises(self):
+        target = UCTagPolicyTarget()
+        with pytest.raises(ValueError, match="policy_type must be"):
+            target.compile(_policy("POL-1"), {
+                "target": "uc_tag_policy",
+                "tag_key": "x",
+                "policy_type": "forbidden",
+            })
+
+    def test_allowed_values_required_when_type_is_allowed_values(self):
+        target = UCTagPolicyTarget()
+        with pytest.raises(ValueError, match="non-empty list"):
+            target.compile(_policy("POL-1"), {
+                "target": "uc_tag_policy",
+                "tag_key": "x",
+                "policy_type": "allowed_values",
+            })
+
+    def test_allowed_values_rejected_for_required_type(self):
+        # Author set allowed_values but forgot to flip policy_type.
+        # Refuse rather than emit a silently weaker artifact.
+        target = UCTagPolicyTarget()
+        with pytest.raises(ValueError, match="only valid when"):
+            target.compile(_policy("POL-1"), {
+                "target": "uc_tag_policy",
+                "tag_key": "x",
+                "allowed_values": ["a"],
+            })
+
+    def test_deterministic_hash_for_same_input(self):
+        target = UCTagPolicyTarget()
+        p = _policy("POL-1")
+        config = {"target": "uc_tag_policy", "tag_key": "owner"}
+        a1 = target.compile(p, config)
+        a2 = target.compile(p, config)
+        assert artifact_hash(a1.content) == artifact_hash(a2.content)
+
+    def test_end_to_end_through_registry(self, tmp_path):
+        p = _policy("POL-TAG", compile_to=[{
+            "target": "uc_tag_policy",
+            "tag_key": "data_steward",
+            "resource_types": ["table", "schema"],
+        }])
+        artifacts = compile_policies([p])
+        assert len(artifacts) == 1
+        assert artifacts[0].target == "uc_tag_policy"
+
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+        assert [r.state for r in check_drift(manifest, out)] == ["in_sync"]
 
 
 class TestManifestAndDrift:

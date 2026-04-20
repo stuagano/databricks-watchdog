@@ -8,6 +8,7 @@ import pytest
 from watchdog.compiler import (
     DEFAULT_REGISTRY,
     GuardrailsTarget,
+    UCAbacTarget,
     UCTagPolicyTarget,
     artifact_hash,
     check_drift,
@@ -201,6 +202,94 @@ class TestUCTagPolicyTarget:
         manifest = tmp_path / "manifest.json"
         write_artifacts(artifacts, out)
         write_manifest(artifacts, manifest)
+        assert [r.state for r in check_drift(manifest, out)] == ["in_sync"]
+
+
+class TestUCAbacTarget:
+    def test_valid_mask_function_emits_artifact(self):
+        target = UCAbacTarget()
+        p = _policy("POL-PII-001", name="PII must be masked", severity="critical",
+                     applies_to="PIIColumn")
+        artifact = target.compile(p, {
+            "target": "uc_abac",
+            "mask_function": "main.governance.redact_pii",
+            "apply_when": "environment = prod",
+        })
+        spec = json.loads(artifact.content)
+        assert spec["policy_id"] == "POL-PII-001"
+        assert spec["name"] == "PII must be masked"
+        assert spec["mask_function"] == "main.governance.redact_pii"
+        assert spec["apply_when"] == "environment = prod"
+        assert spec["applies_to"] == "PIIColumn"
+        assert spec["severity"] == "critical"
+        assert artifact.artifact_id == "uc_abac/POL-PII-001.json"
+        assert artifact.target == "uc_abac"
+
+    def test_apply_when_omitted(self):
+        target = UCAbacTarget()
+        p = _policy("POL-1")
+        artifact = target.compile(p, {
+            "target": "uc_abac",
+            "mask_function": "cat.sch.fn",
+        })
+        spec = json.loads(artifact.content)
+        assert "apply_when" not in spec
+        assert spec["mask_function"] == "cat.sch.fn"
+
+    def test_missing_mask_function_raises(self):
+        target = UCAbacTarget()
+        with pytest.raises(ValueError, match="mask_function is required"):
+            target.compile(_policy("POL-1"), {"target": "uc_abac"})
+
+    def test_malformed_mask_function_one_part_raises(self):
+        target = UCAbacTarget()
+        with pytest.raises(ValueError, match="three-part"):
+            target.compile(_policy("POL-1"), {
+                "target": "uc_abac",
+                "mask_function": "redact_pii",
+            })
+
+    def test_malformed_mask_function_two_parts_raises(self):
+        target = UCAbacTarget()
+        with pytest.raises(ValueError, match="three-part"):
+            target.compile(_policy("POL-1"), {
+                "target": "uc_abac",
+                "mask_function": "schema.redact_pii",
+            })
+
+    def test_malformed_mask_function_four_parts_raises(self):
+        target = UCAbacTarget()
+        with pytest.raises(ValueError, match="three-part"):
+            target.compile(_policy("POL-1"), {
+                "target": "uc_abac",
+                "mask_function": "a.b.c.d",
+            })
+
+    def test_deterministic_hash_for_same_input(self):
+        target = UCAbacTarget()
+        p = _policy("POL-1")
+        config = {"target": "uc_abac", "mask_function": "cat.sch.fn"}
+        a1 = target.compile(p, config)
+        a2 = target.compile(p, config)
+        assert artifact_hash(a1.content) == artifact_hash(a2.content)
+
+    def test_end_to_end_through_registry(self, tmp_path):
+        p = _policy("POL-ABAC", compile_to=[{
+            "target": "uc_abac",
+            "mask_function": "main.governance.redact_pii",
+            "apply_when": "environment = prod",
+        }])
+        artifacts = compile_policies([p])
+        assert len(artifacts) == 1
+        assert artifacts[0].target == "uc_abac"
+
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+
+        emitted = json.loads((out / "uc_abac/POL-ABAC.json").read_text())
+        assert emitted["mask_function"] == "main.governance.redact_pii"
         assert [r.state for r in check_drift(manifest, out)] == ["in_sync"]
 
 

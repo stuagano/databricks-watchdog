@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -181,8 +182,71 @@ class UCTagPolicyTarget:
         )
 
 
+class UCAbacTarget:
+    """Compile a policy into a UC ABAC column mask spec.
+
+    UC column masks transform column values at query time via a UDF.
+    The artifact is a JSON spec the deployer turns into
+    ALTER TABLE ... SET COLUMN MASK API calls.
+
+    The compiler validates the mask function name is well-formed but
+    does not verify it exists — that is the deployer's responsibility.
+    The compiler stays pure: no SDK calls, deterministic output.
+
+    Config shape::
+
+        compile_to:
+          - target: uc_abac
+            mask_function: main.governance.redact_pii
+            apply_when: environment = prod
+
+    mask_function is a three-part UDF reference (catalog.schema.function).
+    apply_when is an optional human-readable scope note stored in the
+    artifact for deployer context.
+    """
+    name = "uc_abac"
+    _MASK_FUNCTION_RE = r"^\w+\.\w+\.\w+$"
+
+    def compile(self, policy: PolicyDefinition, config: dict) -> EmittedArtifact:
+        mask_function = config.get("mask_function")
+        if not mask_function:
+            raise ValueError(
+                f"{policy.policy_id}: compile_to.uc_abac.mask_function is required"
+            )
+
+        if not re.match(self._MASK_FUNCTION_RE, mask_function):
+            raise ValueError(
+                f"{policy.policy_id}: compile_to.uc_abac.mask_function must be a "
+                f"three-part name (catalog.schema.function), got {mask_function!r}"
+            )
+
+        spec: dict = {
+            "policy_id": policy.policy_id,
+            "name": policy.name,
+            "mask_function": mask_function,
+            "applies_to": policy.applies_to,
+            "severity": policy.severity,
+            "domain": policy.domain,
+            "description": policy.description.strip() or policy.name,
+        }
+
+        apply_when = config.get("apply_when")
+        if apply_when:
+            spec["apply_when"] = apply_when
+
+        content = json.dumps(spec, sort_keys=True, indent=2) + "\n"
+        return EmittedArtifact(
+            policy_id=policy.policy_id,
+            target=self.name,
+            artifact_id=f"uc_abac/{policy.policy_id}.json",
+            content=content,
+            emitted_at=datetime.now(timezone.utc).isoformat(),
+        )
+
+
 DEFAULT_REGISTRY: dict[str, CompileTarget] = {
     "guardrails": GuardrailsTarget(),
+    "uc_abac": UCAbacTarget(),
     "uc_tag_policy": UCTagPolicyTarget(),
 }
 

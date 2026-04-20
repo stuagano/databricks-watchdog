@@ -102,6 +102,10 @@ class PolicyDefinition:
     remediation: str
     rule: dict  # rule tree for the rule engine
     active: bool = True
+    # Opt-in compile-down: each entry declares a runtime target the policy
+    # should be emitted to (e.g. guardrails, uc_abac, uc_tag_policy, sdp).
+    # Policies without compile_to remain scan-only.
+    compile_to: list[dict] | None = None
 
 
 @dataclass

@@ -42,6 +42,14 @@ def _build_engine(spark: SparkSession, w: WorkspaceClient,
     has_ontology = (ontology_dir / "resource_classes.yml").exists()
     has_primitives = (ontology_dir / "rule_primitives.yml").exists()
 
+    # Detect compile-down manifest presence
+    try:
+        compile_dir = Path(__file__).parent.parent.parent / "compile_output"
+    except NameError:
+        compile_dir = Path(os.getcwd()) / "compile_output"
+    compile_manifest = compile_dir / "manifest.json"
+    has_compile = compile_manifest.exists()
+
     ontology = OntologyEngine()
     rule_engine = RuleEngine()
     yaml_policies = load_yaml_policies()
@@ -62,12 +70,17 @@ def _build_engine(spark: SparkSession, w: WorkspaceClient,
               f"Using resource_type fallback. "
               f"{len(policies)} policies ({len(yaml_policies)} YAML + {len(user_policies)} user)")
 
-    return PolicyEngine(
-        spark, w, catalog, schema,
+    engine_kwargs = dict(
         ontology=ontology,
         rule_engine=rule_engine,
         policies=policies,
     )
+    if has_compile:
+        engine_kwargs["compile_manifest_path"] = str(compile_manifest)
+        engine_kwargs["compile_output_dir"] = str(compile_dir)
+        print(f"Watchdog: compile-down enabled — manifest at {compile_manifest}")
+
+    return PolicyEngine(spark, w, catalog, schema, **engine_kwargs)
 
 
 def crawl():

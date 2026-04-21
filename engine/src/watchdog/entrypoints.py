@@ -43,6 +43,64 @@ def format_compile_summary(
     )
 
 
+def compile():
+    """Entrypoint: compile policies to runtime enforcement artifacts.
+
+    Loads policies, runs the compiler for any with compile_to blocks,
+    writes artifacts + manifest to compile_output/, runs drift detection,
+    and prints a summary.
+    """
+    import os
+    from pathlib import Path
+
+    from watchdog.compiler import (
+        check_drift,
+        compile_policies,
+        write_artifacts,
+        write_manifest,
+    )
+    from watchdog.policy_loader import load_delta_policies, load_yaml_policies
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", required=True)
+    parser.add_argument("--schema", required=True)
+    args = parser.parse_args()
+
+    spark = SparkSession.builder.getOrCreate()
+
+    # Load policies
+    yaml_policies = load_yaml_policies()
+    user_policies = load_delta_policies(spark, args.catalog, args.schema)
+    policies = yaml_policies + user_policies
+
+    compilable = [p for p in policies if p.compile_to]
+    print(f"Loaded {len(policies)} policies ({len(compilable)} with compile_to)")
+
+    # Compile
+    artifacts = compile_policies(policies)
+
+    if not artifacts:
+        print(format_compile_summary([], []))
+        return
+
+    # Resolve output directory
+    try:
+        compile_dir = Path(__file__).parent.parent.parent / "compile_output"
+    except NameError:
+        compile_dir = Path(os.getcwd()) / "compile_output"
+
+    # Write artifacts + manifest
+    write_artifacts(artifacts, compile_dir)
+    manifest_path = compile_dir / "manifest.json"
+    write_manifest(artifacts, manifest_path)
+
+    # Drift detection
+    drift_results = check_drift(manifest_path, compile_dir)
+
+    # Summary
+    print(format_compile_summary(artifacts, drift_results))
+
+
 def _build_engine(spark: SparkSession, w: WorkspaceClient,
                   catalog: str, schema: str):
     """Build a PolicyEngine with all policies loaded.

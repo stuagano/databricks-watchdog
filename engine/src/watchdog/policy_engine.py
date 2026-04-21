@@ -331,6 +331,17 @@ class PolicyEngine:
         scan_results = []
 
         for policy in active_policies:
+            # Pre-compute compile-down artifact state (per-policy, not per-resource)
+            artifact_state = None
+            if policy.compile_to and self.compile_manifest_path and self.compile_output_dir:
+                from watchdog.compiler import get_policy_artifact_state
+                artifact_state = get_policy_artifact_state(
+                    policy.policy_id,
+                    policy.compile_to,
+                    self.compile_manifest_path,
+                    self.compile_output_dir,
+                )
+
             for resource in inventory:
                 # Check if this policy applies to this resource
                 if not self._policy_applies(policy, resource, resource_classes):
@@ -352,17 +363,7 @@ class PolicyEngine:
                 result = self.rule_engine.evaluate(policy.rule, tags, metadata)
 
                 result_str = "pass" if result.passed else "fail"
-
-                # Enrich with compile-down artifact state
-                if policy.compile_to and self.compile_manifest_path and self.compile_output_dir:
-                    from watchdog.compiler import get_policy_artifact_state
-                    artifact_state = get_policy_artifact_state(
-                        policy.policy_id,
-                        policy.compile_to,
-                        self.compile_manifest_path,
-                        self.compile_output_dir,
-                    )
-                    result_str = self._enrich_result(result_str, artifact_state)
+                result_str = self._enrich_result(result_str, artifact_state)
 
                 scan_results.append((
                     scan_id,

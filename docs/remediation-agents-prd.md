@@ -1,7 +1,7 @@
 # PRD: Agentic Remediation Framework for Unity Catalog Governance
 
 **Working title:** Watchdog Remediation Agents (a.k.a. "Watchdog Autopilot")
-**Status:** Future direction — not yet implemented. All Watchdog roadmap phases (1-5F) are complete; this represents a potential Phase 6.
+**Status:** Core remediation pipeline is implemented (dispatcher, proposal review queue, applier with dry-run, verifier, 4 reference agents). This PRD informed the design; see `engine/src/watchdog/remediation/` for the implementation.
 **Owner:** TBD
 **Last updated:** 2026-04-13
 **Reference:** [7-Eleven's AI documentation migration on Databricks](https://www.databricks.com/blog/automating-data-documentation-ai-how-7-eleven-bridged-metadata-gap)

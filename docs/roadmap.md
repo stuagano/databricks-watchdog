@@ -118,7 +118,7 @@ All capabilities below are implemented and operational.
 - **Declarative rule engine** — 16 rule types including composable operators (`all_of`, `any_of`, `if_then`), metadata checks (`metadata_gte`, `metadata_lte`), and `drift_check` for expected-state comparison
 - **Violation lifecycle** — open → resolved/exception, deduplication, owner attribution, per-owner digests, `remediation_status` integration
 - **Compliance trend tracking** — `scan_summary` table + `v_compliance_trend` view with LAG() deltas and rolling averages
-- **14 compliance views** — domain compliance, class compliance, resource compliance, tag policy coverage, data classification summary, DQ monitoring coverage, agent inventory, agent execution compliance, agent risk heatmap, AI Gateway cost governance, cross-metastore compliance/inventory
+- **14 compliance views** — domain compliance, class compliance, resource compliance, tag policy coverage, data classification summary, DQ monitoring coverage, compliance trend, agent inventory, agent execution compliance, agent risk heatmap, agent remediation priorities, AI Gateway cost governance, cross-metastore compliance/inventory
 - **4 remediation views** — remediation funnel, agent performance, proposal outcomes
 - **Multi-metastore support** — `metastore_id` on all tables, `crawl_all_metastores()` entrypoint, cross-metastore views
 - **CDF enabled** on `resource_inventory` (with deletion vectors)
@@ -148,7 +148,7 @@ Build-time: `validate_table_usage`, `discover_governed_assets`, `check_policy_co
 GovernanceProvider protocol + WatchdogProvider implementation. Reads classification + violation data for governance views. Multi-metastore aware.
 
 ### Genie Space
-Deployed with 27 tables (all 13 compliance views + UC system tables + `system.serving.endpoint_usage`). 5 agent SQL datasets. Instructions cover agent governance concepts, risk tiers, common agent questions.
+Deployed with 27+ tables (compliance and remediation views + UC system tables + `system.serving.endpoint_usage`). 5 agent SQL datasets. Instructions cover agent governance concepts, risk tiers, common agent questions.
 
 ### Industry Policy Packs
 - `library/healthcare/` — HIPAA (PHI stewardship, access logging, encryption)

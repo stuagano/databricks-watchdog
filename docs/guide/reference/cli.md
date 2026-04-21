@@ -78,7 +78,7 @@ python -m watchdog.entrypoints evaluate \
    - Pass 2: Evaluate each policy against matching resources.
    - Writes to `scan_results` (append-only) and `violations` (MERGE).
    - Writes to `scan_summary` (append-only).
-4. Refreshes all 14 compliance views.
+4. Refreshes all 18 compliance and remediation views.
 
 **Output:**
 

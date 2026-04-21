@@ -4,7 +4,7 @@ After running a scan and evaluate, Watchdog's Delta tables and compliance views 
 
 ## Compliance Views
 
-The evaluate step creates 14 compliance views in the Watchdog schema. These views join and aggregate across the core tables to provide ready-made analytical surfaces:
+The evaluate step creates 18 compliance and remediation views in the Watchdog schema. These views join and aggregate across the core tables to provide ready-made analytical surfaces:
 
 | View | Description |
 |---|---|
@@ -49,12 +49,12 @@ The repository includes pre-built Lakeview dashboard definitions that can be imp
 
 ## Option B: Genie Space
 
-A Genie space enables natural-language queries against Watchdog data. The space is configured with 27 tables: all 14 compliance views, the core Delta tables, and relevant UC system tables including `system.serving.endpoint_usage`.
+A Genie space enables natural-language queries against Watchdog data. The space is configured with 27+ tables: all compliance and remediation views, the core Delta tables, and relevant UC system tables including `system.serving.endpoint_usage`.
 
 ### Deploy Steps
 
 1. Run the Genie space deployment script (if provided in the repository) or create manually.
-2. Add all 14 `v_*` views and core tables from the Watchdog schema.
+2. Add all `v_*` views and core tables from the Watchdog schema.
 3. Add `system.serving.endpoint_usage` for agent execution context.
 4. Add instructions covering governance concepts, risk tiers, and common question patterns.
 

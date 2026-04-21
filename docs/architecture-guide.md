@@ -63,7 +63,7 @@
 │  ┌──────────┐  ┌───────────┐  ┌───────────┐  ┌────────┐  ┌────────┐ │
 │  │ Crawlers │  │ Ontology  │  │ Rule      │  │ Policy │  │Violatio│ │
 │  │ (16 types│  │ Engine    │  │ Engine    │  │ Engine │  │ns Merge│ │
-│  │ SDK +    │  │ 28 classes│  │ 15 rule   │  │ YAML + │  │ dedup  │ │
+│  │ SDK +    │  │ 31 classes│  │ 16 rule   │  │ YAML + │  │ dedup  │ │
 │  │ system   │  │ tag-based │  │ types     │  │ Delta  │  │ + life │ │
 │  │ tables)  │  │ hierarchy │  │ composable│  │ hybrid │  │ cycle  │ │
 │  └──────────┘  └───────────┘  └───────────┘  └────────┘  └────────┘ │
@@ -287,7 +287,7 @@ Databricks Foundation Model API endpoints (`databricks-*`) are platform infrastr
 
 ### Views: Not Materialized
 
-All 14 views are regular views. On tables with millions of rows, dashboard queries could be slow. Consider materializing the most-used views (`v_domain_compliance`, `v_agent_inventory`) if query latency becomes an issue.
+All 18 views (14 compliance + 4 remediation) are regular views. On tables with millions of rows, dashboard queries could be slow. Consider materializing the most-used views (`v_domain_compliance`, `v_agent_inventory`) if query latency becomes an issue.
 
 ---
 
@@ -452,4 +452,4 @@ A planned extension to the rule engine dispatch table. Unlike other rule types t
 
 ### Implementation Status
 
-The `drift_check` rule type is **designed but not yet implemented** in the rule engine. The integration contract (expected state JSON schema, policy format, volume path convention) is stable and can be used by external systems today — they produce the expected state file, and the drift_check evaluator will consume it once added to the dispatch table.
+The `drift_check` rule type is **implemented** in the rule engine dispatch table. It supports four check types: `grants`, `row_filters`, `column_masks`, and `group_membership`. Four drift policies are active: POL-DRIFT-001 through POL-DRIFT-004. External systems produce the expected state file, upload it to a UC volume, and the evaluator consumes it on the next scan.

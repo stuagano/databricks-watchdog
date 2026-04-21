@@ -75,11 +75,11 @@ databricks jobs run-now <JOB_ID> --profile my-workspace --no-wait
 **What happens:**
 1. Crawls 16 resource types (~2-3 min)
 2. Syncs YAML policies to Delta
-3. Classifies resources via ontology (28 classes)
-4. Evaluates 46 policies
+3. Classifies resources via ontology (31 classes)
+4. Evaluates 46+ policies
 5. Merges violations (dedup + lifecycle)
 6. Writes scan summary
-7. Refreshes 14 compliance views
+7. Refreshes 18 compliance and remediation views
 
 **Validate:**
 ```sql

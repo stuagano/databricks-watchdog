@@ -117,7 +117,7 @@ Five principles shape every architectural decision in Watchdog:
 |  +----------+  +-----------+  +-----------+  +--------+  +------------+  |
 |  | Crawlers |  | Ontology  |  | Rule      |  | Policy |  | Violations |  |
 |  | (16 types|  | Engine    |  | Engine    |  | Engine |  | Merge      |  |
-|  | SDK +    |  | 28 classes|  | 15 rule   |  | YAML + |  | dedup +    |  |
+|  | SDK +    |  | 31 classes|  | 16 rule   |  | YAML + |  | dedup +    |  |
 |  | system   |  | tag-based |  | types     |  | Delta  |  | lifecycle  |  |
 |  | tables)  |  | hierarchy |  | composable|  | hybrid |  |            |  |
 |  +----------+  +-----------+  +-----------+  +--------+  +------------+  |
@@ -135,7 +135,7 @@ Five principles shape every architectural decision in Watchdog:
 Four types of consumer read the data layer:
 
 - **Lakeview Dashboards.** SQL-based dashboards with 10 pages covering domain compliance, agent inventory, cost governance, and trends.
-- **Genie Space.** Natural-language governance queries backed by 27 tables (all 14 compliance views plus UC system tables and `system.serving.endpoint_usage`).
+- **Genie Space.** Natural-language governance queries backed by 27+ tables (compliance and remediation views plus UC system tables and `system.serving.endpoint_usage`).
 - **AI Assistants.** Claude, ChatGPT, or other assistants query governance posture through the Watchdog MCP server (13 tools).
 - **Autonomous AI Agents.** Agents building on the lakehouse call the Guardrails MCP for real-time access checks, action logging, and compliance reporting.
 
@@ -149,7 +149,7 @@ Three servers expose the data layer to different personas:
 
 ### Data Layer
 
-Eight core Delta tables and 14 compliance views. The engine writes to the core tables; consumers read from views that join and aggregate across tables. UC system tables provide source data that the engine crawls.
+Eleven Delta tables (8 core + 3 remediation) and 18 views (14 compliance + 4 remediation). The engine writes to the core tables; consumers read from views that join and aggregate across tables. UC system tables provide source data that the engine crawls.
 
 ### Engine
 

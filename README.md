@@ -661,7 +661,7 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 │  resource_inventory │ violations │ policies │ scan_summary    │
 │  resource_classifications │ exceptions │ scan_results         │
 │                                                               │
-│  + 14 compliance views  + UC system tables cross-joins         │
+│  + 18 compliance/remediation views + UC system table cross-joins│
 └──────────────────────────────────────────────────────────────┘
 ```
 

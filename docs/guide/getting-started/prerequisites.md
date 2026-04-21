@@ -8,7 +8,7 @@ Watchdog requires a Databricks workspace with Unity Catalog enabled. The followi
 
 - **Metastore** attached to the workspace.
 - **Catalog** for Watchdog tables (e.g., `my_catalog`). The engine creates tables and views in this catalog.
-- **Schema** within the catalog (e.g., `my_catalog.watchdog`). The engine creates all 8 tables and 14 views in this schema.
+- **Schema** within the catalog (e.g., `my_catalog.watchdog`). The engine creates all tables (8 core + 3 remediation) and 18 views in this schema.
 - **Unity Catalog grants**: the deploying identity needs `USE CATALOG`, `USE SCHEMA`, `CREATE TABLE`, and `CREATE VIEW` on the target catalog and schema.
 
 ### SQL Warehouse

@@ -58,7 +58,7 @@ Tier 3: AI Interface Layer
 
 Tier 2: Observability Layer
   Watchdog Engine -- daily scan producing Delta tables
-  14 compliance views -- domain compliance, agent inventory, trends
+  18 compliance + remediation views -- domain compliance, agent inventory, trends
   Violation lifecycle -- open / resolved / exception with MERGE dedup
 
 Tier 1: Control Plane (Databricks Platform)

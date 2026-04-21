@@ -30,23 +30,38 @@ python -m pytest tests/unit/test_drift.py -v
 
 ## End-of-Session Documentation Updates
 
-When a session makes code changes that affect documented features, update the corresponding docs before ending. The mapping is:
+When a session makes code changes that affect documented features, update the corresponding docs before ending. This applies to additions, removals, and renames equally.
+
+### What triggers a doc update
 
 | Change type | Doc to update |
 |---|---|
-| New/changed CLI entrypoint | `docs/guide/reference/cli.md` |
-| New ontology class | `docs/guide/reference/ontology-classes.md` |
-| New rule type | `docs/guide/reference/rule-types.md` |
-| New Delta table or column | `docs/guide/reference/tables.md` |
-| New policy field | `docs/guide/reference/policy-schema.md` |
-| New MCP tool (Watchdog) | `docs/guide/reference/mcp-tools.md` |
-| New MCP tool (Guardrails) | `docs/guide/reference/guardrails-tools.md` |
-| Feature completed or scope change | `docs/roadmap.md` |
+| Add/remove/rename CLI entrypoint | `docs/guide/reference/cli.md` |
+| Add/remove/rename ontology class | `docs/guide/reference/ontology-classes.md` |
+| Add/remove/rename rule type | `docs/guide/reference/rule-types.md` |
+| Add/remove/rename Delta table or column | `docs/guide/reference/tables.md` |
+| Add/remove/rename policy field | `docs/guide/reference/policy-schema.md` |
+| Add/remove/rename MCP tool (Watchdog) | `docs/guide/reference/mcp-tools.md` |
+| Add/remove/rename MCP tool (Guardrails) | `docs/guide/reference/guardrails-tools.md` |
+| Feature completed, dropped, or scope change | `docs/roadmap.md` |
 | Architectural change | `docs/architecture-guide.md` |
-| New crawler | `docs/guide/how-to/extend-crawlers.md` |
+| Add/remove crawler | `docs/guide/how-to/extend-crawlers.md` |
 | Drift detection changes | `docs/guide/how-to/drift-detection.md` |
 
-Update the "Last updated" date in any doc you modify. Skip trivial sessions (questions, exploration, no code changes).
+### Removal and rename hygiene
+
+When removing or renaming a feature, function, table, or entrypoint:
+
+1. **Delete the doc section** — don't leave stale references behind. A documented feature that no longer exists is worse than an undocumented feature that does.
+2. **Search for cross-references** — grep the docs/ directory for the old name. References in roadmap.md, architecture-guide.md, README.md, and how-to guides often mention specific function names, table names, or counts.
+3. **Update counts** — if a doc says "13 tools" or "16 rule types" and you removed one, fix the number.
+4. **Check the README** — it has hardcoded counts (class count, rule types, tool count, table count) that go stale when features are added or removed.
+
+### General rules
+
+- Update the "Last updated" date in any doc you modify.
+- Skip trivial sessions (questions, exploration, no code changes).
+- When in doubt, grep `docs/` for the name of whatever you changed — stale references hide in unexpected places.
 
 ## Conventions
 

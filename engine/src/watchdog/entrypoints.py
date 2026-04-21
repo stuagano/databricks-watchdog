@@ -14,6 +14,35 @@ from databricks.sdk import WorkspaceClient
 from pyspark.sql import SparkSession
 
 
+def format_compile_summary(
+    artifacts: list, drift_results: list
+) -> str:
+    """Format a terse compile summary for CLI output.
+
+    Args:
+        artifacts: List of EmittedArtifact from compile_policies().
+        drift_results: List of DriftResult from check_drift().
+    """
+    if not artifacts:
+        return "No policies with compile_to found. Nothing to compile."
+
+    policy_ids = {a.policy_id for a in artifacts}
+    target_counts: dict[str, int] = {}
+    for a in artifacts:
+        target_counts[a.target] = target_counts.get(a.target, 0) + 1
+    target_str = ", ".join(f"{count} {target}" for target, count in sorted(target_counts.items()))
+
+    drift_counts: dict[str, int] = {"in_sync": 0, "drifted": 0, "missing": 0}
+    for d in drift_results:
+        drift_counts[d.state] = drift_counts.get(d.state, 0) + 1
+    drift_str = ", ".join(f"{count} {state}" for state, count in drift_counts.items())
+
+    return (
+        f"Compiled {len(policy_ids)} policies → {len(artifacts)} artifacts "
+        f"({target_str}). Drift: {drift_str}."
+    )
+
+
 def _build_engine(spark: SparkSession, w: WorkspaceClient,
                   catalog: str, schema: str):
     """Build a PolicyEngine with all policies loaded.

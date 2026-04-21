@@ -17,6 +17,7 @@ setup(
             "watchdog-crawl=watchdog.entrypoints:crawl",
             "watchdog-crawl-all-metastores=watchdog.entrypoints:crawl_all_metastores",
             "watchdog-compile=watchdog.entrypoints:compile",
+            "watchdog-deploy=watchdog.entrypoints:deploy",
             "watchdog-evaluate=watchdog.entrypoints:evaluate",
             "watchdog-notify=watchdog.entrypoints:notify",
             "watchdog-adhoc=watchdog.entrypoints:adhoc",

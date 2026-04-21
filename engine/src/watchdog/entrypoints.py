@@ -101,6 +101,83 @@ def compile():
     print(format_compile_summary(artifacts, drift_results))
 
 
+def deploy():
+    """Entrypoint: deploy compiled artifacts to the workspace.
+
+    Reads the compile manifest, pushes each artifact to its target
+    platform substrate (UC tag policies, ABAC column masks), and
+    reports results. Guardrails artifacts are skipped (deployed via disk).
+    """
+    import json
+    import os
+    from pathlib import Path
+
+    from watchdog.compiler import load_manifest
+    from watchdog.deployer import deploy_artifacts
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--catalog", required=True)
+    parser.add_argument("--schema", required=True)
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Resolve targets but skip execution")
+    args = parser.parse_args()
+
+    spark = SparkSession.builder.getOrCreate()
+    w = WorkspaceClient()
+
+    # Resolve compile output directory
+    try:
+        compile_dir = Path(__file__).parent.parent.parent / "compile_output"
+    except NameError:
+        compile_dir = Path(os.getcwd()) / "compile_output"
+
+    manifest_path = compile_dir / "manifest.json"
+    if not manifest_path.exists():
+        print("No compile manifest found. Run watchdog-compile first.")
+        return
+
+    # Load manifest and read artifact content
+    entries = load_manifest(manifest_path)
+    if not entries:
+        print("Manifest is empty. Nothing to deploy.")
+        return
+
+    artifacts = []
+    for entry in entries:
+        artifact_path = compile_dir / entry["artifact_id"]
+        content = artifact_path.read_text() if artifact_path.exists() else "{}"
+        artifacts.append({
+            **entry,
+            "content": content,
+        })
+
+    mode = "(dry-run) " if args.dry_run else ""
+    print(f"{mode}Deploying {len(artifacts)} artifacts...")
+
+    results = deploy_artifacts(
+        artifacts, w=w, spark=spark,
+        catalog=args.catalog, schema=args.schema,
+        dry_run=args.dry_run,
+    )
+
+    # Summary
+    succeeded = sum(1 for r in results if r.success)
+    failed = sum(1 for r in results if not r.success)
+
+    for r in results:
+        status = "OK" if r.success else "FAIL"
+        print(f"  [{status}] {r.artifact_id}: {r.details or r.error or ''}")
+
+    suffix = " (dry-run)" if args.dry_run else ""
+    print(f"Deployed {succeeded}/{len(results)} artifacts ({failed} failed){suffix}.")
+
+    if [r for r in results if not r.success]:
+        print("Failures:")
+        for r in results:
+            if not r.success:
+                print(f"  {r.artifact_id}: {r.error}")
+
+
 def _build_engine(spark: SparkSession, w: WorkspaceClient,
                   catalog: str, schema: str):
     """Build a PolicyEngine with all policies loaded.

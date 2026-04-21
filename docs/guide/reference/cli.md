@@ -1,6 +1,6 @@
 # CLI Reference
 
-Watchdog provides four entrypoints that run as Databricks Workflow tasks. Each corresponds to a stage in the governance pipeline.
+Watchdog provides ten entrypoints that run as Databricks Workflow tasks. Each corresponds to a stage in the governance pipeline.
 
 ## watchdog-crawl
 
@@ -182,6 +182,90 @@ Refreshed compliance views
 
 ---
 
+## Compile-Down Pipeline
+
+### watchdog-compile
+
+Compiles policies with `compile_to` blocks into runtime enforcement artifacts (UC tag policies, ABAC column masks, guardrails configs). Writes artifacts and manifest to the `compile_output/` directory, then runs drift detection on compiled artifacts.
+
+```bash
+python -m watchdog.entrypoints compile \
+  --catalog <catalog> \
+  --schema <schema>
+```
+
+**Arguments:**
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--catalog` | Yes | | Unity Catalog name |
+| `--schema` | Yes | | Schema name |
+
+**Behavior:**
+
+1. Loads all policies (YAML + user-created from Delta).
+2. Filters to policies with `compile_to` blocks.
+3. Runs `compile_policies()` to emit artifacts for each target (UC tag policies, ABAC column masks, guardrails configs).
+4. Writes artifacts and a `manifest.json` to the `compile_output/` directory.
+5. Runs `check_drift()` against the manifest to detect in-sync, drifted, or missing artifacts.
+6. Prints a compile summary.
+
+**Output:**
+
+```
+Loaded 42 policies (6 with compile_to)
+Compiled 6 policies -> 12 artifacts (4 uc_tag_policy, 4 uc_abac, 4 guardrails). Drift: 10 in_sync, 1 drifted, 1 missing.
+```
+
+---
+
+### watchdog-deploy
+
+Deploys compiled artifacts to the workspace. Reads the compile manifest, pushes each artifact to its target platform substrate (UC tag policies, ABAC column masks). Guardrails artifacts are skipped (deployed via disk).
+
+```bash
+python -m watchdog.entrypoints deploy \
+  --catalog <catalog> \
+  --schema <schema> \
+  [--dry-run]
+```
+
+**Arguments:**
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--catalog` | Yes | | Unity Catalog name |
+| `--schema` | Yes | | Schema name |
+| `--dry-run` | No | false | Resolve targets but skip execution |
+
+**Behavior:**
+
+1. Reads the compile manifest from `compile_output/manifest.json`. Exits if no manifest found.
+2. Loads artifact content from the compile output directory.
+3. Calls `deploy_artifacts()` to push each artifact to its target platform substrate.
+4. In `--dry-run` mode, resolves targets and reports what would be deployed without executing.
+5. Prints per-artifact status and a summary with success/failure counts.
+
+**Output:**
+
+```
+Deploying 12 artifacts...
+  [OK] uc_tag_policy_pii_tagging: applied to catalog.schema
+  [OK] uc_abac_pii_mask: column mask created
+  [FAIL] guardrails_toxicity: skipped (disk-only)
+Deployed 10/12 artifacts (2 failed).
+```
+
+With `--dry-run`:
+
+```
+(dry-run) Deploying 12 artifacts...
+  [OK] uc_tag_policy_pii_tagging: would apply to catalog.schema
+Deployed 12/12 artifacts (0 failed) (dry-run).
+```
+
+---
+
 ## crawl-all-metastores
 
 Cross-metastore crawler that scans resources across multiple Unity Catalog metastores.
@@ -221,4 +305,119 @@ Scanning metastore ghi789-jkl012...
   ...
   Metastore ghi789-jkl012: 178 resources
 Scanned 2 metastores, 412 resources
+```
+
+---
+
+## Remediation Pipeline
+
+### watchdog-remediate
+
+Dispatches open violations to remediation agents. Reads violations with `status='open'`, dispatches each to the first agent whose `handles[]` matches its `policy_id`, and writes new proposals to `remediation_proposals` in status `pending_review`. Idempotent -- a violation that already has a proposal from the same agent version is skipped.
+
+```bash
+python -m watchdog.entrypoints remediate \
+  --catalog <catalog> \
+  --schema <schema> \
+  [--limit <n>]
+```
+
+**Arguments:**
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--catalog` | Yes | | Unity Catalog name |
+| `--schema` | Yes | | Schema name |
+| `--limit` | No | `500` | Max open violations to consider in one run |
+
+**Behavior:**
+
+1. Ensures `remediation_agents` and `remediation_proposals` tables exist.
+2. Registers all known agents (StewardAgent, ClusterTaggerAgent, DQMonitorScaffoldAgent, JobOwnerAgent).
+3. Reads up to `--limit` open violations ordered by severity.
+4. Loads existing proposal keys for idempotency checks.
+5. Dispatches each violation to the first matching agent via `dispatch_remediations()`.
+6. Writes new proposals to `remediation_proposals` table.
+7. Refreshes remediation views.
+
+**Output:**
+
+```
+Remediate: considered 45 violations -- dispatched 32 proposals, skipped 10, errors 3
+```
+
+---
+
+### watchdog-apply
+
+Applies approved remediation proposals by executing proposed SQL. Reads proposals with `status='approved'`, executes the SQL via Spark, and records each application in `remediation_applied`. Proposal status flips to `applied`.
+
+```bash
+python -m watchdog.entrypoints apply_approved_remediations \
+  --catalog <catalog> \
+  --schema <schema> \
+  [--dry-run] \
+  [--limit <n>]
+```
+
+**Arguments:**
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--catalog` | Yes | | Unity Catalog name |
+| `--schema` | Yes | | Schema name |
+| `--dry-run` | No | false | Preview what would be applied without executing SQL |
+| `--limit` | No | `100` | Max approved proposals to apply in one run |
+
+**Behavior:**
+
+1. Ensures `remediation_applied` table exists.
+2. Reads up to `--limit` approved proposals ordered by `created_at`.
+3. For each proposal, calls `apply_proposal()` to execute the proposed SQL.
+4. Records each application in `remediation_applied` with pre/post state and verify status.
+5. Flips proposal status to `applied` (skipped in `--dry-run` mode).
+
+**Output:**
+
+```
+Remediate-apply (applied): 18 proposals, 1 errors
+```
+
+With `--dry-run`:
+
+```
+Remediate-apply (dry-run): 18 proposals, 0 errors
+```
+
+---
+
+### watchdog-verify
+
+Verifies applied remediation proposals against the latest scan. Reads `remediation_applied` rows with `verify_status='pending'` and checks whether the corresponding violations resolved. Sets `verify_status` to `verified` or `verification_failed` and flips proposal status to `verified` when the violation is gone.
+
+```bash
+python -m watchdog.entrypoints verify_remediations \
+  --catalog <catalog> \
+  --schema <schema>
+```
+
+**Arguments:**
+
+| Argument | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `--catalog` | Yes | | Unity Catalog name |
+| `--schema` | Yes | | Schema name |
+
+**Behavior:**
+
+1. Reads `remediation_applied` rows where `verify_status = 'pending'`.
+2. Looks up the corresponding `violation_id` for each proposal.
+3. Checks whether those violations now have `status = 'resolved'` in the violations table.
+4. Updates `verify_status` to `verified` or `verification_failed`.
+5. Flips proposal status to `verified` for resolved violations.
+
+**Output:**
+
+```
+Verify: 14 verified, 2 failed
 ```

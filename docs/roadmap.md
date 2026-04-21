@@ -2,7 +2,7 @@
 
 > What Watchdog is, what it isn't, and what's built.
 >
-> Last updated: 2026-04-13
+> Last updated: 2026-04-21
 
 ## Identity
 
@@ -113,14 +113,16 @@ What's shipping natively and what it means for Watchdog scope:
 All capabilities below are implemented and operational.
 
 ### Core Engine
-- **12+ crawlers** — tables, views, volumes, models, functions, grants, service principals, agents, agent traces, and more via SDK + information_schema
-- **Ontology classification** — tag-based hierarchy with inheritance (e.g., `HipaaAsset → ConfidentialAsset → DataAsset`)
-- **Declarative rule engine** — composable rules (`all_of`, `any_of`, `if_then`, `metadata_gte`) with named reusable primitives
-- **Violation lifecycle** — open → resolved/exception, deduplication, owner attribution, per-owner digests
+- **16+ crawlers** — tables, views, volumes, models, functions, grants, service principals, agents, agent traces, row filters, column masks, group members, pipeline freshness, and more via SDK + information_schema
+- **Ontology classification** — tag-based hierarchy with inheritance (e.g., `HipaaAsset → ConfidentialAsset → DataAsset`), 8 base classes, 20+ derived classes
+- **Declarative rule engine** — 16 rule types including composable operators (`all_of`, `any_of`, `if_then`), metadata checks (`metadata_gte`, `metadata_lte`), and `drift_check` for expected-state comparison
+- **Violation lifecycle** — open → resolved/exception, deduplication, owner attribution, per-owner digests, `remediation_status` integration
 - **Compliance trend tracking** — `scan_summary` table + `v_compliance_trend` view with LAG() deltas and rolling averages
 - **14 compliance views** — domain compliance, class compliance, resource compliance, tag policy coverage, data classification summary, DQ monitoring coverage, agent inventory, agent execution compliance, agent risk heatmap, AI Gateway cost governance, cross-metastore compliance/inventory
-- **Multi-metastore support** — `metastore_id` on all 9 tables, `crawl_all_metastores()` entrypoint, cross-metastore views
+- **4 remediation views** — remediation funnel, agent performance, proposal outcomes
+- **Multi-metastore support** — `metastore_id` on all tables, `crawl_all_metastores()` entrypoint, cross-metastore views
 - **CDF enabled** on `resource_inventory` (with deletion vectors)
+- **10 CLI entrypoints** — crawl, evaluate, notify, adhoc, crawl-all-metastores, compile, deploy, remediate, apply, verify
 
 ### Access Governance
 - **Grants crawler** — `information_schema.*_privileges` + SDK `w.grants.get()` (catalog-level)
@@ -155,13 +157,69 @@ Deployed with 27 tables (all 13 compliance views + UC system tables + `system.se
 - `library/general/` — CIS benchmarks, data lifecycle, cost governance
 - Each pack: ontology classes + rule primitives + policies + dashboard SQL
 
-### Drift Detection (Extension Point)
-- **Design:** complete (see architecture guide, "Drift Detection Pattern" section)
-- **Implementation:** planned — `drift_check` rule type for the rule engine dispatch table
-- **Contract:** External systems produce `expected_state.json` → upload to UC volume → Watchdog evaluates against actual state
-- **Use cases:** permissions-as-code (RBAC/ABAC grant drift), IaC drift (Terraform state vs reality), compliance baselines
+### Drift Detection
+- **`drift_check` rule type** — implemented in the rule engine dispatch table, evaluates resources against externally declared expected state
+- **v1:** Grant drift detection (`POL-DRIFT-001`) — extra, missing, and modified grants
+- **v2:** Row filter drift (`POL-DRIFT-002`), column mask drift (`POL-DRIFT-003`), group membership drift (`POL-DRIFT-004`)
+- **Expected state loader** — reads `expected_state.json` from UC volume, injects into resource metadata for policy evaluation
+- **OPA bundle loader** — alternative expected state source for Open Policy Agent bundles
+- **New crawlers:** `_crawl_row_filters`, `_crawl_column_masks`, group member enrichment via `_crawl_groups`
+- **New ontology base classes:** `RowFilterAsset`, `ColumnMaskAsset`, `GroupMemberAsset`
 - **Key principle:** Watchdog detects drift but never remediates. External systems own expected state and remediation.
 - **Policy namespace:** External systems use `POL-PERM-*` or `POL-DRIFT-*` prefixes to avoid collisions with Watchdog's built-in `POL-A*`, `POL-AGENT-*` policies.
+
+### Remediation Pipeline
+- **Dispatcher** — routes open violations to the first matching remediation agent, idempotent (skips existing proposals)
+- **Protocol** — `RemediationAgent` protocol with `handles`, `version`, and `propose()` contract
+- **Tables:** `remediation_agents` (registry), `remediation_proposals` (proposals with status lifecycle), `remediation_applied` (execution audit trail)
+- **Review queue** — state machine: pending_review → approved/rejected → applied → verified
+- **Applier** — executes approved proposals with dry-run support
+- **Verifier** — batch verify against latest scan, rollback support
+- **4 compliance views** — remediation funnel, agent performance, proposal outcomes
+- **`remediation_status` column** on violations table for lifecycle integration
+- **Reference agents:**
+  - `StewardAgent` — assigns data steward tags (e2e tested)
+  - `ClusterTaggerAgent` — adds missing cost attribution tags
+  - `DQMonitorScaffoldAgent` — scaffolds data quality monitoring
+  - `JobOwnerAgent` — assigns job ownership
+- **CLI entrypoints:** `watchdog-remediate`, `watchdog-apply`, `watchdog-verify`
+
+### Review UI (Ontos Adapter)
+- **RemediationInbox** — split-panel review queue for approving/rejecting proposals
+- **RemediationDashboard** — funnel visualization, agent cards, reviewer table
+- **ProposalDiff** — before/after state comparison component
+- **FastAPI router** — 6 REST endpoints for review workflow
+- **GovernanceProvider** — remediation methods added to protocol
+
+### Compile-Down Pipeline
+- **Policy compiler** — policies with `compile_to` blocks compile to runtime enforcement artifacts
+- **Compile targets:**
+  - `uc_tag_policy` — Unity Catalog tag policies
+  - `uc_abac` — Unity Catalog ABAC column masks
+  - `guardrails` — Guardrails MCP configuration
+- **Manifest** — `compile_output/manifest.json` tracks all compiled artifacts with checksums
+- **Drift detection** — `check_drift()` compares manifest against on-disk artifacts (in_sync, drifted, missing)
+- **Scanner integration** — `get_policy_artifact_state()` enriches scan results with compile-down posture; `compliance_pct` weighted by artifact state
+- **Meta-violations** — PolicyEngine emits violations for drifted/missing compile-down artifacts
+- **Deployer** — `deploy_artifacts()` pushes compiled artifacts to UC (tag policies, ABAC column masks) with dry-run support
+- **CLI entrypoints:** `watchdog-compile`, `watchdog-deploy`
+
+### Hub Integration
+- **Hub contract YAML** — declared schema contracts for 6 compliance views consumed by the Governance Hub
+- **Hub contract integration tests** — validate view schemas match contracts
+- **Hub smoke test notebook** — post-deployment validation
+- **Delta policy persistence** — `sync_policies_to_delta()` for Hub view JOINs
+
+### Medallion Governance
+- **Bronze/Silver/Gold policies** — governance rules scoped to medallion layer classes
+- **Rule primitives** — medallion-specific reusable rule definitions
+- **`metadata_lte` rule type** — maximum threshold check (complement of `metadata_gte`)
+- **Pipeline freshness crawler** — enriches resources with system table pipeline data
+
+### Policy Pack Install
+- **`install_pack.sh`** — one-command policy pack installation for new customers
+- **YAML merge helper** — `merge_primitives()` and `copy_policies()` for non-destructive pack install
+- **E2e dry-run test** — validates healthcare pack install end-to-end
 
 ---
 
@@ -187,6 +245,14 @@ Items that are native platform territory — Watchdog does not build these:
 databricks-watchdog/
 ├── engine/                    # Core — ontology + rules + violations + crawlers
 │   ├── src/watchdog/          #   The compliance posture engine
+│   │   ├── compiler.py        #   Policy compile-down (compile_to → artifacts)
+│   │   ├── deployer.py        #   Artifact deployment to UC tag policies / ABAC
+│   │   ├── drift.py           #   Expected-state drift detection
+│   │   └── remediation/       #   Remediation pipeline package
+│   │       ├── dispatcher.py  #   Violation → agent routing
+│   │       ├── applier.py     #   Proposal execution (dry-run support)
+│   │       ├── verifier.py    #   Post-apply verification
+│   │       └── agents/        #   Reference remediation agents
 │   ├── ontologies/            #   Classification hierarchy + rule primitives
 │   ├── policies/              #   Governance policies by domain (YAML)
 │   ├── dashboards/            #   AI/BI dashboard SQL queries
@@ -196,12 +262,14 @@ databricks-watchdog/
 │   └── src/watchdog_mcp/      #   13 tools for AI assistants
 │
 ├── ontos-adapter/             # Pluggable governance module for Ontos
-│   └── src/watchdog_governance/  GovernanceProvider protocol + WatchdogProvider
+│   ├── src/watchdog_governance/  GovernanceProvider protocol + WatchdogProvider
+│   └── frontend/              #   Remediation review UI (React)
 │
 ├── guardrails/                # AI DevKit MCP — build-time governance for agents
 │   └── src/ai_devkit/         #   9 MCP tools + watchdog_client.py integration
 │
 ├── library/                   # Industry policy packs (HIPAA, SOX, NIST, etc.)
+├── scripts/                   # install_pack.sh, deployment helpers
 ├── terraform/                 # Infrastructure as Code
 ├── template/                  # Blank starting point for new customers
 ├── customer/                  # Worked example
@@ -225,3 +293,26 @@ Watchdog is succeeding if:
 9. An AI agent accessing PII is flagged before the query executes (runtime governance)
 10. A compliance officer can see "which agents accessed sensitive data this week" in one query
 11. Agent executions that violate governance policies produce tracked violations with the same lifecycle as data violations
+
+---
+
+## Backlog
+
+Future capabilities not yet built. Ordered by priority within each category.
+
+### Pipeline Governance
+- [ ] **SDP/DLT Expectations coverage policy** — Evaluate whether gold/silver tables have Spark Declarative Pipeline expectations defined. Watchdog doesn't create expectations (that's SDP's job), but it can answer: "which production tables are missing data quality expectations?" Policy: `IF gold_table OR silver_table THEN must have SDP expectations defined`. Requires crawler enrichment to detect DLT pipeline association and expectation presence per table. (Note: medallion governance and pipeline freshness crawler provide groundwork.)
+
+### Compile-Down Extensions
+- [ ] **UC row filter compile target** — Extend the compiler to emit row filter UDF definitions for ABAC enforcement
+- [ ] **OPA bundle compile target** — Emit Open Policy Agent bundles from Watchdog policies for external policy engines
+- [ ] **Compile-down CI integration** — GitHub Actions workflow to run `watchdog-compile` on PR and diff artifacts
+
+### Observability
+- [ ] **OpenTelemetry trace ingestion** — Read OTel traces from `system.serving` tables for deeper agent compliance monitoring (platform support GA as of Mar 2026)
+- [ ] **AI Gateway inference table integration** — Read inference tables for richer agent execution data alongside `endpoint_usage`
+
+### Remediation Extensions
+- [ ] **LLM-powered remediation agents** — Agents that use foundation models for complex remediation proposals (e.g., generating column mask UDFs)
+- [ ] **Remediation SLA tracking** — Time-to-remediate metrics per policy/domain/owner
+- [ ] **Slack/Teams integration for review workflow** — Notify reviewers of pending proposals via messaging

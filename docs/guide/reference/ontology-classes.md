@@ -30,6 +30,12 @@ GrantAsset
 ├── OverprivilegedGrant
 └── DirectUserGrant
 
+RowFilterAsset
+
+ColumnMaskAsset
+
+GroupMemberAsset
+
 AgentAsset
 ├── ManagedModelEndpoint
 ├── AgentWithPiiAccess
@@ -50,7 +56,12 @@ Base classes match on the `resource_type` field from the crawler. Every resource
 | `ComputeAsset` | job, cluster, warehouse, pipeline | Any compute resource |
 | `IdentityAsset` | user, group, service_principal | Users, groups, service principals |
 | `GrantAsset` | grant | Any grant (permission assignment) in Unity Catalog |
+| `RowFilterAsset` | row_filter | A Unity Catalog row filter applied to a table |
+| `ColumnMaskAsset` | column_mask | A Unity Catalog column mask applied to a table column |
+| `GroupMemberAsset` | group_member | A member of a workspace or account-level group |
 | `AgentAsset` | agent, agent_execution | AI agent or agent execution |
+
+`RowFilterAsset`, `ColumnMaskAsset`, and `GroupMemberAsset` currently have no derived classes. Resources matching these base classes are classified solely by their `resource_type`.
 
 ## Derived Classes: DataAsset
 

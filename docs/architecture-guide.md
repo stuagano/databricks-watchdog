@@ -2,12 +2,12 @@
 
 > How the components fit together, why the architecture looks this way, and what to know before modifying it.
 >
-> Last updated: 2026-04-13
+> Last updated: 2026-04-21
 
 ## Design Principles
 
 1. **Delta tables are the universal contract.** All consumers read the same tables. No consumer-specific APIs.
-2. **Watchdog is read-only.** It crawls and evaluates. It never writes tags, grants, or ABAC policies.
+2. **The engine is read-only; the deploy pipeline writes.** The core engine (crawl + evaluate) never modifies workspace resources. The compile-down deploy pipeline (`watchdog-deploy`) is the sole write path — it pushes compiled artifacts (UC tag policies, ABAC column masks) to the workspace. This separation is intentional: the engine can always run safely, and writes are explicit, auditable, and support dry-run.
 3. **Three integration surfaces, one data model.** Hub reads Delta for dashboards. Ontos reads via GovernanceProvider. Guardrails reads via `watchdog_client.py`.
 4. **MCP is the AI gateway.** AI assistants and agents query governance posture through MCP tools, not direct SQL.
 5. **Multi-metastore is a filter, not a partition.** All metastores write to the same tables with a `metastore_id` discriminator.
@@ -70,10 +70,50 @@
 │                                                                       │
 │  Sources:                                                             │
 │  ├─ UC: information_schema (tables, schemas, catalogs, volumes,       │
-│  │      grants, tags)                                                 │
-│  ├─ SDK: jobs, clusters, warehouses, service principals, groups       │
+│  │      grants, tags, row_filters, column_masks)                      │
+│  ├─ SDK: jobs, clusters, warehouses, service principals, groups,      │
+│  │       group members                                                │
 │  ├─ Apps API: Databricks Apps (agent heuristic)                       │
-│  └─ System: system.serving.endpoint_usage + served_entities           │
+│  └─ System: system.serving.endpoint_usage + served_entities +         │
+│             pipeline freshness                                        │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                  Compile-Down Pipeline (on demand)                      │
+│                                                                       │
+│  watchdog-compile                   watchdog-deploy                    │
+│  ┌──────────┐  ┌──────────────┐    ┌──────────────┐  ┌────────────┐  │
+│  │ Policy   │  │ Compile      │    │ Artifact     │  │ UC Target  │  │
+│  │ Loader   │→ │ Targets:     │ →  │ Deployer     │→ │ Writes:    │  │
+│  │          │  │ uc_tag_policy│    │ (dry-run     │  │ tag policies│ │
+│  │ compile_ │  │ uc_abac      │    │  support)    │  │ ABAC masks │  │
+│  │ to block │  │ guardrails   │    │              │  │            │  │
+│  └──────────┘  └──────┬───────┘    └──────────────┘  └────────────┘  │
+│                       │                                               │
+│              compile_output/                                          │
+│              ├── manifest.json (checksums + metadata)                 │
+│              ├── *.sql (tag policy DDL)                               │
+│              └── *.json (guardrails config)                           │
+│                       │                                               │
+│              Drift detection: manifest vs on-disk artifacts           │
+│              Meta-violations: drifted/missing → violations table      │
+└───────────────────────────────────────────────────────────────────────┘
+
+┌───────────────────────────────────────────────────────────────────────┐
+│                  Remediation Pipeline (on demand)                       │
+│                                                                       │
+│  watchdog-remediate         watchdog-apply        watchdog-verify      │
+│  ┌──────────┐  ┌────────┐  ┌──────────┐  ┌──────┐  ┌──────────┐    │
+│  │Dispatcher│→ │Agents: │→ │ Applier  │→ │ SQL  │→ │ Verifier │    │
+│  │routes    │  │Steward │  │(dry-run) │  │ exec │  │ (batch)  │    │
+│  │violations│  │Cluster │  │          │  │      │  │          │    │
+│  │to agents │  │DQMon   │  │          │  │      │  │          │    │
+│  │          │  │JobOwner│  │          │  │      │  │          │    │
+│  └──────────┘  └────────┘  └──────────┘  └──────┘  └──────────┘    │
+│                                                                       │
+│  Tables: remediation_agents → remediation_proposals →                 │
+│          remediation_applied                                          │
+│  Status: pending_review → approved → applied → verified               │
 └───────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -110,6 +150,37 @@ PolicyEngine.evaluate_all()
   │
   └─ write_scan_summary()
        └──▶ scan_summary (append-only, one row per scan)
+```
+
+### Compile-Down Path (Policies → Workspace Artifacts)
+
+```
+compile_policies(policies)
+  ├─ Filter policies with compile_to block
+  ├─ For each target (uc_tag_policy, uc_abac, guardrails):
+  │    └──▶ compile_output/<artifact_id>.sql|.json
+  └─ write_manifest()
+       └──▶ compile_output/manifest.json (checksums, metadata)
+
+deploy_artifacts(manifest)
+  ├─ uc_tag_policy: ALTER TAG SET ALLOWED VALUES
+  ├─ uc_abac: CREATE OR REPLACE FUNCTION (column mask)
+  └─ guardrails: disk-deployed (skipped by deployer)
+```
+
+### Remediation Path (Violations → Proposals → Applied)
+
+```
+dispatch_remediations(violations, agents)
+  ├─ For each open violation, match agent.handles[]
+  │    └──▶ agent.propose() → remediation_proposals (append)
+  │
+apply_proposal(proposal)
+  │    └──▶ Execute proposed_sql → remediation_applied (append)
+  │         └── proposal status: approved → applied
+  │
+batch_verify(applied, resolved_violations)
+       └──▶ verify_status: pending → verified | verification_failed
 ```
 
 ### Read Path (Consumers → Delta)
@@ -173,6 +244,27 @@ Separation means:
 - Different deployment lifecycle (Watchdog MCP updates when policies change, Guardrails when agent tools change)
 - Different auth models (Watchdog runs as the querying user, Guardrails can enforce per-agent policies)
 - Different scaling requirements (Watchdog is query-heavy, Guardrails is latency-sensitive)
+
+### Why a compile-down pipeline instead of direct writes?
+
+Watchdog policies are declarative YAML. Some policies map directly to UC enforcement artifacts (tag policies that restrict allowed values, ABAC column masks). Rather than maintaining these artifacts by hand, the compile-down pipeline generates them from the same policies that drive evaluation.
+
+The compile → deploy split is deliberate:
+- **Compile is pure** — no workspace side effects, produces files you can review in a PR
+- **Deploy is explicit** — dry-run support, artifact-level success/failure reporting
+- **Drift detection** — the manifest tracks checksums, so the scanner can detect when on-disk artifacts diverge from what was deployed
+- **Meta-violations** — drifted or missing artifacts produce violations in the same table as everything else, so the same dashboards and notifications apply
+
+### Why remediation agents instead of auto-fix?
+
+Auto-fixing violations (e.g., auto-tagging tables) sounds appealing but is dangerous at scale. The remediation pipeline adds a human review gate:
+- Agents **propose** fixes, they don't execute them
+- Every proposal enters a **review queue** (pending_review → approved → applied → verified)
+- The **applier** supports dry-run so reviewers can preview SQL before execution
+- The **verifier** checks whether the fix actually resolved the violation on the next scan
+- All of this is auditable: `remediation_proposals`, `remediation_applied` tables
+
+This pattern lets you start with fully manual review and progressively auto-approve low-risk, high-confidence proposals as trust builds.
 
 ### Why FMAPI endpoints get auto-classified?
 

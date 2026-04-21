@@ -146,7 +146,7 @@ Resources are classified into a hierarchy. One policy on `ConfidentialAsset` aut
 
 Change a policy at `ConfidentialAsset`? Every `PiiAsset`, `HipaaAsset`, and `PhiAsset` inherits it automatically. UC has flat tags — you'd edit every child policy individually.
 
-*28 ontology classes across 5 base types. Add your own by dropping YAML in `engine/ontologies/`.*
+*31 ontology classes across 8 base types. Add your own by dropping YAML in `engine/ontologies/`.*
 
 ### Actionable Remediation Lists
 
@@ -334,7 +334,7 @@ FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` w
 │  CRAWL   │───▶│ CLASSIFY  │───▶│ EVALUATE │───▶│  MERGE   │───▶│ NOTIFY   │
 │          │    │           │    │          │    │          │    │          │
 │ 16 types │    │ Ontology  │    │ 46       │    │ Dedup    │    │ Per-owner│
-│ SDK +    │    │ 28 classes│    │ policies │    │ Lifecycle│    │ digests  │
+│ SDK +    │    │ 31 classes│    │ policies │    │ Lifecycle│    │ digests  │
 │ system   │    │ Tag-based │    │ YAML +   │    │ open →   │    │ Email /  │
 │ tables   │    │ hierarchy │    │ user     │    │ resolved │    │ webhook  │
 └──────────┘    └───────────┘    └──────────┘    └──────────┘    └──────────┘
@@ -352,7 +352,7 @@ FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` w
 │  Watchdog Engine (Daily Scan Job)                                │
 │                                                                  │
 │  Crawl 16 resource types (data + compute + identity + agents)    │
-│  → Classify via ontology (28 classes)                            │
+│  → Classify via ontology (31 classes)                            │
 │  → Evaluate 46 policies (data governance + agent governance)     │
 │  → Track violations with lifecycle → Notify owners               │
 └───────────┬───────────────────┬──────────────────┬──────────────┘
@@ -417,7 +417,7 @@ databricks bundle deploy -t my-workspace
 databricks bundle run watchdog_adhoc_scan -t my-workspace
 ```
 
-This crawls all resources (tables, volumes, jobs, clusters, warehouses, grants, service principals, agents, agent execution traces), classifies them via the ontology (28 classes), evaluates 46 policies, and writes violations. Takes 2-3 minutes.
+This crawls all resources (tables, volumes, jobs, clusters, warehouses, grants, service principals, agents, agent execution traces), classifies them via the ontology (31 classes), evaluates 46 policies, and writes violations. Takes 2-3 minutes.
 
 > **Multiple metastores?** The default scan covers the current workspace's metastore only. To scan several at once, see [Multi-metastore scanning](#multi-metastore-scanning) below — you'll set `WATCHDOG_METASTORE_IDS` and use the `crawl_all_metastores` entrypoint.
 
@@ -606,6 +606,9 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 | `violations` | Open violations — deduplicated, with status lifecycle (open/resolved/exception) |
 | `exceptions` | Approved policy exceptions with expiration dates |
 | `notification_queue` | Per-owner notification digests (CDF-enabled) |
+| `remediation_agents` | Registry of remediation agent definitions |
+| `remediation_proposals` | Agent-generated fix proposals with review lifecycle |
+| `remediation_applied` | Applied proposal audit trail with verification status |
 
 ### Compliance Views
 
@@ -739,7 +742,7 @@ policies:
       ref: has_data_steward
 ```
 
-Rules support: `tag_exists`, `tag_equals`, `tag_in`, `metadata_equals`, `all_of`, `any_of`, `none_of`, `if_then`, `metadata_gte`, and references to named primitives.
+Rules support: `tag_exists`, `tag_equals`, `tag_in`, `metadata_equals`, `all_of`, `any_of`, `none_of`, `if_then`, `metadata_gte`, `metadata_lte`, `drift_check`, and references to named primitives.
 
 ### Multi-metastore scanning
 

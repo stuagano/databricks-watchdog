@@ -1,6 +1,6 @@
 # Rule Types Reference
 
-The rule engine supports 14 rule types organized into three categories: tag checks, metadata checks, and composite operators. Every rule evaluation returns a `RuleResult` with pass/fail status and a human-readable detail string.
+The rule engine supports 16 rule types organized into four categories: tag checks, metadata checks, composite operators, and drift checks. Every rule evaluation returns a `RuleResult` with pass/fail status and a human-readable detail string.
 
 ## Tag Rules
 
@@ -218,6 +218,30 @@ rule:
 
 ---
 
+### metadata_lte
+
+Checks that a metadata field value is less than or equal to a threshold. Uses the same version-aware comparison as `metadata_gte` but reverses the direction: the field value must be <= the threshold. Falls back to lexicographic string comparison if the value cannot be parsed as a version.
+
+**Parameters:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `field` | string | Metadata field name |
+| `threshold` | string | Maximum value (numeric or version string) |
+
+**Example:**
+
+```yaml
+rule:
+  type: metadata_lte
+  field: spark_version
+  threshold: "15.4"
+```
+
+**Failure detail:** `Metadata 'spark_version' is '16.0.x-scala2.12' (> 15.4)`
+
+---
+
 ### has_owner
 
 Composite shorthand that checks for an owner in both metadata and tags. Passes if either `metadata.owner` or `tags.owner` has a non-empty value.
@@ -343,6 +367,48 @@ rule:
 ```
 
 **Failure detail:** (detail from the `then` rule)
+
+---
+
+## Drift Rules
+
+### drift_check
+
+Compares actual resource state against an externally declared expected state. The policy engine injects the expected state into metadata before evaluation. If no expected state is present for a resource, the check passes vacuously (no declared expectation means no drift).
+
+Drift checks detect unauthorized manual changes that bypass permissions-as-code pipelines.
+
+**Parameters:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `source` | string | Path to the expected state file (e.g., `expected_permissions/expected_state.json`) |
+| `check` | string | Type of drift check to perform |
+
+**Supported check types:**
+
+| Check | Expected metadata key | What it compares |
+|-------|----------------------|------------------|
+| `grants` | `expected_grants` | Actual grantee/privilege against declared expected grants |
+| `row_filters` | `expected_row_filters` | Actual row filter function against declared expected function |
+| `column_masks` | `expected_column_masks` | Actual column mask function against declared expected function |
+| `group_membership` | `expected_group_members` | Actual group member against declared expected members list |
+
+**Example:**
+
+```yaml
+rule:
+  type: drift_check
+  source: expected_permissions/expected_state.json
+  check: grants
+```
+
+**Failure details:**
+
+- `Drift detected: grant 'SELECT' on catalog.schema.table for user@example.com is not in expected state`
+- `Drift detected: row filter 'my_filter_fn' on catalog.schema.table does not match expected 'correct_filter_fn'`
+- `Drift detected: column mask 'my_mask_fn' on catalog.schema.table.column does not match expected 'correct_mask_fn'`
+- `Drift detected: member 'user@example.com' in group 'admins' is not in expected state`
 
 ---
 

@@ -39,6 +39,7 @@ policies:
 | `remediation` | string | Yes | | Step-by-step instructions to fix a violation. |
 | `active` | boolean | No | `true` | Set to `false` to disable evaluation without removing the policy. |
 | `rule` | object | Yes | | Declarative rule tree. See Rule Tree Schema below. |
+| `compile_to` | list\|object | No | `null` | Compile-down targets. See Compile-Down Configuration below. |
 
 ## Rule Tree Schema
 
@@ -241,6 +242,111 @@ User policies use the `rule_json` column (JSON string) instead of the YAML `rule
 ### Policy History
 
 Every policy change (YAML sync or user edit) is recorded in the `policies_history` table as an append-only audit trail. Change detection uses the fields that affect evaluation behavior: `rule_json`, `severity`, `applies_to`, and `active`. Cosmetic edits to description or remediation do not generate history entries.
+
+## Compile-Down Configuration
+
+Policies can declare a `compile_to` block to emit runtime artifacts to external enforcement substrates. Policies without `compile_to` remain scan-only (evaluated by the Watchdog engine but not pushed to any runtime system).
+
+The `compile_to` field accepts either a single entry (object) or a list of entries. A single object is automatically normalized to a one-element list by the policy loader. Each entry must include a `target` field identifying the substrate, plus target-specific configuration fields.
+
+### Supported Targets
+
+| Target | Description | Key Config Fields |
+|--------|-------------|-------------------|
+| `guardrails` | Guardrails MCP check definition | `kind` (advisory or blocking), `block_when` |
+| `uc_tag_policy` | Unity Catalog tag policy spec | `tag_key`, `policy_type`, `allowed_values`, `resource_types`, `scope` |
+| `uc_abac` | Unity Catalog ABAC column mask spec | `mask_function`, `apply_when` |
+
+### Target: guardrails
+
+Emits a JSON check definition the Guardrails MCP server can load at startup.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `target` | string | Yes | | Must be `guardrails` |
+| `kind` | string | No | `advisory` | `advisory` (log only) or `blocking` (reject the action) |
+| `block_when` | string | No | `null` | Predicate describing when the check fires |
+
+### Target: uc_tag_policy
+
+Emits a JSON spec the deployer turns into a Unity Catalog tag policy API call.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `target` | string | Yes | | Must be `uc_tag_policy` |
+| `tag_key` | string | Yes | | Tag key to enforce (e.g., `data_steward`) |
+| `policy_type` | string | No | `required` | `required` (tag must exist) or `allowed_values` (tag value constrained) |
+| `allowed_values` | list | Conditional | | Required when `policy_type` is `allowed_values`. List of permitted tag values. |
+| `resource_types` | list | No | `[table]` | Resource types the tag policy applies to |
+| `scope` | object | No | `null` | Optional scope restriction with `catalog` and/or `schema` fields |
+
+### Target: uc_abac
+
+Emits a JSON spec the deployer turns into `ALTER TABLE ... SET COLUMN MASK` API calls.
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `target` | string | Yes | | Must be `uc_abac` |
+| `mask_function` | string | Yes | | Three-part UDF reference (`catalog.schema.function`) |
+| `apply_when` | string | No | `null` | Human-readable scope note for deployer context |
+
+### Examples
+
+Single target (object shorthand):
+
+```yaml
+policies:
+  - id: POL-G001
+    name: "PII columns must be masked in production"
+    applies_to: PiiTable
+    domain: SecurityGovernance
+    severity: critical
+    description: >
+      PII columns require column masks in production to prevent
+      unauthorized access to sensitive data.
+    remediation: >
+      Apply column mask UDF main.governance.redact_pii to PII columns.
+    rule:
+      ref: has_column_mask
+    compile_to:
+      target: uc_abac
+      mask_function: main.governance.redact_pii
+      apply_when: environment = prod
+```
+
+Multiple targets (list form):
+
+```yaml
+policies:
+  - id: POL-T001
+    name: "Production tables must have a data steward"
+    applies_to: GoldTable
+    domain: SecurityGovernance
+    severity: high
+    description: >
+      Gold-layer tables require a named data steward for accountability.
+    remediation: >
+      Add a 'data_steward' tag with the responsible person's email.
+    rule:
+      ref: has_data_steward
+    compile_to:
+      - target: uc_tag_policy
+        tag_key: data_steward
+        resource_types: [table, schema]
+      - target: guardrails
+        kind: blocking
+        block_when: "table is in gold layer without data_steward tag"
+```
+
+### Drift Detection
+
+The compiler writes a manifest file recording each emitted artifact and its content hash. On every scan, the policy engine checks deployed artifacts against the manifest:
+
+- **in_sync** -- artifact on disk matches the manifest hash.
+- **drifted** -- artifact exists but has been modified out-of-band.
+- **missing** -- artifact was never emitted or has been deleted.
+
+Drifted or missing artifacts emit meta-violations (severity high for missing, medium for drifted) so the compliance dashboard surfaces enforcement gaps.
 
 ## Severity Guidelines
 

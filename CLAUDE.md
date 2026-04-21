@@ -57,11 +57,27 @@ When removing or renaming a feature, function, table, or entrypoint:
 3. **Update counts** — if a doc says "13 tools" or "16 rule types" and you removed one, fix the number.
 4. **Check the README** — it has hardcoded counts (class count, rule types, tool count, table count) that go stale when features are added or removed.
 
+### Duplicated facts
+
+Design principles and key numbers get copied across multiple docs. When a fact changes, the copies go stale silently. After changing any of the following, grep for the old claim across `docs/` AND `README.md`:
+
+| Fact | Grep pattern | Known locations |
+|---|---|---|
+| Read-only vs write behavior | `read-only\|never writes\|never creates` | architecture-guide, concepts/architecture, hub-integration-plan, prerequisites, roadmap |
+| Ontology class count | `\d+ classes` | architecture-guide, concepts/architecture, deployment-playbook, README, cli.md (example output) |
+| Rule type count | `\d+ rule` | architecture-guide, concepts/architecture, rule-types.md |
+| View count | `\d+ (compliance\|views)` | architecture-guide, concepts/architecture, cli.md, index.md, first-dashboard, prerequisites, deployment-playbook, roadmap |
+| Table count | `\d+ tables` | concepts/architecture, prerequisites, hub-prd-comparison, README (diagram + deployment table), first-dashboard |
+| Genie Space table count | `\d+ tables` | architecture-guide (diagram), concepts/architecture, first-dashboard, roadmap, README (diagram + deployment table) |
+| CLI entrypoint count | `entrypoint` | cli.md, concepts/architecture |
+| MCP tool count | `\d+ tool` | architecture-guide, README, guardrails-tools, mcp-tools |
+| "Cannot fix/remediate" claims | `only reports\|cannot fix\|never remediates` | remediation-agents-prd, architecture-guide |
+
 ### General rules
 
 - Update the "Last updated" date in any doc you modify.
 - Skip trivial sessions (questions, exploration, no code changes).
-- When in doubt, grep `docs/` for the name of whatever you changed — stale references hide in unexpected places.
+- When in doubt, grep `docs/` AND `README.md` for the old value — stale copies are the #1 source of doc drift.
 
 ## Conventions
 

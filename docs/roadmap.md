@@ -165,7 +165,7 @@ Deployed with 27+ tables (compliance and remediation views + UC system tables + 
 - **OPA bundle loader** — alternative expected state source for Open Policy Agent bundles
 - **New crawlers:** `_crawl_row_filters`, `_crawl_column_masks`, group member enrichment via `_crawl_groups`
 - **New ontology base classes:** `RowFilterAsset`, `ColumnMaskAsset`, `GroupMemberAsset`
-- **Key principle:** Watchdog detects drift but never remediates. External systems own expected state and remediation.
+- **Key principle:** The drift engine detects but does not remediate drift — external systems own expected state and its remediation. (Non-drift violations can use the remediation pipeline.)
 - **Policy namespace:** External systems use `POL-PERM-*` or `POL-DRIFT-*` prefixes to avoid collisions with Watchdog's built-in `POL-A*`, `POL-AGENT-*` policies.
 
 ### Remediation Pipeline

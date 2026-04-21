@@ -24,7 +24,7 @@ Watchdog Scanner (daily scan)
   Same violations table, same notifications, same dashboards
 ```
 
-Watchdog remains read-only throughout this process. It detects drift and reports it. Remediation is always a human action in the external system that owns the expected state.
+The drift detection engine is read-only throughout this process — it detects drift and reports it as violations. For drift specifically, remediation belongs to the external system that owns the expected state. (Other violation types can use Watchdog's remediation pipeline — see `watchdog-remediate`.)
 
 ## The drift_check Rule Type
 

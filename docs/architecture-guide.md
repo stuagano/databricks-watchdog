@@ -429,7 +429,7 @@ A planned extension to the rule engine dispatch table. Unlike other rule types t
 
 ### Design Principles
 
-1. **Watchdog remains read-only.** Drift detection reports mismatches. It never creates, modifies, or revokes grants. Remediation is always a human action in the external system.
+1. **The drift engine is read-only.** Drift detection reports mismatches. It never creates, modifies, or revokes grants. For drift violations, remediation belongs to the external system that owns the expected state. (Non-drift violations can use the remediation pipeline.)
 
 2. **External systems own expected state.** Watchdog doesn't know or care how the expected state was produced — it could be a permissions compiler, Terraform output, a spreadsheet export, or a manual JSON file. The contract is the JSON schema.
 

@@ -375,21 +375,34 @@ def write_scan_summary(spark: SparkSession, catalog: str, schema: str,
         FROM {violations_table}
     """).first()
 
-    # Compliance %: resources with zero open violations / total resources
+    # Compliance %: weighted by scan result, accounting for compile-down partial credit.
+    # pass = 1.0, pass_drifted = 0.5, pass_missing/fail = 0.0.
+    # Per-resource weight = minimum weight across all its scan results.
+    scan_results_table = f"{catalog}.{schema}.scan_results"
     inventory_table = f"{catalog}.{schema}.resource_inventory"
     compliance_row = spark.sql(f"""
         SELECT
             COUNT(DISTINCT ri.resource_id) AS total,
-            COUNT(DISTINCT CASE WHEN v.resource_id IS NOT NULL THEN ri.resource_id END) AS with_violations
+            COALESCE(SUM(resource_weight), 0) AS weighted_sum
         FROM {inventory_table} ri
-        LEFT JOIN {violations_table} v
-            ON ri.resource_id = v.resource_id AND v.status = 'open'
+        LEFT JOIN (
+            SELECT resource_id, MIN(
+                CASE result
+                    WHEN 'pass' THEN 1.0
+                    WHEN 'pass_drifted' THEN 0.5
+                    ELSE 0.0
+                END
+            ) AS resource_weight
+            FROM {scan_results_table}
+            WHERE scan_id = '{scan_id}'
+            GROUP BY resource_id
+        ) sw ON ri.resource_id = sw.resource_id
         WHERE ri.scan_id = '{scan_id}'
     """).first()
 
     total = compliance_row.total or 0
-    with_violations = compliance_row.with_violations or 0
-    compliance_pct = round((total - with_violations) * 100.0 / total, 1) if total > 0 else 100.0
+    weighted_sum = compliance_row.weighted_sum or 0.0
+    compliance_pct = round(weighted_sum * 100.0 / total, 1) if total > 0 else 100.0
 
     # Count newly resolved this scan (resolved_at within last few seconds of scanned_at)
     newly_resolved = violation_summary.get("resolved", 0)

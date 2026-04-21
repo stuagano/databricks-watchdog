@@ -236,6 +236,43 @@ class PolicyEngine:
             return "pass"
         return f"pass_{artifact_state}"
 
+    def _build_meta_violation(
+        self,
+        scan_id: str,
+        policy_id: str,
+        artifact_state: str | None,
+        compile_to: list[dict],
+        metastore_id: str | None,
+    ) -> tuple | None:
+        """Build a meta-violation scan result for a drifted/missing artifact.
+
+        Returns None for scan-only policies or in-sync artifacts.
+        Returns a single scan_results tuple for drifted or missing artifacts.
+        """
+        if artifact_state is None or artifact_state == "in_sync":
+            return None
+
+        severity = "high" if artifact_state == "missing" else "medium"
+        targets = ", ".join(e.get("target", "unknown") for e in compile_to)
+        details = (
+            f"Compile-down artifact for {policy_id} is {artifact_state} "
+            f"(targets: {targets}). Runtime enforcement not "
+            f"{'deployed' if artifact_state == 'missing' else 'in sync'}."
+        )
+
+        return (
+            scan_id,
+            f"compile-artifact:{policy_id}",
+            f"META-DRIFT-{policy_id}",
+            "fail",
+            details,
+            "CompileDown",
+            severity,
+            "",
+            metastore_id,
+            self.now,
+        )
+
     def evaluate_all(self) -> EvaluationSummary:
         """Evaluate all active policies against the latest resource inventory.
 
@@ -341,6 +378,15 @@ class PolicyEngine:
                     self.compile_manifest_path,
                     self.compile_output_dir,
                 )
+
+            # Emit meta-violation for drifted/missing artifacts (once per policy)
+            if artifact_state and artifact_state != "in_sync" and policy.compile_to:
+                meta = self._build_meta_violation(
+                    scan_id, policy.policy_id, artifact_state,
+                    policy.compile_to, metastore_id,
+                )
+                if meta:
+                    scan_results.append(meta)
 
             for resource in inventory:
                 # Check if this policy applies to this resource

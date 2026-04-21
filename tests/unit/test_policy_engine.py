@@ -494,3 +494,93 @@ class TestEnrichResult:
     def test_compile_down_fail_missing(self, engine):
         result = engine._enrich_result("fail", "missing")
         assert result == "fail"
+
+
+class TestMetaViolations:
+    """Tests for _build_meta_violation — compile-down drift as violations."""
+
+    def test_not_emitted_for_scan_only(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-1",
+            artifact_state=None,
+            compile_to=[{"target": "guardrails", "kind": "advisory"}],
+            metastore_id=None,
+        )
+        assert result is None
+
+    def test_not_emitted_for_in_sync(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-1",
+            artifact_state="in_sync",
+            compile_to=[{"target": "guardrails", "kind": "advisory"}],
+            metastore_id=None,
+        )
+        assert result is None
+
+    def test_emitted_for_drifted(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-1",
+            artifact_state="drifted",
+            compile_to=[{"target": "uc_abac", "mask_function": "cat.sch.fn"}],
+            metastore_id="ms-1",
+        )
+        assert result is not None
+        scan_id, resource_id, policy_id, result_str, details, domain, severity, classes, ms_id, ts = result
+        assert scan_id == "scan-1"
+        assert policy_id == "META-DRIFT-POL-1"
+        assert result_str == "fail"
+        assert severity == "medium"
+        assert domain == "CompileDown"
+        assert "drifted" in details
+        assert ms_id == "ms-1"
+
+    def test_emitted_for_missing(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-1",
+            artifact_state="missing",
+            compile_to=[{"target": "uc_tag_policy", "tag_key": "owner"}],
+            metastore_id=None,
+        )
+        assert result is not None
+        _, _, _, _, _, _, severity, _, _, _ = result
+        assert severity == "high"
+
+    def test_policy_id_format(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-PII-001",
+            artifact_state="drifted",
+            compile_to=[{"target": "guardrails"}],
+            metastore_id=None,
+        )
+        _, _, policy_id, _, _, _, _, _, _, _ = result
+        assert policy_id == "META-DRIFT-POL-PII-001"
+
+    def test_resource_id_uses_first_artifact_id(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-1",
+            artifact_state="missing",
+            compile_to=[
+                {"target": "guardrails", "kind": "advisory"},
+                {"target": "uc_tag_policy", "tag_key": "owner"},
+            ],
+            metastore_id=None,
+        )
+        _, resource_id, _, _, _, _, _, _, _, _ = result
+        assert resource_id == "compile-artifact:POL-1"
+
+    def test_emitted_once_per_policy(self, engine):
+        result = engine._build_meta_violation(
+            scan_id="scan-1",
+            policy_id="POL-1",
+            artifact_state="drifted",
+            compile_to=[{"target": "guardrails"}],
+            metastore_id=None,
+        )
+        assert isinstance(result, tuple)
+        assert len(result) == 10

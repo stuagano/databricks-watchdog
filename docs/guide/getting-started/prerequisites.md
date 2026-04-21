@@ -45,7 +45,7 @@ A service principal is recommended for production deployments. The service princ
 
 For multi-metastore deployments, the service principal needs access to each metastore that Watchdog will scan.
 
-The service principal should **not** have workspace admin entitlements. Watchdog is read-only and does not need administrative privileges.
+The service principal should **not** have workspace admin entitlements. The scan engine is read-only. If using `watchdog-deploy` to push compiled artifacts (UC tag policies, ABAC masks), the service principal will need `ALTER` privileges on target catalogs/schemas.
 
 ## Databricks Asset Bundles (DABs)
 

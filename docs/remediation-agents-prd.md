@@ -12,7 +12,7 @@
 
 ## 0. TL;DR
 
-7-Eleven proved that an agentic LLM pipeline (Llama 4 Maverick on Mosaic AI Model Serving) can close one governance gap — missing table/column documentation — in days instead of months. That pattern is generalizable to every other class of Unity Catalog metadata gap. Watchdog has the catalog of gaps (46 policies across 5 domains) but today only *reports* them; it cannot *fix* them.
+7-Eleven proved that an agentic LLM pipeline (Llama 4 Maverick on Mosaic AI Model Serving) can close one governance gap — missing table/column documentation — in days instead of months. That pattern is generalizable to every other class of Unity Catalog metadata gap. Watchdog has the catalog of gaps (46+ policies across 5 domains). The core remediation pipeline (dispatcher, review queue, applier, verifier) is now implemented — this PRD informed that design.
 
 This PRD proposes a Remediation Agent framework that sits on top of Watchdog's violation store, dispatches the right LLM-backed agent per violation type, applies fixes under human review, and uses the next Watchdog scan as the verification oracle. The result is a closed loop: **detect → remediate → verify → measure**.
 

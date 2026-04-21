@@ -117,7 +117,7 @@ These are GA or near-GA. They define what the platform owns — Watchdog, Ontos,
 | AI agent runtime enforcement | Guardrails | `check_before_access`, `report_agent_execution` |
 | AI Gateway cost governance | Watchdog engine | Token cost views, risk flags |
 | Industry policy packs (4 packs) | Watchdog library | HIPAA, SOX, NIST, CIS |
-| Multi-metastore scanning | Watchdog engine | `metastore_id` on all 9 tables |
+| Multi-metastore scanning | Watchdog engine | `metastore_id` on all 11 tables |
 | Ontos adapter (GovernanceProvider) | ontos-adapter | Ontos reads Watchdog data |
 | Cost policy evaluation | Watchdog engine | Cost dashboards deferred to Hub |
 | DQ policy evaluation | Watchdog engine | Evaluate coverage, don't build monitors |

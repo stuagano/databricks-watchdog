@@ -363,7 +363,7 @@ FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` w
     │ 10 pages       │  │ for assistants │  │  9 build-time +     │
     ├────────────────┤  ├────────────────┤  │  4 runtime agent    │
     │ Genie Space    │  │ Ontos Adapter  │  │  governance         │
-    │ 19 tables      │  │ Business       │  │  check_before_access│
+    │ 27 tables      │  │ Business       │  │  check_before_access│
     │ NL governance  │  │ catalog views  │  │  log_agent_action   │
     └────────────────┘  └────────────────┘  └─────────────────────┘
 ```
@@ -552,10 +552,10 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 
 | Component | What | Deploy Command |
 |---|---|---|
-| **Engine** | Daily scan — 16 resource types (data + compute + identity + agents), 28 ontology classes, 46 policies | `cd engine && databricks bundle deploy` |
+| **Engine** | Daily scan — 16 resource types (data + compute + identity + agents), 31 ontology classes, 46+ policies | `cd engine && databricks bundle deploy` |
 | **Lakeview Dashboard** | 10-page unified governance hub (data + agents + remediation) | `python engine/dashboards/lakeview/deploy_dashboard.py` |
 | **Watchdog MCP** | 13 AI tools for compliance queries | `cd mcp && databricks bundle deploy` + app deploy |
-| **Genie Space** | NL governance exploration (19 tables: Watchdog + UC system tables) | `python mcp/genie/deploy_genie_space.py` |
+| **Genie Space** | NL governance exploration (27 tables: Watchdog + UC system tables) | `python mcp/genie/deploy_genie_space.py` |
 | **Guardrails MCP** | 13 tools: 9 build-time + 4 runtime agent governance | `cd guardrails && databricks bundle deploy` + app deploy |
 | **Ontos Adapter** | Pluggable governance module for Ontos business catalog | Drop-in to Ontos fork |
 

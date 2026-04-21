@@ -8,7 +8,7 @@
 ## Design Principles
 
 1. **Delta tables are the universal contract.** All consumers (Hub, Ontos, Guardrails) read Watchdog's Delta tables. No consumer-specific APIs — just tables and views.
-2. **Watchdog is read-only.** It crawls and evaluates. It never writes tags, grants, or ABAC policies. All write operations belong to the platform.
+2. **The engine is read-only; the deploy pipeline writes.** The core engine (crawl + evaluate) never modifies workspace resources. The compile-down deploy pipeline (`watchdog-deploy`) is the sole write path — it pushes compiled artifacts (UC tag policies, ABAC column masks) to the workspace. This separation is intentional: the engine can always run safely, and writes are explicit, auditable, and support dry-run.
 3. **Three integration surfaces, one data model.** Hub reads Delta for dashboards. Ontos reads Delta via GovernanceProvider for business catalog views. Guardrails reads Delta via `watchdog_client.py` for AI build-time checks. Same tables, different consumers.
 4. **MCP server is the AI gateway.** AI assistants and Guardrails tools can query governance posture through Watchdog MCP. Centralizes AI governance logic.
 5. **Multi-metastore is a filter, not a partition.** All metastores write to the same tables with a `metastore_id` discriminator.

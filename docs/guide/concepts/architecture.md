@@ -56,7 +56,7 @@ Five principles shape every architectural decision in Watchdog:
 
 1. **Delta tables are the universal contract.** Every consumer -- dashboards, Genie spaces, MCP servers, business catalog adapters -- reads the same Delta tables. There is no consumer-specific API layer. Schema evolves in one place, consumers work even when the engine job is not running, and table access is governed by UC grants rather than application-level auth.
 
-2. **Watchdog is read-only.** The engine crawls and evaluates. It never writes tags, creates grants, modifies ABAC policies, or revokes permissions. Remediation is always a human action. This eliminates the risk of automated governance tools making destructive changes.
+2. **The engine is read-only; the deploy pipeline writes.** The core engine (crawl + evaluate) never modifies workspace resources. The compile-down deploy pipeline (`watchdog-deploy`) is the sole write path — it pushes compiled artifacts (UC tag policies, ABAC column masks) to the workspace. Writes are explicit, auditable, and support dry-run. The remediation pipeline proposes fixes but requires human review before execution.
 
 3. **Three integration surfaces, one data model.** Dashboards read Delta via SQL. MCP servers read Delta via the statement execution API. Business catalog adapters read Delta via the GovernanceProvider protocol. All three surfaces query the same tables.
 

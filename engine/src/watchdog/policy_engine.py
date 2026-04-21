@@ -125,7 +125,9 @@ class PolicyEngine:
                  catalog: str, schema: str,
                  ontology: OntologyEngine | None = None,
                  rule_engine: RuleEngine | None = None,
-                 policies: list[PolicyDefinition] | None = None):
+                 policies: list[PolicyDefinition] | None = None,
+                 compile_manifest_path: str | None = None,
+                 compile_output_dir: str | None = None):
         self.spark = spark
         self.w = w
         self.catalog = catalog
@@ -134,6 +136,8 @@ class PolicyEngine:
         self.rule_engine = rule_engine or RuleEngine()
         self.policies = policies or []
         self.now = datetime.now(timezone.utc)
+        self.compile_manifest_path = compile_manifest_path
+        self.compile_output_dir = compile_output_dir
 
     @property
     def _scan_results_table(self) -> str:
@@ -218,6 +222,19 @@ class PolicyEngine:
                     }
 
         return metadata
+
+    @staticmethod
+    def _enrich_result(result: str, artifact_state: str | None) -> str:
+        """Enrich a scan result with compile-down artifact state.
+
+        fail always trumps artifact state. pass is enriched to pass_drifted
+        or pass_missing when the runtime artifact is not in sync.
+        """
+        if result != "pass" or artifact_state is None:
+            return result
+        if artifact_state == "in_sync":
+            return "pass"
+        return f"pass_{artifact_state}"
 
     def evaluate_all(self) -> EvaluationSummary:
         """Evaluate all active policies against the latest resource inventory.
@@ -334,11 +351,24 @@ class PolicyEngine:
                 # Evaluate the rule
                 result = self.rule_engine.evaluate(policy.rule, tags, metadata)
 
+                result_str = "pass" if result.passed else "fail"
+
+                # Enrich with compile-down artifact state
+                if policy.compile_to and self.compile_manifest_path and self.compile_output_dir:
+                    from watchdog.compiler import get_policy_artifact_state
+                    artifact_state = get_policy_artifact_state(
+                        policy.policy_id,
+                        policy.compile_to,
+                        self.compile_manifest_path,
+                        self.compile_output_dir,
+                    )
+                    result_str = self._enrich_result(result_str, artifact_state)
+
                 scan_results.append((
                     scan_id,
                     resource.resource_id,
                     policy.policy_id,
-                    "pass" if result.passed else "fail",
+                    result_str,
                     result.detail,
                     policy.domain,
                     policy.severity,

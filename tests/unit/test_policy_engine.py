@@ -458,3 +458,39 @@ class TestDriftCheckPolicyEngineV2:
         rule = {"type": "drift_check", "check": "row_filters"}
         result = rule_engine.evaluate(rule, {}, enriched)
         assert result.passed
+
+
+class TestEnrichResult:
+    """Tests for _enrich_result — compile-down artifact state enrichment."""
+
+    def test_scan_only_pass_unchanged(self, engine):
+        result = engine._enrich_result("pass", None)
+        assert result == "pass"
+
+    def test_scan_only_fail_unchanged(self, engine):
+        result = engine._enrich_result("fail", None)
+        assert result == "fail"
+
+    def test_compile_down_pass_in_sync(self, engine):
+        result = engine._enrich_result("pass", "in_sync")
+        assert result == "pass"
+
+    def test_compile_down_pass_drifted(self, engine):
+        result = engine._enrich_result("pass", "drifted")
+        assert result == "pass_drifted"
+
+    def test_compile_down_pass_missing(self, engine):
+        result = engine._enrich_result("pass", "missing")
+        assert result == "pass_missing"
+
+    def test_compile_down_fail_in_sync(self, engine):
+        result = engine._enrich_result("fail", "in_sync")
+        assert result == "fail"
+
+    def test_compile_down_fail_drifted(self, engine):
+        result = engine._enrich_result("fail", "drifted")
+        assert result == "fail"
+
+    def test_compile_down_fail_missing(self, engine):
+        result = engine._enrich_result("fail", "missing")
+        assert result == "fail"

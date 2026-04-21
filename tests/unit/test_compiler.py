@@ -13,6 +13,7 @@ from watchdog.compiler import (
     artifact_hash,
     check_drift,
     compile_policies,
+    get_policy_artifact_state,
     load_manifest,
     write_artifacts,
     write_manifest,
@@ -422,3 +423,109 @@ class TestPolicyLoaderCompileTo:
         emitted = json.loads((out / "guardrails/POL-E2E.json").read_text())
         assert emitted["kind"] == "blocking"
         assert [r.state for r in check_drift(manifest, out)] == ["in_sync"]
+
+
+class TestGetPolicyArtifactState:
+    """Tests for get_policy_artifact_state — per-policy artifact drift check."""
+
+    def test_no_compile_to_returns_none(self):
+        state = get_policy_artifact_state("POL-1", None, "/fake/manifest.json", "/fake/out")
+        assert state is None
+
+    def test_empty_compile_to_returns_none(self):
+        state = get_policy_artifact_state("POL-1", [], "/fake/manifest.json", "/fake/out")
+        assert state is None
+
+    def test_all_in_sync(self, tmp_path):
+        p = _policy("POL-1", compile_to=[{"target": "guardrails", "kind": "advisory"}])
+        artifacts = compile_policies([p])
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+
+        state = get_policy_artifact_state(
+            "POL-1", p.compile_to, str(manifest), str(out)
+        )
+        assert state == "in_sync"
+
+    def test_drifted_artifact(self, tmp_path):
+        p = _policy("POL-1", compile_to=[{"target": "guardrails", "kind": "advisory"}])
+        artifacts = compile_policies([p])
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+
+        (out / artifacts[0].artifact_id).write_text("tampered\n")
+
+        state = get_policy_artifact_state(
+            "POL-1", p.compile_to, str(manifest), str(out)
+        )
+        assert state == "drifted"
+
+    def test_missing_artifact(self, tmp_path):
+        p = _policy("POL-1", compile_to=[{"target": "guardrails", "kind": "advisory"}])
+        artifacts = compile_policies([p])
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+
+        (out / artifacts[0].artifact_id).unlink()
+
+        state = get_policy_artifact_state(
+            "POL-1", p.compile_to, str(manifest), str(out)
+        )
+        assert state == "missing"
+
+    def test_policy_not_in_manifest_returns_missing(self, tmp_path):
+        manifest = tmp_path / "manifest.json"
+        manifest.write_text('{"entries": []}\n')
+        out = tmp_path / "out"
+        out.mkdir()
+
+        state = get_policy_artifact_state(
+            "POL-NEVER-COMPILED",
+            [{"target": "guardrails", "kind": "advisory"}],
+            str(manifest),
+            str(out),
+        )
+        assert state == "missing"
+
+    def test_worst_case_missing_trumps_drifted(self, tmp_path):
+        p = _policy("POL-1", compile_to=[
+            {"target": "guardrails", "kind": "advisory"},
+            {"target": "uc_tag_policy", "tag_key": "owner"},
+        ])
+        artifacts = compile_policies([p])
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+
+        (out / "guardrails/POL-1.json").write_text("tampered\n")
+        (out / "uc_tag_policy/POL-1.json").unlink()
+
+        state = get_policy_artifact_state(
+            "POL-1", p.compile_to, str(manifest), str(out)
+        )
+        assert state == "missing"
+
+    def test_worst_case_drifted_trumps_in_sync(self, tmp_path):
+        p = _policy("POL-1", compile_to=[
+            {"target": "guardrails", "kind": "advisory"},
+            {"target": "uc_tag_policy", "tag_key": "owner"},
+        ])
+        artifacts = compile_policies([p])
+        out = tmp_path / "out"
+        manifest = tmp_path / "manifest.json"
+        write_artifacts(artifacts, out)
+        write_manifest(artifacts, manifest)
+
+        (out / "guardrails/POL-1.json").write_text("tampered\n")
+
+        state = get_policy_artifact_state(
+            "POL-1", p.compile_to, str(manifest), str(out)
+        )
+        assert state == "drifted"

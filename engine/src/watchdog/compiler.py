@@ -334,6 +334,49 @@ def load_manifest(manifest_path: str | Path) -> list[dict]:
     return data.get("entries", [])
 
 
+def get_policy_artifact_state(
+    policy_id: str,
+    compile_to: list[dict] | None,
+    manifest_path: str | Path,
+    output_dir: str | Path,
+) -> str | None:
+    """Check artifact drift for a single policy's compile targets.
+
+    Returns the worst-case state across all targets for efficiency during
+    evaluate_all (avoids processing the entire manifest for every policy).
+
+    Returns:
+        None if compile_to is empty/None (scan-only policy).
+        "in_sync" if all targets are present and match the manifest hash.
+        "drifted" if any target is present but modified out-of-band.
+        "missing" if any target is absent or was never emitted.
+    """
+    if not compile_to:
+        return None
+
+    entries = load_manifest(manifest_path)
+    policy_entries = [e for e in entries if e["policy_id"] == policy_id]
+
+    if not policy_entries:
+        return "missing"
+
+    base = Path(output_dir)
+    worst = "in_sync"
+    _SEVERITY = {"in_sync": 0, "drifted": 1, "missing": 2}
+
+    for entry in policy_entries:
+        artifact_path = base / entry["artifact_id"]
+        if not artifact_path.exists():
+            state = "missing"
+        else:
+            actual = artifact_hash(artifact_path.read_text())
+            state = "in_sync" if actual == entry["content_hash"] else "drifted"
+        if _SEVERITY[state] > _SEVERITY[worst]:
+            worst = state
+
+    return worst
+
+
 def check_drift(
     manifest_path: str | Path,
     output_dir: str | Path,

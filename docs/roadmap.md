@@ -150,12 +150,25 @@ GovernanceProvider protocol + WatchdogProvider implementation. Reads classificat
 ### Genie Space
 Deployed with 27+ tables (compliance and remediation views + UC system tables + `system.serving.endpoint_usage`). 5 agent SQL datasets. Instructions cover agent governance concepts, risk tiers, common agent questions.
 
-### Industry Policy Packs
+### Industry & Domain Policy Packs
 - `library/healthcare/` — HIPAA (PHI stewardship, access logging, encryption)
 - `library/financial/` — SOX, PCI-DSS, GLBA
 - `library/defense/` — NIST 800-171, CMMC, ITAR
 - `library/general/` — CIS benchmarks, data lifecycle, cost governance
+- `library/data-classification/` — Bridges Databricks auto-classification with Watchdog governance (4 policies: PII stewardship, PHI/HIPAA, catalog enablement, ITAR export control). **Note:** POL-DC-001 and POL-DC-002 require crawler enrichment from `system.data_classification.results` (not yet implemented).
 - Each pack: ontology classes + rule primitives + policies + dashboard SQL
+
+### Watchdog Terraform Module
+- `terraform/modules/watchdog/` — Reusable Terraform module for one-command Watchdog deployment
+- Creates: service principal, secret scope, platform catalog, watchdog schema, UC grants
+- Azure-specific (tenant_id, subscription_id for SP credentials)
+- `scanned_catalog_names` variable controls which catalogs Watchdog can crawl
+
+### Permissions Compiler Reference
+- `template/permissions-compiler/` — Reference implementation showing how permissions-as-code systems integrate with Watchdog drift detection
+- `watchdog_generator.py` — standalone script producing `expected_state.json` + drift policies from YAML permission declarations
+- Example YAML configs: domains, ABAC (row filters, column masks), team membership
+- Feeds directly into the `drift_check` rule type
 
 ### Drift Detection
 - **`drift_check` rule type** — implemented in the rule engine dispatch table, evaluates resources against externally declared expected state
@@ -268,10 +281,20 @@ databricks-watchdog/
 ├── guardrails/                # AI DevKit MCP — build-time governance for agents
 │   └── src/ai_devkit/         #   9 MCP tools + watchdog_client.py integration
 │
-├── library/                   # Industry policy packs (HIPAA, SOX, NIST, etc.)
+├── library/                   # Industry + domain policy packs
+│   ├── healthcare/            #   HIPAA (10 policies, 4 classes)
+│   ├── financial/             #   SOX/PCI/GLBA (12 policies, 6 classes)
+│   ├── defense/               #   NIST/CMMC/ITAR (8 policies, 5 classes)
+│   ├── general/               #   CIS benchmarks (10 policies, 5 classes)
+│   └── data-classification/   #   Auto-classification enforcement (4 policies)
+│
 ├── scripts/                   # install_pack.sh, deployment helpers
 ├── terraform/                 # Infrastructure as Code
-├── template/                  # Blank starting point for new customers
+│   └── modules/watchdog/      #   Reusable TF module (SP, catalog, schema, grants)
+│
+├── template/                  # Starting points for new customers
+│   └── permissions-compiler/  #   Reference drift detection integration
+│
 ├── customer/                  # Worked example
 └── tests/
 ```

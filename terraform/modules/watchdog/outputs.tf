@@ -13,7 +13,7 @@ output "catalog_name" {
   value       = databricks_catalog.platform.name
 }
 
-output "schema_name" {
+output "schema_fqn" {
   description = "Fully qualified schema name (catalog.schema)"
   value       = "${databricks_catalog.platform.name}.${databricks_schema.watchdog.name}"
 }

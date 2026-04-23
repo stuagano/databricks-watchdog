@@ -1,0 +1,7 @@
+row_filters:
+  - table: gold.finance.transactions
+    function: filter_transactions_by_region
+    enforcement: uc_native
+    rules:
+      - match: {column: region, operator: "=", value: "current_user_region()"}
+        description: Users can only see transactions from their region

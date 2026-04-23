@@ -1,0 +1,12 @@
+teams:
+  - name: analytics-team
+    members:
+      - analyst1@company.com
+      - analyst2@company.com
+  - name: data-engineers
+    members:
+      - eng1@company.com
+      - eng2@company.com
+  - name: hr-admins
+    members:
+      - hr-lead@company.com

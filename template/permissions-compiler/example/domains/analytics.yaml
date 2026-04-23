@@ -1,0 +1,11 @@
+catalog: gold
+description: Analytics domain — curated datasets for BI and reporting
+
+grants:
+  - principal: analytics-team
+    privileges: [USE_CATALOG, USE_SCHEMA, SELECT]
+    schema: "*"
+
+  - principal: data-engineers
+    privileges: [USE_CATALOG, USE_SCHEMA, SELECT, MODIFY, CREATE_TABLE]
+    schema: "*"

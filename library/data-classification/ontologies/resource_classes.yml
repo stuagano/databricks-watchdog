@@ -1,0 +1,13 @@
+# Data Classification Ontology Classes
+#
+# Derived classes for tables that have been processed by Databricks
+# auto-classification.
+
+derived_classes:
+
+  AutoClassifiedAsset:
+    parent: DataAsset
+    description: "Table with auto-classification results from Databricks Data Classification"
+    classifier:
+      metadata_equals:
+        has_classification_results: "true"

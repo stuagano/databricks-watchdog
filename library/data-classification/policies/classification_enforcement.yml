@@ -1,0 +1,106 @@
+# Data Classification Enforcement Policies
+# Domain: SecurityGovernance / RegulatoryCompliance
+#
+# Bridges Databricks auto-classification results with Watchdog governance.
+# POL-DC-001 and POL-DC-002 require a crawler enrichment that reads
+# system.data_classification.results and sets has_pii_columns / has_phi_columns
+# in resource metadata. This crawler is NOT yet implemented in the core engine.
+
+policies:
+
+  - id: POL-DC-001
+    name: "Tables with auto-detected PII must have a data steward"
+    applies_to: DataAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: >
+      When Databricks auto-classification detects PII columns, the table must
+      have a named data steward who is accountable for access decisions and
+      retention compliance.
+    remediation: >
+      Add a 'data_steward' tag with the email of the responsible person.
+      Review auto-classification results in system.data_classification.results.
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: metadata_equals
+        field: has_pii_columns
+        value: "true"
+      then:
+        ref: has_data_steward
+
+  - id: POL-DC-002
+    name: "Tables with auto-detected PHI must have HIPAA regulatory domain"
+    applies_to: DataAsset
+    domain: SecurityGovernance
+    severity: critical
+    description: >
+      When auto-classification detects PHI columns, the table must be tagged
+      with regulatory_domain=HIPAA to ensure correct governance controls.
+    remediation: >
+      Add 'regulatory_domain' tag with value 'HIPAA'. Add 'data_steward' tag.
+      Review auto-classification results and confirm PHI detection is accurate.
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: metadata_equals
+        field: has_phi_columns
+        value: "true"
+      then:
+        type: all_of
+        rules:
+          - type: tag_equals
+            key: regulatory_domain
+            value: "HIPAA"
+          - ref: has_data_steward
+
+  - id: POL-DC-003
+    name: "All catalogs must have data classification enabled"
+    applies_to: DataAsset
+    domain: SecurityGovernance
+    severity: high
+    description: >
+      Every catalog should have auto-classification enabled so sensitive
+      columns are detected automatically. Unscanned catalogs are a blind spot.
+    remediation: >
+      Enable data classification on the catalog via Terraform or the
+      Databricks UI (Catalog Explorer > Settings > Data Classification).
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: metadata_equals
+        field: resource_type
+        value: "catalog"
+      then:
+        type: metadata_equals
+        field: classification_enabled
+        value: "true"
+
+  - id: POL-DC-004
+    name: "Export-controlled tables must have full export metadata"
+    applies_to: DataAsset
+    domain: RegulatoryCompliance
+    severity: critical
+    description: >
+      Tables tagged with export_classification=ITAR must also have a data
+      steward and regulatory_domain tag for auditability.
+    remediation: >
+      Add 'data_steward' tag (email of export compliance officer).
+      Add 'regulatory_domain' tag with value 'ITAR'.
+    active: true
+    rule:
+      type: if_then
+      condition:
+        type: tag_equals
+        key: export_classification
+        value: "ITAR"
+      then:
+        type: all_of
+        rules:
+          - ref: has_data_steward
+          - type: tag_equals
+            key: regulatory_domain
+            value: "ITAR"

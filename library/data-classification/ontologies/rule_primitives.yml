@@ -1,0 +1,17 @@
+# Data Classification Rule Primitives
+#
+# Reusable checks for data classification policy enforcement.
+
+primitives:
+
+  has_regulatory_domain:
+    description: "Resource must have a regulatory_domain tag"
+    rule:
+      type: tag_exists
+      keys: [regulatory_domain]
+
+  has_export_classification:
+    description: "Resource must have an export_classification tag"
+    rule:
+      type: tag_exists
+      keys: [export_classification]

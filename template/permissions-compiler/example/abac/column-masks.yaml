@@ -1,0 +1,6 @@
+column_masks:
+  - table: gold.hr.employees
+    column: ssn
+    function: mask_ssn
+    enforcement: uc_native
+    mask_body: "CASE WHEN is_member('hr-admins') THEN ssn ELSE '***-**-' || RIGHT(ssn, 4) END"

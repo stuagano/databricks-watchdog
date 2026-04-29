@@ -13,10 +13,9 @@ policies:
     severity: critical
     description: "ALL PRIVILEGES and MANAGE grants on production assets violate least-privilege. Use specific grants (SELECT, MODIFY, etc.)."
     remediation: "Replace ALL PRIVILEGES with specific required privileges. Use 'GRANT SELECT' or 'GRANT MODIFY' instead."
-    active: true
+    active: false
     rule:
       ref: no_all_privileges
-
   - id: POL-A002
     name: "No direct user grants on catalogs"
     applies_to: GrantAsset

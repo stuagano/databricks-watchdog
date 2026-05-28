@@ -377,9 +377,21 @@ FMAPI endpoints (`databricks-*`) are auto-classified as `ManagedModelEndpoint` w
 ### Prerequisites
 
 - Databricks workspace with **Unity Catalog** enabled
-- **Databricks CLI** v0.230+ (`databricks --version`)
+- **Databricks CLI** v0.230+ (`databricks --version`). For first-time setup, authenticate:
+  ```bash
+  databricks auth login --host https://your-workspace.cloud.databricks.com
+  # writes a profile to ~/.databrickscfg; the profile name is what you'll pass as `your-profile` below
+  databricks current-user me --profile your-profile   # verify
+  ```
+- **UC permissions you need** (as yourself for `dev` mode):
+  - `CREATE_SCHEMA` on the catalog where Watchdog will land its `watchdog` schema (or `CREATE_CATALOG` on the metastore if the catalog itself doesn't exist yet)
+  - `CAN_USE` on the SQL warehouse
+  - For `prod` deployment only: a pre-provisioned service principal named `spWatchdog` (see `terraform/modules/watchdog/`). Not required for first deploy.
 - A catalog where Watchdog can create a `watchdog` schema
-- A SQL warehouse (Starter Warehouse works)
+- A SQL warehouse (Starter Warehouse works). Find its ID for steps 6 and 8:
+  ```bash
+  databricks warehouses list --profile your-profile --output json | jq '.[] | {name, id}'
+  ```
 
 ### Step 1: Clone and configure
 

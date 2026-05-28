@@ -235,7 +235,7 @@ An OSI-style view of the controls. Each layer has a distinct responsibility, its
                       ▼
                     ┌──────────────────────────────────┐
                     │  Data: hub_catalog.finance.txns   │
-                    │  (bytes in stmedianeastus2hubuc) │
+                    │  (bytes in sthubregional) │
                     └──────────────────────────────────┘
 ```
 
@@ -430,7 +430,7 @@ Create the regional-singleton Azure resources backing the hub catalog:
 
 - `rg-regional-metastore-hub` resource group
 - `id-databricks-regional-metastore-hub` access connector MI (the only identity with data-plane access to hub storage)
-- `stmedianeastus2hubuc` storage account: private, `default_action = "Deny"`, `public_network_access_enabled = false`, `prevent_destroy`, `private_link_access` only to the hub MI
+- `sthubregional` storage account: private, `default_action = "Deny"`, `public_network_access_enabled = false`, `prevent_destroy`, `private_link_access` only to the hub MI
 - `hub-catalog` container
 - `Storage Blob Data Contributor` role assignment scoped to hub storage, granted to the hub MI only
 
@@ -451,7 +451,7 @@ New module called from the promotion workspace deployment:
 | Resource | Configuration |
 | --- | --- |
 | `databricks_storage_credential.hub` | References hub access connector MI; `isolation_mode = ISOLATION_MODE_ISOLATED` |
-| `databricks_external_location.hub` | `hub_catalog` location, `abfss://hub-catalog@stmedianeastus2hubuc.dfs.core.windows.net/`; `ISOLATION_MODE_ISOLATED` |
+| `databricks_external_location.hub` | `hub_catalog` location, `abfss://hub-catalog@sthubregional.dfs.core.windows.net/`; `ISOLATION_MODE_ISOLATED` |
 | `databricks_catalog.hub` | `hub_catalog` catalog; `isolation_mode = "ISOLATED"` |
 | `databricks_grant` × 4 | publishers get MODIFY/CREATE_TABLE/CREATE_VOLUME/APPLY_TAG on catalog + WRITE_FILES on SC/EL; reader groups get SELECT/BROWSE/READ_VOLUME |
 | `databricks_workspace_binding.spoke_readers` | `BINDING_TYPE_READ_ONLY` for each spoke workspace ID |
@@ -508,7 +508,7 @@ The publishing path proper. Source data leaves a spoke, is validated, and lands 
               │ Spoke privatelink subnet → PE → hub storage
               ▼
 ┌──────────────────────────────────┐
-│ stmedianeastus2hubuc /hub-catalog │ ← published bytes land here
+│ sthubregional /hub-catalog │ ← published bytes land here
 │   hub_catalog.finance.txns        │ ← UC table referencing storage_root
 └──────────────────────────────────┘
 ```
@@ -549,7 +549,7 @@ The consumption path. A user in any spoke reads published data through their own
 └─────────────┬────────────────────┘
               ▼
 ┌──────────────────────────────────┐
-│ stmedianeastus2hubuc /hub-catalog │
+│ sthubregional /hub-catalog │
 │   Returns Delta files            │
 └──────────────────────────────────┘
 ```
@@ -650,7 +650,7 @@ Four lenses on the Azure network plane underlying the publishing path.
 
 "Network hub" (webauth) is NOT the publishing hub. They share the word but nothing else — `promotion` is a network spoke that happens to be the publishing choke point. See Glossary.
 
-### N2 — How any workspace reaches `stmedianeastus2hubuc` (the hub storage)
+### N2 — How any workspace reaches `sthubregional` (the hub storage)
 
 ```
    CLASSIC COMPUTE  (interactive clusters, jobs)
@@ -666,7 +666,7 @@ Four lenses on the Azure network plane underlying the publishing path.
                                                │  (modules/databricks/hub-pe/)
                                                ▼
                                   ┌──────────────────────────┐
-                                  │ stmedianeastus2hubuc     │
+                                  │ sthubregional     │
                                   │ private, deny-all,       │
                                   │ prevent_destroy          │
                                   └──────────────────────────┘
@@ -684,7 +684,7 @@ Four lenses on the Azure network plane underlying the publishing path.
                                                │   Azure requires exclusive access)
                                                ▼
                                   ┌──────────────────────────┐
-                                  │ stmedianeastus2hubuc     │
+                                  │ sthubregional     │
                                   └──────────────────────────┘
 ```
 
@@ -693,7 +693,7 @@ Both paths land at the same storage. Both PE types are created per workspace by 
 ### N3 — DNS resolution (private path only; no public IPs ever)
 
 ```
-   DNS chain when compute resolves stmedianeastus2hubuc.dfs.core.windows.net
+   DNS chain when compute resolves sthubregional.dfs.core.windows.net
    ─────────────────────────────────────────────────────────────────────────
 
    workspace compute query
@@ -713,7 +713,7 @@ Both paths land at the same storage. Both PE types are created per workspace by 
                             ▼
    ┌─────────────────────────────────────────────────┐
    │ A record auto-created by the PE on apply:       │
-   │ "stmedianeastus2hubuc"                          │
+   │ "sthubregional"                          │
    │   →  10.202.X.4   (PE's IP in this ws's /24)    │
    └─────────────────────────────────────────────────┘
 ```
@@ -756,7 +756,7 @@ TLS terminates on the PE inside the workspace's own VNet. No public IP, no publi
    └─────────────┬────────────────────────────┘
                  ▼
    ┌────────────────────────────┐
-   │ stmedianeastus2hubuc        │
+   │ sthubregional        │
    │  • hub MI authorized        │
    │  • PE network path verified │
    │  • bytes returned over TLS  │

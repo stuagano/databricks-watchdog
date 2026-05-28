@@ -54,7 +54,7 @@ These are not alternatives — they're complementary. The ontology drives enforc
 ### Tag design
 
 ```yaml
-# ontologies/resource_classes_mirion.yml
+# ontologies/resource_classes_customer.yml
 DosimetryData:
   parent: DataAsset
   discover_domain: "Dosimetry & Safety Data"   # → written as governed tag
@@ -117,7 +117,7 @@ Placeholder tables in `serverless_stable_qh44kx_catalog` tagged with `watchdog_d
 | `supply_chain` | raw_orders, enriched_orders | Sales & Orders Data |
 
 ### the customer ontology overlay
-`bundles/watchdog/ontologies/resource_classes_mirion.yml` — customer-specific classes:
+`bundles/watchdog/ontologies/resource_classes_customer.yml` — customer-specific classes:
 - `DosimetryData`, `DetectorData`, `NuclearRegulatoryData`, `OrdersData` (business domains)
 - `ItarAsset` (enforcement-only, no discover_domain)
 

@@ -36,7 +36,7 @@ SAP S/4HANA / Datasphere
                        │
                        ▼
                    ADLS Gen2
-                   stmedianraw / container: sap
+                   strawingest / container: sap
                        │
                        ▼  Auto Loader (01_ingest_datasphere.py)
                    bronze.sap.*   (Delta, append)
@@ -63,7 +63,7 @@ transparent to Databricks — only the landing path matters.
 
 | Property | Value |
 |---|---|
-| Storage account | `stmedianraw` (or equivalent in platform subscription) |
+| Storage account | `strawingest` (or equivalent in platform subscription) |
 | Container | `sap` |
 | Format | **Parquet** |
 | Compression | Snappy (ADF default) |
@@ -132,7 +132,7 @@ pointing at the ADLS path above, the pipeline runs end-to-end:
 ```bash
 # 1. Set adls_root and deploy
 databricks bundle deploy --target munich \
-  --var adls_root="abfss://sap@stmedianraw.dfs.core.windows.net"
+  --var adls_root="abfss://sap@strawingest.dfs.core.windows.net"
 
 # 2. Register with platform (run once)
 databricks bundle run datasphere_platform_setup --target munich
@@ -161,8 +161,8 @@ databricks bundle run datasphere_pipeline --target munich
 ### Azure side (data platform team)
 
 - [ ] ADLS Gen2 storage account available in platform subscription
-  (the `stmedian*` accounts created by workspace Terraform may be usable —
-  check with the Azure team; alternatively create a dedicated `stmedianraw`)
+  (the `stcustomer*` accounts created by workspace Terraform may be usable —
+  check with the Azure team; alternatively create a dedicated `strawingest`)
 - [ ] ADF instance created in platform subscription
 - [ ] ADF linked service: SAP S/4HANA (RFC/HANA credentials from Key Vault)
 - [ ] ADF linked service: ADLS Gen2 (managed identity preferred)
@@ -187,8 +187,8 @@ databricks bundle run datasphere_pipeline --target munich
 2. **ODP availability**: Is ODP enabled on the customer's S/4HANA system? If not, SAP
    Table connector with CPUDT watermark is the fallback for GL — confirm with basis.
 
-2. **Storage account**: Should we use an existing `stmedian*` account for raw SAP
-   landing, or create a dedicated `stmedianraw`? A dedicated account is cleaner
+2. **Storage account**: Should we use an existing `stcustomer*` account for raw SAP
+   landing, or create a dedicated `strawingest`? A dedicated account is cleaner
    (separate access control, no DBFS collision) but adds an Azure resource.
 
 3. **GL history depth**: How many years of GL history does the first full load need?

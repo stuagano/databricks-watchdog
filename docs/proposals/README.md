@@ -8,21 +8,22 @@ These proposals originated in a customer-specific repository as a Pn-prefixed ro
 
 ## Scrubbing
 
-Mechanical substitutions applied during import:
+Mechanical substitutions applied during import (replacement targets shown; original customer strings deliberately not enumerated here):
 
-| Original | Scrubbed to |
+| Category | Scrubbed to |
 |---|---|
-| `Mirion`, `Median` | `the customer` |
-| `Mirion-DataPlatform` | `CustomerDataPlatform` |
-| `Mirion Catalog` | `Customer Catalog` |
-| `mirion_hub`, `mirion-hub` | `hub_catalog` / `hub-catalog` |
-| `mirion_catalog`, `mirion-catalog` | `customer_catalog` / `customer-catalog` |
-| `median-eastus2`, `ucm-median-eastus2` | `regional-metastore` / `ucm-regional` |
-| `eastus2` (standalone) | `region` |
-| Workspace names `romulus`, `remus` | `spoke_a`, `spoke_b` |
-| Workspace name `mllab` | `ml_spoke` |
-| `median-{domain}-stewards` (group templates) | `customer-{domain}-stewards` |
-| `MIRION_CATALOG_*` env vars | `CUSTOMER_CATALOG_*` |
+| Customer company name | `the customer` |
+| Customer's data-platform org identifier | `CustomerDataPlatform` |
+| Customer's branded catalog product name | `Customer Catalog` |
+| Customer's hub catalog identifier | `hub_catalog` / `hub-catalog` |
+| Customer's catalog identifier | `customer_catalog` / `customer-catalog` |
+| Customer's regional metastore name | `regional-metastore` / `ucm-regional` |
+| Customer's cloud region | `region` |
+| Customer's mythology-themed spoke workspace names | `spoke_a`, `spoke_b` |
+| Customer's ML workspace name | `ml_spoke` |
+| Customer's storage account prefixes | `stcustomer*`, `sthubregional`, `strawingest` |
+| Customer's group-name templates | `customer-{domain}-stewards` |
+| Customer's env-var prefixes | `CUSTOMER_CATALOG_*` |
 
 Generic industry context (HIPAA, ITAR, NRC, regulated data domains, PII/PHI examples) was left intact since it's not customer-identifying.
 

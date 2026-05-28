@@ -2,7 +2,7 @@
 
 **Status:** Proposed (codifies existing implementation in `ontos-adapter`)
 **Date:** 2026-05-28
-**Source:** Imported from an external industry proposal (`p-mirion-catalog`) describing a catalog UI that owns the exception lifecycle via a FastAPI-fronted Delta write path.
+**Source:** Imported from an external industry proposal (`p-customer-catalog`) describing a catalog UI that owns the exception lifecycle via a FastAPI-fronted Delta write path.
 
 ---
 

@@ -396,15 +396,26 @@ async def handle(
 def _execute_sql(
     w: WorkspaceClient, config: WatchdogMcpConfig, query: str
 ) -> dict[str, Any]:
-    """Execute SQL and return structured result."""
-    response = w.statement_execution.execute_statement(
+    """Execute SQL as the app service principal.
+
+    Governance reads use the app SP's UC/warehouse grants rather than the caller's
+    OBO token, so they don't depend on the per-user 'sql' OAuth scope — which resets
+    on every app deploy and requires per-user consent across app-to-app calls (e.g.
+    a data-catalog relay). Grant the app SP SELECT on the watchdog schema + CAN USE
+    on the warehouse. `w` is kept for signature compatibility but intentionally unused.
+    """
+    sp = WorkspaceClient()  # app SP (Apps-injected DATABRICKS_CLIENT_ID/SECRET)
+    response = sp.statement_execution.execute_statement(
         warehouse_id=config.warehouse_id,
         statement=query,
         catalog=config.catalog,
         schema=config.schema,
         wait_timeout="30s",
     )
-    if response.status and response.status.state and response.status.state.value == "FAILED":
+    # state may be a StatementState enum or a plain str depending on SDK version
+    _state = response.status.state if response.status else None
+    _state_val = getattr(_state, "value", _state)
+    if _state_val == "FAILED":
         error_msg = response.status.error.message if response.status.error else "Unknown"
         return {"error": error_msg, "rows": [], "columns": []}
 
@@ -507,16 +518,13 @@ async def _get_policies(
     qs = config.qualified_schema
     metastore = _resolve_metastore(args, config)
     active_only = args.get("active_only", True)
-    conditions = []
-    if active_only:
-        conditions.append("active = true")
-    if metastore:
-        conditions.append(f"metastore_id = '{metastore}'")
-    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    # policies table (engine policies_table.py) has no metastore_id column, and the
+    # columns are policy_name / applies_to / updated_at — not name/resource_type/last_updated.
+    where = "WHERE active = true" if active_only else ""
 
     query = f"""
-        SELECT policy_id, name, description, severity, resource_type,
-               active, last_updated
+        SELECT policy_id, policy_name, description, severity, applies_to,
+               active, updated_at
         FROM {qs}.policies
         {where}
         ORDER BY severity, policy_id

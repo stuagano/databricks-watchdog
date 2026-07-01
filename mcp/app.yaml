@@ -12,3 +12,14 @@ env:
     value: watchdog
   - name: DATABRICKS_WAREHOUSE_ID
     value: 2053827451af25b6
+
+resources:
+  - name: "sql-warehouse"
+    description: "SQL Warehouse for user-scoped governance queries"
+    sql_warehouse:
+      id: "{{DATABRICKS_WAREHOUSE_ID}}"
+      permission: "CAN_USE"
+
+user_authorization:
+  scopes:
+    - sql

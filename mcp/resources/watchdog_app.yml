@@ -22,6 +22,15 @@ resources:
             value: ${var.schema}
           - name: DATABRICKS_WAREHOUSE_ID
             value: ${var.warehouse_id}
+        resources:
+          - name: "sql-warehouse"
+            description: "SQL Warehouse for user-scoped governance queries"
+            sql_warehouse:
+              id: ${var.warehouse_id}
+              permission: "CAN_USE"
+        user_authorization:
+          scopes:
+            - sql
       permissions:
         - user_name: stuart.gano@databricks.com
           level: CAN_MANAGE

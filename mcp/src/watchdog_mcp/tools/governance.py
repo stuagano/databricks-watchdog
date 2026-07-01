@@ -404,7 +404,10 @@ def _execute_sql(
         schema=config.schema,
         wait_timeout="30s",
     )
-    if response.status and response.status.state and response.status.state.value == "FAILED":
+    # state may be a StatementState enum or a plain str depending on SDK version
+    _state = response.status.state if response.status else None
+    _state_val = getattr(_state, "value", _state)
+    if _state_val == "FAILED":
         error_msg = response.status.error.message if response.status.error else "Unknown"
         return {"error": error_msg, "rows": [], "columns": []}
 

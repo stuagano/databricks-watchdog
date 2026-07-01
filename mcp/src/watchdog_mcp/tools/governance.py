@@ -510,16 +510,13 @@ async def _get_policies(
     qs = config.qualified_schema
     metastore = _resolve_metastore(args, config)
     active_only = args.get("active_only", True)
-    conditions = []
-    if active_only:
-        conditions.append("active = true")
-    if metastore:
-        conditions.append(f"metastore_id = '{metastore}'")
-    where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+    # policies table (engine policies_table.py) has no metastore_id column, and the
+    # columns are policy_name / applies_to / updated_at — not name/resource_type/last_updated.
+    where = "WHERE active = true" if active_only else ""
 
     query = f"""
-        SELECT policy_id, name, description, severity, resource_type,
-               active, last_updated
+        SELECT policy_id, policy_name, description, severity, applies_to,
+               active, updated_at
         FROM {qs}.policies
         {where}
         ORDER BY severity, policy_id

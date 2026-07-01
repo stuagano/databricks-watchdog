@@ -396,8 +396,16 @@ async def handle(
 def _execute_sql(
     w: WorkspaceClient, config: WatchdogMcpConfig, query: str
 ) -> dict[str, Any]:
-    """Execute SQL and return structured result."""
-    response = w.statement_execution.execute_statement(
+    """Execute SQL as the app service principal.
+
+    Governance reads use the app SP's UC/warehouse grants rather than the caller's
+    OBO token, so they don't depend on the per-user 'sql' OAuth scope — which resets
+    on every app deploy and requires per-user consent across app-to-app calls (e.g.
+    a data-catalog relay). Grant the app SP SELECT on the watchdog schema + CAN USE
+    on the warehouse. `w` is kept for signature compatibility but intentionally unused.
+    """
+    sp = WorkspaceClient()  # app SP (Apps-injected DATABRICKS_CLIENT_ID/SECRET)
+    response = sp.statement_execution.execute_statement(
         warehouse_id=config.warehouse_id,
         statement=query,
         catalog=config.catalog,

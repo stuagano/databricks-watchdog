@@ -1,0 +1,40 @@
+{
+  "rules": [
+    {
+      "canonical_field": "mpn",
+      "strategy": "MOST_TRUSTED_SOURCE",
+      "tiebreaker": null,
+      "notes": "PLM is the system of record for the manufacturer part number."
+    },
+    {
+      "canonical_field": "description",
+      "strategy": "MOST_TRUSTED_SOURCE",
+      "tiebreaker": "MOST_COMPLETE",
+      "notes": "PLM description wins; falls back to the longest/most-complete description when trust ties."
+    },
+    {
+      "canonical_field": "manufacturer",
+      "strategy": "MOST_TRUSTED_SOURCE",
+      "tiebreaker": null,
+      "notes": "PLM/ERP master data is more reliable than procurement free-text."
+    },
+    {
+      "canonical_field": "commodity",
+      "strategy": "MOST_TRUSTED_SOURCE",
+      "tiebreaker": null,
+      "notes": "PLM commodity/category classification is the governed taxonomy."
+    },
+    {
+      "canonical_field": "lifecycle_status",
+      "strategy": "MOST_RECENT",
+      "tiebreaker": "MOST_TRUSTED_SOURCE",
+      "notes": "Lifecycle status changes over time (active -> nrnd -> obsolete); the most recently updated source wins, not the most trusted one."
+    },
+    {
+      "canonical_field": "specs",
+      "strategy": "MOST_COMPLETE",
+      "tiebreaker": "MOST_TRUSTED_SOURCE",
+      "notes": "Longest/most-complete free-text spec summary is most useful for functional-equivalent matching."
+    }
+  ]
+}

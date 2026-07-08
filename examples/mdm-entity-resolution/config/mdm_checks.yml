@@ -1,0 +1,44 @@
+# mdm_checks.yml — MDM quality gates for U7, run against gold.entities.
+#
+# `schema`/`table` (and `source_schema`/`source_table`) are logical Cfg schema
+# keys ("bronze" | "silver" | "match" | "mdm" | "gold") + bare table names --
+# pipeline.quality resolves them to fully-qualified names via Cfg.tbl() so no
+# catalog/schema string is hardcoded here. `source_filter`, when present, is a
+# raw SQL boolean expression appended as a WHERE clause on the resolved source
+# subquery (e.g. restricting entity_crosswalk to still-active rows).
+#
+# kind ∈ {dedup, reconcile, completeness} — see
+# engine/src/watchdog/mdm_checks.py for the SQL each kind builds and how
+# results are interpreted.
+
+checks:
+  - id: POL-GOLD-001
+    name: "gold.entities has no duplicate entity_id"
+    kind: dedup
+    severity: high
+    schema: gold
+    table: entities
+    keys: [entity_id]
+
+  - id: POL-GOLD-002
+    name: "gold.entities count reconciles with distinct active source entities"
+    kind: reconcile
+    severity: high
+    schema: gold
+    table: entities
+    measure: "COUNT(DISTINCT entity_id)"
+    source_schema: mdm
+    source_table: entity_crosswalk
+    source_filter: "status = 'active'"
+    tolerance_pct: 0.5
+
+  - id: POL-GOLD-003
+    name: "every gold.entities row has an active contributing source"
+    kind: completeness
+    severity: medium
+    schema: gold
+    table: entities
+    keys: [entity_id]
+    source_schema: mdm
+    source_table: entity_crosswalk
+    source_filter: "status = 'active'"

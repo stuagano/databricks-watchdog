@@ -560,6 +560,18 @@ Each pack includes ontology classes, rule primitives, policies, and dashboard SQ
 
 ---
 
+## Examples
+
+Worked examples of Watchdog's building blocks used outside the core governance-scan
+loop — showing the pure check/rule primitives reused as a quality gate inside a real
+downstream data pipeline, not just as UC metadata policies.
+
+| Example | What it shows |
+|---|---|
+| [`examples/mdm-entity-resolution/`](examples/mdm-entity-resolution/) | A Databricks-native, batch fuzzy-match entity-resolution / MDM reference pipeline (synthetic multi-source generation → standardize → Vector Search match → persistent identity crosswalk → config-driven survivorship → golden records), using Watchdog's pure `mdm_checks` dedup/reconcile/completeness builders (`engine/src/watchdog/mdm_checks.py`) as its U7 quality gate. Verified live end to end: precision 1.0 / recall 1.0 against gold truth, all quality gates passing, id-stable across a re-run. |
+
+---
+
 ## What's Deployed (Full Stack)
 
 | Component | What | Deploy Command |
@@ -793,8 +805,10 @@ databricks-watchdog/
 ├── terraform/                       # Infrastructure as Code (SP, catalog, grants)
 ├── template/                        # Blank starting point for new customers
 ├── customer/                        # Worked example
+├── examples/                        # Worked examples using Watchdog's building blocks
+│   └── mdm-entity-resolution/       #   Fuzzy-match ER/MDM reference pipeline (mdm_checks as U7 gate)
 ├── docs/                            # Roadmap, positioning, integration plan
-└── tests/                           # 510 unit tests
+└── tests/                           # unit tests
 ```
 
 ## Testing

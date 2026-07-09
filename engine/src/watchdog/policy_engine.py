@@ -143,10 +143,6 @@ class PolicyEngine:
     def _scan_results_table(self) -> str:
         return f"{self.catalog}.{self.schema}.scan_results"
 
-    @property
-    def _violations_table(self) -> str:
-        return f"{self.catalog}.{self.schema}.violations"
-
     # ------------------------------------------------------------------
     # Drift-check helpers — extracted for testability (no Spark required)
     # ------------------------------------------------------------------
@@ -491,51 +487,3 @@ class PolicyEngine:
             return resource.resource_type in fallback_types
 
         return False
-
-    # ------------------------------------------------------------------
-    # Introspection helpers (for MCP tools / dashboards)
-    # ------------------------------------------------------------------
-
-    def get_policy_coverage(self) -> list[dict]:
-        """Show which ontology classes have policies and which don't."""
-        covered_classes = {p.applies_to for p in self.policies if p.active}
-        all_classes = self.ontology.list_classes()
-
-        result = []
-        for cls in all_classes:
-            descendants = self.ontology.get_descendants(cls["name"])
-            # A class is covered if it or any ancestor has a policy
-            directly_covered = cls["name"] in covered_classes
-            inherited_coverage = any(
-                a in covered_classes for a in cls["ancestors"]
-            )
-            result.append({
-                "class": cls["name"],
-                "parent": cls["parent"],
-                "directly_covered": directly_covered,
-                "inherited_coverage": inherited_coverage,
-                "descendant_count": len(descendants),
-                "policy_count": sum(
-                    1 for p in self.policies
-                    if p.applies_to == cls["name"] and p.active
-                ),
-            })
-        return result
-
-    def classify_resource(self, resource_type: str, tags: dict[str, str],
-                          metadata: dict[str, str]) -> dict:
-        """Classify a single resource — useful for debugging / MCP tool."""
-        classes = self.ontology.get_all_classes_for_resource(
-            resource_type, tags, metadata
-        )
-        applicable_policies = [
-            {"id": p.policy_id, "name": p.name, "severity": p.severity}
-            for p in self.policies
-            if p.active and (p.applies_to == "*" or p.applies_to in classes)
-        ]
-        return {
-            "resource_type": resource_type,
-            "tags": tags,
-            "classes": sorted(classes),
-            "applicable_policies": applicable_policies,
-        }

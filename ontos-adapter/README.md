@@ -152,7 +152,6 @@ ontos-adapter/
 │   │   └── ontology.py               # GET class hierarchy, tree, validate
 │   ├── router.py                     # Mount all routers, register_routes()
 │   ├── app.py                        # Standalone FastAPI app
-│   ├── ontology_export.py            # OWL/Turtle export for Ontos import
 │   └── ontos_sync.py                 # Semantic link sync (Watchdog → Ontos)
 └── frontend/
     ├── README.md                     # Frontend integration guide

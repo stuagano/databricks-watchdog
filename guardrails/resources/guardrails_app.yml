@@ -7,7 +7,7 @@ resources:
       config:
         command:
           - uvicorn
-          - ai_devkit.server:app
+          - watchdog_guardrails.server:app
           - --host
           - 0.0.0.0
           - --port

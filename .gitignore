@@ -45,3 +45,6 @@ Thumbs.db
 .env
 .env.*
 .claude/worktrees/
+
+# caps / python artifacts (added by caps init)
+*.bak.*

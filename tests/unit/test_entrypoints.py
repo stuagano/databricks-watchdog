@@ -126,6 +126,7 @@ class TestEntrypointSignatures:
              patch.object(ep, "SparkSession") as ms, \
              patch("watchdog.remediation.tables.ensure_remediation_agents_table"), \
              patch("watchdog.remediation.tables.ensure_remediation_proposals_table"), \
+             patch("watchdog.remediation.tables.ensure_remediation_reviews_table"), \
              patch("watchdog.remediation.tables.register_agent"), \
              patch("watchdog.remediation.views.ensure_remediation_views"):
             spark = MagicMock()

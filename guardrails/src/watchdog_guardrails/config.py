@@ -30,5 +30,10 @@ class GuardrailsConfig:
         default_factory=lambda: os.environ.get("DATABRICKS_WAREHOUSE_ID", "")
     )
 
+    # Optional default metastore filter — applies when callers omit metastore
+    default_metastore_id: str = field(
+        default_factory=lambda: os.environ.get("WATCHDOG_DEFAULT_METASTORE_ID", "")
+    )
+
     server_name: str = "watchdog-guardrails"
     server_version: str = "1.0.0"

@@ -27,6 +27,7 @@ class ResourceGovernanceState:
     """Governance state for a single resource from Watchdog."""
 
     resource_id: str
+    metastore_id: str = ""
     classes: list[str] = field(default_factory=list)
     open_violations: list[dict[str, Any]] = field(default_factory=list)
     active_exceptions: list[dict[str, Any]] = field(default_factory=list)
@@ -51,15 +52,23 @@ def get_resource_governance(
     w: WorkspaceClient,
     config: GuardrailsConfig,
     resource_id: str,
+    metastore_id: str | None = None,
 ) -> ResourceGovernanceState:
     """Fetch governance state for a resource from Watchdog tables.
 
     Queries classifications, violations, and exceptions sequentially.
     Returns a degraded state (watchdog_available=False) on any error
     from the first query — assumes tables are inaccessible.
+
+    Args:
+        metastore_id: Optional metastore filter. When provided, restricts
+            queries to the given metastore. Omit for no filter.
     """
-    state = ResourceGovernanceState(resource_id=resource_id)
+    state = ResourceGovernanceState(resource_id=resource_id, metastore_id=metastore_id or "")
     schema = config.watchdog_schema
+    metastore_clause = (
+        f"AND metastore_id = '{_esc(metastore_id)}'" if metastore_id else ""
+    )
 
     # 1. Classifications — class names for informational display
     try:
@@ -69,6 +78,7 @@ def get_resource_governance(
                 SELECT class_name, class_ancestors
                 FROM {schema}.resource_classifications
                 WHERE resource_id = '{_esc(resource_id)}'
+                {metastore_clause}
                 ORDER BY class_name
             """,
             wait_timeout="10s",
@@ -89,6 +99,7 @@ def get_resource_governance(
                 SELECT violation_id, policy_id, policy_name, severity, domain
                 FROM {schema}.violations
                 WHERE resource_id = '{_esc(resource_id)}' AND active = true
+                {metastore_clause}
                 ORDER BY
                     CASE severity
                         WHEN 'critical' THEN 0 WHEN 'high' THEN 1
@@ -116,6 +127,7 @@ def get_resource_governance(
                 WHERE resource_id = '{_esc(resource_id)}'
                   AND active = true
                   AND (expires_at IS NULL OR expires_at > current_timestamp())
+                  {metastore_clause}
             """,
             wait_timeout="10s",
         )

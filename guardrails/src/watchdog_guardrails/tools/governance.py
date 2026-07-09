@@ -28,6 +28,20 @@ from watchdog_guardrails.watchdog_client import (
 
 logger = logging.getLogger(__name__)
 
+# Shared property for optional metastore filtering
+_METASTORE_PROP = {
+    "metastore": {
+        "type": "string",
+        "description": "Filter to a specific metastore ID. Omit for the config default (if any) or no filter.",
+    },
+}
+
+
+def _resolve_metastore(args: dict, config: GuardrailsConfig) -> str:
+    """Get metastore filter: explicit arg > config default > empty (no filter)."""
+    return _esc(args.get("metastore") or config.default_metastore_id or "")
+
+
 # ── Runtime agent session state (per server instance) ──────────────────────
 _agent_sessions: dict[str, dict] = {}
 
@@ -126,6 +140,7 @@ TOOLS: list[Tool] = [
                 "tables": {"type": "array", "items": {"type": "string"}, "description": "Fully qualified table names to validate."},
                 "operation": {"type": "string", "enum": ["query", "embed", "chat_context", "train"]},
                 "purpose": {"type": "string", "description": "Brief description of why this data is needed."},
+                **_METASTORE_PROP,
             },
             "required": ["tables", "operation"],
         },
@@ -200,6 +215,7 @@ TOOLS: list[Tool] = [
                 "table": {"type": "string", "description": "Fully qualified table name."},
                 "operation": {"type": "string", "enum": ["SELECT", "INSERT", "UPDATE", "DELETE"], "description": "Default: SELECT."},
                 "columns": {"type": "array", "items": {"type": "string"}},
+                **_METASTORE_PROP,
             },
             "required": ["agent_id", "table"],
         },
@@ -390,6 +406,7 @@ async def _validate_ai_query(w, config, args):
     operation = args["operation"]
     purpose = args.get("purpose", "")
     op_risk = _OPERATION_RISK.get(operation, 2)
+    metastore = _resolve_metastore(args, config)
 
     if not tables:
         return [TextContent(type="text", text=json.dumps(
@@ -402,7 +419,7 @@ async def _validate_ai_query(w, config, args):
 
     for table_name in tables:
         finding: dict[str, Any] = {"table": table_name, "issues": []}
-        gov = get_resource_governance(w, config, table_name)
+        gov = get_resource_governance(w, config, table_name, metastore_id=metastore or None)
         finding["watchdog_available"] = gov.watchdog_available
         finding["ontology_classes"] = gov.classes
 
@@ -764,9 +781,10 @@ async def _check_before_access(w, config, args):
     agent_id = args["agent_id"]
     table = args["table"]
     operation = args.get("operation", "SELECT")
+    metastore = _resolve_metastore(args, config)
 
     session = _init_agent_session(agent_id)
-    gov = get_resource_governance(w, config, table)
+    gov = get_resource_governance(w, config, table, metastore_id=metastore or None)
 
     reasons: list[str] = []
     alternatives: list[str] = []

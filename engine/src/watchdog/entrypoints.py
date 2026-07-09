@@ -563,6 +563,7 @@ def remediate():
     from watchdog.remediation.tables import (
         ensure_remediation_agents_table,
         ensure_remediation_proposals_table,
+        ensure_remediation_reviews_table,
         register_agent,
     )
 
@@ -577,6 +578,7 @@ def remediate():
 
     ensure_remediation_agents_table(spark, args.catalog, args.schema)
     ensure_remediation_proposals_table(spark, args.catalog, args.schema)
+    ensure_remediation_reviews_table(spark, args.catalog, args.schema)
 
     agents = _load_agents()
     for agent in agents:

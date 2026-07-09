@@ -166,8 +166,8 @@ class TestMcpTools:
         assert "ms-001" in result[0].text
 
     def test_resolve_metastore_prefers_args(self):
-        from watchdog_mcp.tools.governance import _resolve_metastore
         from watchdog_mcp.config import WatchdogMcpConfig
+        from watchdog_mcp.tools.governance import _resolve_metastore
 
         config = WatchdogMcpConfig()
         config.default_metastore_id = "default-ms"
@@ -176,10 +176,92 @@ class TestMcpTools:
         assert _resolve_metastore({}, config) == "default-ms"
 
     def test_resolve_metastore_empty_when_no_default(self):
-        from watchdog_mcp.tools.governance import _resolve_metastore
         from watchdog_mcp.config import WatchdogMcpConfig
+        from watchdog_mcp.tools.governance import _resolve_metastore
 
         config = WatchdogMcpConfig()
+        assert _resolve_metastore({}, config) == ""
+
+
+# ── Guardrails ─────────────────────────────────────────────────────────────
+
+
+class TestGuardrailsMetastore:
+    def test_resource_governance_state_has_metastore_id(self):
+        from watchdog_guardrails.watchdog_client import ResourceGovernanceState
+
+        state = ResourceGovernanceState(resource_id="r-1")
+        assert state.metastore_id == ""
+
+        state2 = ResourceGovernanceState(resource_id="r-2", metastore_id="ms-abc")
+        assert state2.metastore_id == "ms-abc"
+
+    def test_get_resource_governance_accepts_metastore_id(self):
+        import inspect
+
+        from watchdog_guardrails.watchdog_client import get_resource_governance
+
+        sig = inspect.signature(get_resource_governance)
+        assert "metastore_id" in sig.parameters
+        assert sig.parameters["metastore_id"].default is None
+
+    def test_get_resource_governance_propagates_metastore_id(self):
+        """When metastore_id is provided, it appears in SQL queries."""
+        from watchdog_guardrails.watchdog_client import get_resource_governance
+
+        mock_w = MagicMock()
+        mock_config = MagicMock()
+        mock_config.watchdog_schema = "platform.watchdog"
+        mock_config.warehouse_id = "wh-001"
+
+        mock_resp = MagicMock()
+        mock_resp.result.data_array = []
+        mock_w.statement_execution.execute_statement.return_value = mock_resp
+
+        state = get_resource_governance(
+            mock_w, mock_config, "resource-1", metastore_id="ms-test"
+        )
+        assert state.metastore_id == "ms-test"
+
+        call_args = mock_w.statement_execution.execute_statement.call_args_list
+        assert len(call_args) >= 1
+        first_sql = call_args[0].kwargs.get("statement", "")
+        assert "metastore_id = 'ms-test'" in first_sql
+
+    def test_get_resource_governance_no_metastore_no_filter(self):
+        """When metastore_id is omitted, no metastore filter in SQL."""
+        from watchdog_guardrails.watchdog_client import get_resource_governance
+
+        mock_w = MagicMock()
+        mock_config = MagicMock()
+        mock_config.watchdog_schema = "platform.watchdog"
+        mock_config.warehouse_id = "wh-001"
+
+        mock_resp = MagicMock()
+        mock_resp.result.data_array = []
+        mock_w.statement_execution.execute_statement.return_value = mock_resp
+
+        get_resource_governance(mock_w, mock_config, "resource-1")
+
+        call_args = mock_w.statement_execution.execute_statement.call_args_list
+        first_sql = call_args[0].kwargs.get("statement", "")
+        assert "metastore_id" not in first_sql
+
+    def test_resolve_metastore_prefers_args(self):
+        from watchdog_guardrails.config import GuardrailsConfig
+        from watchdog_guardrails.tools.governance import _resolve_metastore
+
+        config = GuardrailsConfig()
+        config.default_metastore_id = "default-ms"
+
+        assert _resolve_metastore({"metastore": "arg-ms"}, config) == "arg-ms"
+        assert _resolve_metastore({}, config) == "default-ms"
+
+    def test_resolve_metastore_empty_when_no_default(self):
+        from watchdog_guardrails.config import GuardrailsConfig
+        from watchdog_guardrails.tools.governance import _resolve_metastore
+
+        config = GuardrailsConfig()
         assert _resolve_metastore({}, config) == ""
 
 
@@ -211,39 +293,44 @@ class TestOntosMetastoreInfo:
 
 class TestOntosProviderProtocol:
     def test_protocol_has_list_metastores(self):
-        from watchdog_governance.provider import GovernanceProvider
         import inspect
+
+        from watchdog_governance.provider import GovernanceProvider
 
         assert hasattr(GovernanceProvider, "list_metastores")
         sig = inspect.signature(GovernanceProvider.list_metastores)
         assert "self" in sig.parameters
 
     def test_protocol_has_set_active_metastore(self):
-        from watchdog_governance.provider import GovernanceProvider
         import inspect
+
+        from watchdog_governance.provider import GovernanceProvider
 
         assert hasattr(GovernanceProvider, "set_active_metastore")
         sig = inspect.signature(GovernanceProvider.set_active_metastore)
         assert "metastore_id" in sig.parameters
 
     def test_violations_summary_has_metastore_param(self):
-        from watchdog_governance.provider import GovernanceProvider
         import inspect
+
+        from watchdog_governance.provider import GovernanceProvider
 
         sig = inspect.signature(GovernanceProvider.violations_summary)
         assert "metastore_id" in sig.parameters
         assert sig.parameters["metastore_id"].default is None
 
     def test_list_violations_has_metastore_param(self):
-        from watchdog_governance.provider import GovernanceProvider
         import inspect
+
+        from watchdog_governance.provider import GovernanceProvider
 
         sig = inspect.signature(GovernanceProvider.list_violations)
         assert "metastore_id" in sig.parameters
 
     def test_list_resources_has_metastore_param(self):
-        from watchdog_governance.provider import GovernanceProvider
         import inspect
+
+        from watchdog_governance.provider import GovernanceProvider
 
         sig = inspect.signature(GovernanceProvider.list_resources)
         assert "metastore_id" in sig.parameters

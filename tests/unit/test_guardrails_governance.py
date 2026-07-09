@@ -114,7 +114,7 @@ class TestValidateAiQuery:
         import watchdog_guardrails.tools.governance as gov_module
         original = gov_module.get_resource_governance
 
-        def mock_gov(w, config, resource_id):
+        def mock_gov(w, config, resource_id, metastore_id=None):
             return _make_governance_state()
 
         gov_module.get_resource_governance = mock_gov
@@ -139,7 +139,7 @@ class TestValidateAiQuery:
         import watchdog_guardrails.tools.governance as gov_module
         original = gov_module.get_resource_governance
 
-        def mock_gov(w, config, resource_id):
+        def mock_gov(w, config, resource_id, metastore_id=None):
             return _make_governance_state()
 
         gov_module.get_resource_governance = mock_gov
@@ -164,7 +164,7 @@ class TestValidateAiQuery:
         import watchdog_guardrails.tools.governance as gov_module
         original = gov_module.get_resource_governance
 
-        def mock_gov(w, config, resource_id):
+        def mock_gov(w, config, resource_id, metastore_id=None):
             return _make_governance_state()
 
         gov_module.get_resource_governance = mock_gov
@@ -188,7 +188,7 @@ class TestValidateAiQuery:
         import watchdog_guardrails.tools.governance as gov_module
         original = gov_module.get_resource_governance
 
-        def mock_gov(w, config, resource_id):
+        def mock_gov(w, config, resource_id, metastore_id=None):
             return _make_governance_state(violations=[
                 {"severity": "critical", "policy_id": "POL-001", "policy_name": "Must have steward"}
             ])

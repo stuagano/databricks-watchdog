@@ -9,6 +9,13 @@ once it reaches 1.0.
 
 ### Added
 
+- `examples/mdm-entity-resolution/ctk/` and `caps/`: vendored the `ctk`
+  anti-silent-failure test kit into the example, plus a `capabilities.yaml`
+  with 3 proven `tier: cheap` capabilities (`matching-core-grounded-auto-match`,
+  `mdm-checks-catch-real-defects`, `crosswalk-id-stability`) and a new
+  `claim_vs_reality`-based regression test
+  (`tests/test_matching_core_ctk.py`) encoding the exact grounding invariant
+  that a live run once violated.
 - `engine/src/watchdog/mdm_checks.py`: pure MDM data-quality check
   builders/interpreters (dedup, reconcile, completeness) for cross-table
   aggregate checks that don't fit the tag-based policy engine, plus unit

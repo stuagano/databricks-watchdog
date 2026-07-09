@@ -114,6 +114,47 @@ PYTHONPATH=../../engine/src pytest tests/ -v   # pure-logic + local-Spark schema
 `from watchdog.mdm_checks import ...` resolves; `conftest.py` also adds it
 automatically when it finds `../../engine/src` relative to itself.
 
+### Anti-silent-failure checks (`ctk`)
+
+`ctk/` (vendored here — see `ctk/__init__.py`) is a small pytest add-on built to
+catch the specific way this pipeline's own local test suite went wrong once:
+green locally, wrong live. `conftest.py` wires in two things automatically —
+
+- an autouse guard that fails a test if the code under test logged
+  ERROR/CRITICAL, even if every assert in the test passed;
+- `workspace` / `run_started_at` fixtures for artifact-freshness checks
+  (`ctk.Artifact(..., newer_than=run_started_at)`).
+
+`tests/test_matching_core_ctk.py` demonstrates `ctk.claim_vs_reality` on the
+actual bug this pipeline shipped live once: `categorize()`'s `auto_match`
+*claim* is checked against the *reality* of whether a real grounding signal
+(same normalized MPN, or same-manufacturer + a variant suffix) justifies it —
+a plain assert on category strings wouldn't have caught the original score-only
+fallback that tanked live precision to 0.40 despite passing every existing test.
+
+### Proven capabilities (`caps`)
+
+`capabilities.yaml` declares specific, checkable claims about this pipeline and
+`caps/` proves each one with a real test rather than trusting that the code ran:
+
+| Capability | What it proves |
+|---|---|
+| `matching-core-grounded-auto-match` | `categorize()` never auto-matches on embedding score alone (`tests/test_matching_core_ctk.py`) |
+| `mdm-checks-catch-real-defects` | Watchdog's dedup/reconcile/completeness checks actually flag genuine defects, not just report a trivial pass (`tests/test_mdm_checks_catch_defects.py`) |
+| `crosswalk-id-stability` | the persistent `entity_id` crosswalk is stable across re-runs and merges collapse onto the older id (`tests/test_crosswalk.py`) |
+
+```bash
+cd examples/mdm-entity-resolution
+PYTHONPATH=. python -m caps status   # read-only: is each capability proven and fresh?
+PYTHONPATH=. python -m caps verify   # re-run every check and record proof in .ctk/ledger.json
+```
+
+All three are `tier: cheap` (pure-logic, no live workspace needed) — deliberately
+scoped to what's provable without a Databricks workspace on hand. The pipeline's
+live-verified claims (precision/recall against gold truth, id-stability across a
+real re-run) are exercised by `scripts/verify_match.py` / `scripts/verify_e2e.py`
+against a real workspace, but aren't (yet) wired as `tier: live` capabilities here.
+
 Vector Search / Jobs / live-Delta integration checks live in `scripts/` and run on
 your own Databricks workspace (`databricks jobs submit`, see `scripts/verify_match.py`
 and `scripts/verify_e2e.py`'s module docstrings for the exact JSON).

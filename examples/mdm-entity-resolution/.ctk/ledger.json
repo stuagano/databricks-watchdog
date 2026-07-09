@@ -1,0 +1,40 @@
+{
+  "crosswalk-id-stability": {
+    "at": "2026-07-09T06:39:58.233895+00:00",
+    "detail": null,
+    "duration": 0.214,
+    "files": {
+      "pipeline/crosswalk.py": "sha256:1d717cf31a687b19e1ef30f34e47f68ceb0c15bc35d4099465f1c0d3b4137ae5",
+      "tests/test_crosswalk.py": "sha256:a476dba95103afad13a071e2fd54bbd9f20aed21aebd10acb21560a6a64090fc"
+    },
+    "fingerprint": "sha256:a3ef5abf9660fc1d28238b43bed86a9d5f4bbeb34ce41b2fc411403a895f6bc8",
+    "result": "pass",
+    "tier": "cheap",
+    "waiver": null
+  },
+  "matching-core-grounded-auto-match": {
+    "at": "2026-07-09T06:39:58.233895+00:00",
+    "detail": null,
+    "duration": 0.258,
+    "files": {
+      "pipeline/matching_core.py": "sha256:dbdfd44f88ee41cb35a600c5503031bf95e575fc6e04d2dea50b20fd7a14c125",
+      "tests/test_matching_core_ctk.py": "sha256:f96ad02ea31bca86e0d1787d0d8f442bfe2ce8a92d5f0720e0cd71e4fe2b2f1e"
+    },
+    "fingerprint": "sha256:5124f1883bc19a90031b3d3c095137a96492fa3eda097ecdaeb0bbdd4359e0bd",
+    "result": "pass",
+    "tier": "cheap",
+    "waiver": null
+  },
+  "mdm-checks-catch-real-defects": {
+    "at": "2026-07-09T06:39:58.233895+00:00",
+    "detail": null,
+    "duration": 0.198,
+    "files": {
+      "tests/test_mdm_checks_catch_defects.py": "sha256:b6dd2b95a93ae67c0db215aff0478a8def51ebcf90987a455a36e85543205791"
+    },
+    "fingerprint": "sha256:f4ab8d04183264779f1de625641e1c2cc4aaaf66a402e160d465848c4ca5efe2",
+    "result": "pass",
+    "tier": "cheap",
+    "waiver": null
+  }
+}

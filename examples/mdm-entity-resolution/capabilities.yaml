@@ -1,0 +1,37 @@
+# Capabilities this project promises — managed with `caps`.
+# Prove with: python -m caps verify
+capabilities:
+  - id: matching-core-grounded-auto-match
+    description: categorize() never auto-matches a pair without a real grounding signal
+    given: a candidate pair scored by Vector Search similarity
+    when: matching_core.categorize assigns a decision
+    then: any auto_match decision has same-normalized-mpn or same-manufacturer+variant
+      grounding, never score alone
+    tier: cheap
+    deps:
+    - pipeline/matching_core.py
+    check: tests/test_matching_core_ctk.py
+  - id: mdm-checks-catch-real-defects
+    description: Watchdog's mdm_checks dedup/reconcile/completeness checks actually
+      flag real defects, not just report a trivial pass
+    given: gold.entities result rows with a genuine duplicate, count mismatch, or orphan
+      row
+    when: watchdog.mdm_checks.interpret evaluates each check kind
+    then: every genuine defect is reported passed=False with a matching detail, and
+      clean data reports passed=True
+    tier: cheap
+    deps:
+    - engine/src/watchdog/mdm_checks.py
+    check: tests/test_mdm_checks_catch_defects.py
+  - id: crosswalk-id-stability
+    description: the persistent entity_id crosswalk is stable across re-runs and correctly
+      collapses merges onto the older id
+    given: a prior record->entity_id assignment and a new clustering of the same records
+    when: stable_assign recomputes ids for an unchanged clustering, or two clusters
+      merge
+    then: unchanged clusters keep their exact prior entity_id, and a merge collapses
+      onto the older (not a freshly minted) id
+    tier: cheap
+    deps:
+    - pipeline/crosswalk.py
+    check: tests/test_crosswalk.py

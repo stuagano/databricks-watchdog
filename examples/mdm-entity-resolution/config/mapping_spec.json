@@ -1,0 +1,26 @@
+{
+  "erp": {
+    "mpn": "part_number",
+    "description": "part_desc",
+    "manufacturer": "mfr_name",
+    "commodity": "commodity_code",
+    "lifecycle_status": "status",
+    "specs": "spec_text"
+  },
+  "plm": {
+    "mpn": "mpn",
+    "description": "item_description",
+    "manufacturer": "manufacturer_name",
+    "commodity": "category",
+    "lifecycle_status": "lifecycle",
+    "specs": "technical_specs"
+  },
+  "procurement": {
+    "mpn": "vendor_part_no",
+    "description": "part_description",
+    "manufacturer": "supplier_name",
+    "commodity": "comm_class",
+    "lifecycle_status": "life_status",
+    "specs": "attributes_text"
+  }
+}

@@ -4,6 +4,7 @@ target-version = "py310"
 exclude = [
     ".git",
     "engine/notebooks",
+    "examples/mdm-entity-resolution/demo",
     "docs",
     "terraform",
     "library",

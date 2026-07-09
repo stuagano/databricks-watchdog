@@ -1,0 +1,78 @@
+# Databricks Asset Bundle resource — U9 batch orchestration job.
+#
+# Single serverless task running `pipeline/run_all.py` end to end (U1 -> U3 ->
+# U4 -> U8 -> U5 -> U6 -> U7). One `run_id` per job run threads through every
+# stage's output tables; each stage overwrites (U8 appends to) its own table,
+# so a re-run of the same job is idempotent -- `entity_crosswalk` reuses
+# stable ids (see `pipeline/crosswalk.py::stable_assign`) rather than minting
+# new ones.
+#
+# Deploy target: your own CLI profile, e.g.:
+#   databricks bundle deploy -p <your-profile>
+#   databricks bundle run er_ref_pipeline -p <your-profile>
+#
+# This fragment is written to be pulled in via an `include:` entry (e.g.
+# `include: - examples/mdm-entity-resolution/jobs/*.yml`) in a bundle's
+# `databricks.yml` -- wiring that include (or standing up a dedicated bundle
+# root for this job) is a live-workspace deploy step, not exercised by local
+# pytest.
+#
+# `pipeline/quality.py` imports Watchdog's pure `mdm_checks` module from
+# `engine/src` via a relative sys.path shim (see `pipeline/run_all.py`) --
+# verified live end to end (job run SUCCEEDED, all U7 checks reported
+# PASS/FAIL correctly) once this example was synced alongside `engine/` at
+# the same repo root. If your bundle sync layout puts this example somewhere
+# that doesn't have `engine/src` two directories up, either add Watchdog's
+# `engine/src` as an extra `libraries`/`whl` dependency on the task below or
+# adjust the sys.path shim in `pipeline/run_all.py` to a workspace-absolute
+# path.
+#
+# `pipeline/run_all.py::run_all` calls `survivorship.seed_rules` (overwrite
+# from config/survivorship_rules.json) right before the U6 stage on every run,
+# so an edit to that JSON rolls out on the next job run with no separate load
+# step.
+
+resources:
+  jobs:
+    er_ref_pipeline:
+      name: "[${bundle.target}] Fuzzy-Match ER Reference Pipeline — Batch Run"
+      description: >-
+        Reconciles the erp/plm/procurement synthetic source systems into
+        governed golden records: generate -> standardize -> Vector Search
+        match -> steward queue -> persistent crosswalk -> survivorship merge
+        -> quality gates. One run_id per run; safe to re-run daily.
+
+      schedule:
+        quartz_cron_expression: "0 0 5 * * ?" # Daily at 05:00 UTC
+        timezone_id: "America/New_York"
+        pause_status: PAUSED # unpause once the workspace pass (VS indexes, seeded config tables) is verified
+
+      parameters:
+        - name: catalog
+          default: "main"
+
+      environments:
+        - environment_key: er_ref_env
+          spec:
+            client: "1"
+            dependencies:
+              - databricks-vectorsearch>=0.40
+              - databricks-sdk>=0.30.0
+              - pyyaml>=6.0
+
+      tasks:
+        - task_key: run_all
+          description: "Run U1->U3->U4->U8->U5->U6->U7 for this job run's run_id and fail the run if any U7 quality check fails."
+          environment_key: er_ref_env
+          spark_python_task:
+            python_file: ../pipeline/run_all.py
+            parameters:
+              - "--run-id"
+              - "{{job.run_id}}"
+              - "--catalog"
+              - "{{job.parameters.catalog}}"
+
+      tags:
+        project: er-ref-pipeline
+        cost_center: data-platform
+        owner: data-platform-admin

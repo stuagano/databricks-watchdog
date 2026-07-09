@@ -1,0 +1,54 @@
+{
+  "model": "er-canonical-model",
+  "version": "1.0",
+  "description": "Canonical entity model for the fuzzy-match ER reference pipeline. Decoupled input: this is the kind of artifact any data-modeling tool or session produces (domains -> products -> attributes); the pipeline only depends on its shape, not on how it was authored.",
+  "domains": [
+    {
+      "domain": "electronic_components",
+      "products": [
+        {
+          "product": "part",
+          "description": "A manufacturer part (electronic component) tracked across ERP, PLM, and procurement source systems and resolved to a single golden entity in gold.entities.",
+          "attributes": [
+            {
+              "field": "mpn",
+              "type": "string",
+              "required": true,
+              "description": "Manufacturer part number as published by the source system, unnormalized."
+            },
+            {
+              "field": "description",
+              "type": "string",
+              "required": true,
+              "description": "Free-text part description."
+            },
+            {
+              "field": "manufacturer",
+              "type": "string",
+              "required": true,
+              "description": "Manufacturer / brand name."
+            },
+            {
+              "field": "commodity",
+              "type": "string",
+              "required": true,
+              "description": "Commodity/category classification, e.g. op-amps, regulators, PMTs, ADCs, connectors, MOSFETs, caps."
+            },
+            {
+              "field": "lifecycle_status",
+              "type": "string",
+              "required": true,
+              "description": "Part lifecycle state, e.g. active, nrnd, obsolete. Sources may disagree; resolved by survivorship rules in U6."
+            },
+            {
+              "field": "specs",
+              "type": "string",
+              "required": true,
+              "description": "Free-text technical specification summary used for functional-equivalent matching."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

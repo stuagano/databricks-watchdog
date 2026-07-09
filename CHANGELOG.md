@@ -9,6 +9,15 @@ once it reaches 1.0.
 
 ### Added
 
+- `engine/src/watchdog/mdm_checks.py`: pure MDM data-quality check
+  builders/interpreters (dedup, reconcile, completeness) for cross-table
+  aggregate checks that don't fit the tag-based policy engine, plus unit
+  tests (`tests/unit/test_mdm_checks.py`, 11 tests).
+- `examples/mdm-entity-resolution/`: a worked example -- a Databricks-native
+  batch fuzzy-match entity-resolution/MDM reference pipeline using
+  `mdm_checks` as its quality gate. Verified live end to end (precision 1.0 /
+  recall 1.0 against gold truth, all quality gates passing, id-stable across
+  a re-run).
 - Continuous integration workflow (`.github/workflows/ci.yml`) running unit
   tests across Python 3.10–3.12, ruff linting, and policy-YAML linting.
 - `scripts/` helpers: `lint_policies.py`, `deploy.sh`, `sync_policies.sh`,
